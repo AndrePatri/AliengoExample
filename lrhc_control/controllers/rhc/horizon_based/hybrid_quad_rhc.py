@@ -98,6 +98,11 @@ class HybridQuadRhc(RHController):
 
         self._fail_idx_scale=1e-2
         self._pred_node_idx=self._n_nodes-1
+
+        self._nq=self.nq()
+        self._nq_jnts=self._nq-7# assuming floating base
+        self._nv=self.nv()
+        self._nv_jnts=self._nv-6
     
     def get_file_paths(self):
         # can be overriden by child
@@ -177,9 +182,14 @@ class HybridQuadRhc(RHController):
         return joints_names
     
     def _get_ndofs(self):
-        
         return len(self._model.joint_names)
-
+    
+    def nq(self):
+        return self._kin_dyn.nq()
+    
+    def nv(self):
+        return self._kin_dyn.nv()
+    
     def _get_robot_mass(self):
 
         return self._kin_dyn.mass()
@@ -200,27 +210,26 @@ class HybridQuadRhc(RHController):
 
     def _get_jnt_q_from_sol(self, node_idx=1):
         
-        # wrapping joint q commands between 2pi and -2pi
-        # (to be done for the simulator)
-        return np.fmod(self._ti.solution['q'][7:, node_idx], 2*np.pi).reshape(1,  
-                    self.n_dofs)
-    
+        full_q=self._ti.solution['q'] # assuming floating base robot
+        return np.fmod(full_q[7:, node_idx], 2*np.pi).reshape(1,  
+                self._nq_jnts)
+        
     def _get_jnt_v_from_sol(self, node_idx=1):
 
         return self._get_v_from_sol()[6:, node_idx].reshape(1,  
-                    self.n_dofs)
+                    self._nv_jnts)
 
     def _get_jnt_a_from_sol(self, node_idx=1):
 
         return self._get_a_from_sol()[6:, node_idx].reshape(1,
-                    self.n_dofs)
+                    self._nv_jnts)
 
     def _get_jnt_eff_from_sol(self, node_idx=1):
         
         efforts_on_node = self._ti.eval_efforts_on_node(node_idx=node_idx)
         
         return efforts_on_node[6:, 0].reshape(1,  
-                self.n_dofs)
+                self._nv_jnts)
     
     def _get_rhc_cost(self):
 
