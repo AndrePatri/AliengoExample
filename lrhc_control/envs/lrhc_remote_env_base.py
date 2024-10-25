@@ -684,7 +684,17 @@ class LRhcEnvBase(ABC):
         self._reset_jnt_imp_control(robot_name=robot_name,
                 env_indxs=env_indxs)
         
+        # update jnts state
+        if self._override_low_lev_controller:
+            self._read_jnts_state_from_robot(robot_name=robot_name,
+                env_indxs=env_indxs)
+        
         if reset_cluster: # reset the state of clusters using the reset state
+            if not self._override_low_lev_controller:
+                self._read_jnts_state_from_robot(robot_name=robot_name,
+                    env_indxs=env_indxs)
+            self._read_root_state_from_robot(robot_name=robot_name,
+                env_indxs=env_indxs)
             self._write_state_to_cluster(robot_name=robot_name,
                 env_indxs=env_indxs)
         if reset_cluster_counter:
@@ -1046,6 +1056,7 @@ class LRhcEnvBase(ABC):
             self._jnt_imp_controllers[robot_name].set_refs(pos_ref=self._homing[env_indxs, :],
                 robot_indxs = env_indxs)
 
+        # self._write_state_to_jnt_imp(robot_name=robot_name)
         # actually applies reset commands to the articulation
         # self._jnt_imp_controllers[robot_name].apply_cmds()          
 
