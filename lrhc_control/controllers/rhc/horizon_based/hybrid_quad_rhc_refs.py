@@ -160,7 +160,7 @@ class HybridQuadRhcRefs(RhcRefs):
         elif phase_id == 0:
             Journal.log(self.__class__.__name__,
                 "step",
-                "not yet supported!!",
+                f"phase id {phase_id} not yet supported!!",
                 LogType.EXCEP,
                 throw_when_excep = True)
         else:
