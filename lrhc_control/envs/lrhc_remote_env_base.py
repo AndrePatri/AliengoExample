@@ -627,9 +627,8 @@ class LRhcEnvBase(ABC):
                     env_indxs=None)
                 control_cluster.write_robot_state()
 
-                self._remote_steppers[robot_name].ack() # signal cluster stepping is finished
-
                 if self._use_remote_stepping[i]:
+                    self._remote_steppers[robot_name].ack() # signal cluster stepping is finished
                     if failed is not None: # deactivate robot completely 
                         self._deactivate(env_indxs=failed,
                             robot_name=robot_name)
