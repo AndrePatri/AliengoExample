@@ -411,6 +411,10 @@ class HybridQuadRhc(RHController):
         step_height=step_height
 
         for c in self._model.cmap.keys():
+            
+            init_z_foot = self._model.kd.fk(c)(q=self._model.q0)['ee_pos'].elements()[2]
+            ee_vel = self._model.kd.frameVelocity(c, self._model.kd_frame)(q=self._model.q, 
+                        qdot=self._model.v)['ee_vel_linear']
 
             # stance phases
             self._c_timelines[c] = self._pm.createTimeline(f'{c}_timeline')
@@ -418,6 +422,7 @@ class HybridQuadRhc(RHController):
             if self._ti.getTask(f'{c}') is not None:
                 stance_phase_short.addItem(self._ti.getTask(f'{c}'))
                 ref_trj = np.zeros(shape=[7, short_stance_duration])
+                ref_trj[2, :]=init_z_foot
                 stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
                     ref_trj, nodes=list(range(0, short_stance_duration)))
             else:
@@ -439,14 +444,13 @@ class HybridQuadRhc(RHController):
 
             # flight phases
             flight_phase = self._c_timelines[c].createPhase(flight_duration+post_landing_stance, f'flight_{c}')
-            init_z_foot = self._model.kd.fk(c)(q=self._model.q0)['ee_pos'].elements()[2]
-            ee_vel = self._model.kd.frameVelocity(c, self._model.kd_frame)(q=self._model.q, qdot=self._model.v)['ee_vel_linear']
-
+            
             # post landing contact + force reg
             if not post_landing_stance<1:
                 if self._ti.getTask(f'{c}') is not None:
                     flight_phase.addItem(self._ti.getTask(f'{c}'), nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
                     ref_trj = np.zeros(shape=[7, post_landing_stance])
+                    ref_trj[2, :]=init_z_foot
                     flight_phase.addItemReference(self._ti.getTask(f'z_{c}'),
                         ref_trj,
                         nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
