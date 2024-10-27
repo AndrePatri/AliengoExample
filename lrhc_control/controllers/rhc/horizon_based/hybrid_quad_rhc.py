@@ -3,8 +3,10 @@ from control_cluster_bridge.controllers.rhc import RHController
 # from control_cluster_bridge.utilities.cpu_utils.core_utils import get_memory_usage
 
 from lrhc_control.controllers.rhc.horizon_based.horizon_imports import * 
+from lrhc_control.controllers.rhc.horizon_based.hybrid_quad_rhc_refs import HybridQuadRhcRefs
+from lrhc_control.controllers.rhc.horizon_based.gait_manager import GaitManager
 
-# from SharsorIPCpp.PySharsorIPC import VLevel
+from SharsorIPCpp.PySharsorIPC import VLevel
 from SharsorIPCpp.PySharsorIPC import Journal, LogType
 
 import numpy as np
@@ -15,7 +17,8 @@ import os
 import time
 from abc import ABC, abstractmethod
 
-from typing import Dict
+from typing import Dict, List
+import re
 
 class HybridQuadRhc(RHController):
 
@@ -104,6 +107,193 @@ class HybridQuadRhc(RHController):
         self._nv=self.nv()
         self._nv_jnts=self._nv-6
     
+    def _init_problem(self,
+            fixed_jnt_patterns: List[str] = None,
+            foot_linkname: str = None,
+            flight_duration: int = 10,
+            post_landing_stance: int = 5,
+            step_height: float = 0.12,
+            keep_yaw_vert: bool = False,
+            yaw_vertical_weight: float = 2.0,
+            phase_force_reg: float = 1e-2,
+            vel_bounds_weight: float = 1.0):
+        
+        self._vel_bounds_weight=vel_bounds_weight
+        self._phase_force_reg=phase_force_reg
+        self._yaw_vertical_weight=yaw_vertical_weight
+
+        # overrides parent
+        self._prb = Problem(self._n_intervals, 
+                        receding=True, 
+                        casadi_type=cs.SX)
+        self._prb.setDt(self._dt)
+
+        if self._custom_opts["replace_continuous_joints"]:
+            # continous joints are parametrized in So2
+            self.urdf = self.urdf.replace('continuous', 'revolute')
+        self._kin_dyn = casadi_kin_dyn.CasadiKinDyn(self.urdf) # used for getting joint names 
+        self._assign_controller_side_jnt_names(jnt_names=self._get_robot_jnt_names())
+        
+        self._init_robot_homer()
+
+        # handle fixed joints
+        fixed_joint_map={}
+        if fixed_jnt_patterns is not None:
+            for jnt_name in self._get_robot_jnt_names():
+                for fixed_jnt_pattern in fixed_jnt_patterns:
+                    if fixed_jnt_pattern in jnt_name: 
+                        fixed_joint_map.update({f"{jnt_name}":
+                            self._homer.get_homing_val(jnt_name=jnt_name)})
+                        break # do not search for other pattern matches
+        
+        if not len(fixed_joint_map)==0: # we need to recreate kin dyn and homers
+            Journal.log(self.__class__.__name__,
+                "_init_problem",
+                f"Will fix following joints: \n{str(fixed_joint_map)}",
+                LogType.INFO,
+                throw_when_excep=True)
+            # with the fixed joint map
+            self._kin_dyn = casadi_kin_dyn.CasadiKinDyn(self.urdf,fixed_joints=fixed_joint_map)
+            # assign again controlled joints names
+            self._assign_controller_side_jnt_names(jnt_names=self._get_robot_jnt_names())
+            # updated robot homer for controlled joints
+            self._init_robot_homer()
+
+        # handle continuous joints (need to change homing and retrieve
+        # cont jnts indexes)
+        self._continuous_joints=self._get_continuous_jnt_names()
+        # reduced
+        self._continuous_joints_idxs=[]
+        self._continuous_joints_idxs_cos=[]
+        self._continuous_joints_idxs_sin=[]
+        self._continuous_joints_idxs_red=[]
+        self._rev_joints_idxs=[]
+        self._rev_joints_idxs_red=[]
+        # qfull
+        self._continuous_joints_idxs_qfull=[]
+        self._continuous_joints_idxs_cos_qfull=[]
+        self._continuous_joints_idxs_sin_qfull=[]
+        self._continuous_joints_idxs_red_qfull=[]
+        self._rev_joints_idxs_qfull=[]
+        self._rev_joints_idxs_red_qfull=[]
+        jnt_homing=[""]*(len(self._homer.get_homing())+len(self._continuous_joints))
+        jnt_names=self._get_robot_jnt_names()
+        for i in range(len(jnt_names)):
+            jnt=jnt_names[i]
+            index=self._get_jnt_id(jnt)# accounting for floating joint
+            homing_idx=index-7 # homing is only for actuated joints
+            homing_value=self._homer.get_homing_val(jnt)
+            if jnt in self._continuous_joints:
+                jnt_homing[homing_idx]=np.cos(homing_value).item()
+                jnt_homing[homing_idx+1]=np.sin(homing_value).item()
+                # just actuated joints
+                self._continuous_joints_idxs.append(homing_idx) # cos
+                self._continuous_joints_idxs.append(homing_idx+1) # sin
+                self._continuous_joints_idxs_cos.append(homing_idx)
+                self._continuous_joints_idxs_sin.append(homing_idx+1)
+                self._continuous_joints_idxs_red.append(i)
+                # q full
+                self._continuous_joints_idxs_qfull.append(index) # cos
+                self._continuous_joints_idxs_qfull.append(index+1) # sin
+                self._continuous_joints_idxs_cos_qfull.append(index)
+                self._continuous_joints_idxs_sin_qfull.append(index+1)
+                self._continuous_joints_idxs_red_qfull.append(i+7)
+            else:
+                jnt_homing[homing_idx]=homing_value
+                # just actuated joints
+                self._rev_joints_idxs.append(homing_idx) 
+                self._rev_joints_idxs_red.append(i) 
+                # q full
+                self._rev_joints_idxs_qfull.append(index) 
+                self._rev_joints_idxs_red_qfull.append(i+7) 
+
+        self._jnts_q_reduced=None
+        if not len(self._continuous_joints)==0: 
+            # preallocating data 
+            self._jnts_q_reduced=np.zeros((1,self.nv()-6),dtype=self._dtype)
+            self._jnts_q_expanded=np.zeros((1,self.nq()-7),dtype=self._dtype)
+            self._full_q_reduced=np.zeros((7+len(jnt_names), self._n_nodes),dtype=self._dtype)
+
+        self._f0 = [0, 0, self._kin_dyn.mass()/4*9.81]
+        
+        # we can create an init for the base
+        init = self._base_init.tolist() + jnt_homing
+
+        if foot_linkname is not None:
+            FK = self._kin_dyn.fk(foot_linkname) # just to get robot reference height
+            ground_level = FK(q=init)['ee_pos']
+            self._base_init[2] = -ground_level[2]  # override init
+        
+        self._model = FullModelInverseDynamics(problem=self._prb,
+            kd=self._kin_dyn,
+            q_init=self._homer.get_homing_map(),
+            base_init=self._base_init)
+
+        self._ti = TaskInterface(prb=self._prb, 
+                            model=self._model, 
+                            max_solver_iter=self.max_solver_iter,
+                            debug = self._debug,
+                            verbose = self._verbose, 
+                            codegen_workdir = self._codegen_dir)
+        self._ti.setTaskFromYaml(self.config_path)
+        
+        # setting initial base pos ref if exists
+        base_pos = self._ti.getTask('base_height')
+        if base_pos is not None:
+            base_pos.setRef(np.atleast_2d(self._base_init).T)
+
+        self._tg = trajectoryGenerator.TrajectoryGenerator()
+
+        self._pm = pymanager.PhaseManager(self._n_nodes, debug=False) # intervals or nodes?????
+
+        self._init_contact_timelines(flight_duration=flight_duration,
+            post_landing_stance=post_landing_stance,
+            step_height=step_height,
+            keep_yaw_vert=keep_yaw_vert)
+        # self._add_zmp()
+            
+        self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
+        self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
+        self._ti.model.q.setInitialGuess(self._ti.model.q0)
+        self._ti.model.v.setInitialGuess(self._ti.model.v0)
+        for _, cforces in self._ti.model.cmap.items():
+            n_contact_f=len(cforces)
+            for c in cforces:
+                c.setInitialGuess(np.array(self._f0)/n_contact_f)        
+
+        vel_lims = self._model.kd.velocityLimits()
+        import horizon.utils as utils
+        self._prb.createResidual('vel_lb_barrier', self._vel_bounds_weight*utils.utils.barrier(vel_lims[7:] - self._model.v[7:]))
+        self._prb.createResidual('vel_ub_barrier', self._vel_bounds_weight*utils.utils.barrier1(-1 * vel_lims[7:] - self._model.v[7:]))
+
+        # if not self._open_loop:
+        #     # we create a residual cost to be used as an attractor to the measured state on the first node
+        #     # hard constraints injecting meas. states are pure EVIL!
+        #     prb_state=self._prb.getState()
+        #     full_state=prb_state.getVars()
+        #     state_dim=prb_state.getBounds()[0].shape[0]
+        #     meas_state=self._prb.createParameter(name="measured_state",
+        #         dim=state_dim, nodes=0)     
+        #     self._prb.createResidual('meas_state_attractor', meas_state_attractor_weight * (full_state - meas_state), 
+        #                 nodes=[0])
+
+        self._ti.finalize()
+        self._ti.bootstrap()
+
+        self._ti.init_inv_dyn_for_res() # we initialize some objects for sol. postprocessing purposes
+        self._ti.load_initial_guess()
+
+        contact_phase_map = {c: f'{c}_timeline' for c in self._model.cmap.keys()}
+        
+        self._gm = GaitManager(self._ti, self._pm, contact_phase_map, self._injection_node)
+
+        self.n_dofs = self._get_ndofs() # after loading the URDF and creating the controller we
+        # know n_dofs -> we assign it (by default = None)
+
+        self.n_contacts = len(self._model.cmap.keys())
+        
+        # self.horizon_anal = analyzer.ProblemAnalyzer(self._prb)
+
     def get_file_paths(self):
         # can be overriden by child
         paths = super().get_file_paths()
@@ -113,6 +303,62 @@ class HybridQuadRhc(RHController):
         # overrides parent
         return [1, 2, 3, 0] # mapping from robot quat. to Horizon's quaternion convention
     
+    def _zmp(self, model):
+
+        num = cs.SX([0, 0])
+        den = cs.SX([0])
+        pos_contact = dict()
+        force_val = dict()
+
+        q = cs.SX.sym('q', model.nq)
+        v = cs.SX.sym('v', model.nv)
+        a = cs.SX.sym('a', model.nv)
+
+        com = model.kd.centerOfMass()(q=q, v=v, a=a)['com']
+
+        n = cs.SX([0, 0, 1])
+        for c in model.fmap.keys():
+            pos_contact[c] = model.kd.fk(c)(q=q)['ee_pos']
+            force_val[c] = cs.SX.sym('force_val', 3)
+            num += (pos_contact[c][0:2] - com[0:2]) * cs.dot(force_val[c], n)
+            den += cs.dot(force_val[c], n)
+
+        zmp = com[0:2] + (num / den)
+        input_list = []
+        input_list.append(q)
+        input_list.append(v)
+        input_list.append(a)
+
+        for elem in force_val.values():
+            input_list.append(elem)
+
+        f = cs.Function('zmp', input_list, [zmp])
+        return f
+    
+    def _add_zmp(self):
+
+        input_zmp = []
+
+        input_zmp.append(self._model.q)
+        input_zmp.append(self._model.v)
+        input_zmp.append(self._model.a)
+
+        for f_var in self._model.fmap.values():
+            input_zmp.append(f_var)
+
+        c_mean = cs.SX([0, 0, 0])
+        for c_name, f_var in self._model.fmap.items():
+            fk_c_pos = self._kin_dyn.fk(c_name)(q=self._model.q)['ee_pos']
+            c_mean += fk_c_pos
+
+        c_mean /= len(self._model.cmap.keys())
+
+        zmp_nominal_weight = 10.
+        zmp_fun = self._zmp(self._model)(*input_zmp)
+
+        if 'wheel_joint_1' in self._model.kd.joint_names():
+            zmp_residual = self._prb.createIntermediateResidual('zmp',  zmp_nominal_weight * (zmp_fun[0:2] - c_mean[0:2]))
+
     def _quaternion_multiply(self, 
                     q1, q2):
         x1, y1, z1, w1 = q1
@@ -137,21 +383,145 @@ class HybridQuadRhc(RHController):
     def _get_jnt_id(self, jnt_name):
         return self._kin_dyn.joint_iq(jnt_name)
     
-    @abstractmethod
-    def _init_problem(self):
-        pass
-    
-    @abstractmethod
     def _reset_contact_timelines(self):
-        pass
+        for c in self._model.cmap.keys():
+            # fill timeline with stances
+            contact_timeline=self._c_timelines[c]
+            contact_timeline.clear() # remove phases
+            stance = contact_timeline.getRegisteredPhase(f'stance_{c}_short')
+            while contact_timeline.getEmptyNodes() > 0:
+                contact_timeline.addPhase(stance)
+            # f reg
+            # if self._add_f_reg_timeline:
+            #     freg_tline=self._f_reg_timelines[c]
+            #     freg_tline.clear()
+            #     f_stance = freg_tline.getRegisteredPhase(f'freg_{c}_short')
+            #     for i in range(self._n_nodes-1): # not defined on last node
+            #         freg_tline.addPhase(f_stance)
     
-    @abstractmethod
-    def _init_contact_timelines(self):
-        pass
+    def _init_contact_timelines(self,
+            flight_duration: int = 10,
+            post_landing_stance: int = 5,
+            step_height: float = 0.12,
+            keep_yaw_vert: bool = False):
+        
+        short_stance_duration = 1
+        flight_duration = flight_duration
+        post_landing_stance = post_landing_stance
+        step_height=step_height
 
-    @abstractmethod
+        for c in self._model.cmap.keys():
+
+            # stance phases
+            self._c_timelines[c] = self._pm.createTimeline(f'{c}_timeline')
+            stance_phase_short = self._c_timelines[c].createPhase(short_stance_duration, f'stance_{c}_short')
+            if self._ti.getTask(f'{c}') is not None:
+                stance_phase_short.addItem(self._ti.getTask(f'{c}'))
+                ref_trj = np.zeros(shape=[7, short_stance_duration])
+                stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
+                    ref_trj, nodes=list(range(0, short_stance_duration)))
+            else:
+                Journal.log(self.__class__.__name__,
+                    "_init_contact_timelines",
+                    f"contact task {c} not found",
+                    LogType.EXCEP,
+                    throw_when_excep=True)
+            i=0
+            n_forces=len(self._ti.model.cmap[c])
+            for force in self._ti.model.cmap[c]:
+                f_ref=self._prb.createParameter(name=f"{c}_force_reg_f{i}_ref",
+                    dim=3) 
+                force_reg=self._prb.createResidual(f'{c}_force_reg_f{i}', self._phase_force_reg * (force - f_ref), 
+                    nodes=[])
+                f_ref.assign(np.atleast_2d(np.array(self._f0)).T/n_forces)    
+                stance_phase_short.addCost(force_reg, nodes=list(range(0, short_stance_duration)))
+                i+=1
+
+            # flight phases
+            flight_phase = self._c_timelines[c].createPhase(flight_duration+post_landing_stance, f'flight_{c}')
+            init_z_foot = self._model.kd.fk(c)(q=self._model.q0)['ee_pos'].elements()[2]
+            ee_vel = self._model.kd.frameVelocity(c, self._model.kd_frame)(q=self._model.q, qdot=self._model.v)['ee_vel_linear']
+
+            # post landing contact + force reg
+            if not post_landing_stance<1:
+                if self._ti.getTask(f'{c}') is not None:
+                    flight_phase.addItem(self._ti.getTask(f'{c}'), nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
+                    ref_trj = np.zeros(shape=[7, post_landing_stance])
+                    flight_phase.addItemReference(self._ti.getTask(f'z_{c}'),
+                        ref_trj,
+                        nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
+                    i=0
+                    for force in self._ti.model.cmap[c]:
+                        force_reg=self._prb.getCosts(f'{c}_force_reg_f{i}')
+                        flight_phase.addCost(force_reg, nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
+                        i+=1
+                else:
+                    Journal.log(self.__class__.__name__,
+                        "_init_contact_timelines",
+                        f"contact task {c} not found!",
+                        LogType.EXCEP,
+                        throw_when_excep=True)
+            # reference traj
+            der= [None, 0, 0]
+            second_der=[None, 0, 0]
+            # flight pos
+            if self._ti.getTask(f'z_{c}') is not None:
+                ref_trj = np.zeros(shape=[7, flight_duration])
+                ref_trj[2, :] = np.atleast_2d(self._tg.from_derivatives(flight_duration, init_z_foot, init_z_foot, step_height,
+                    derivatives=der,
+                    second_der=second_der))
+                flight_phase.addItemReference(self._ti.getTask(f'z_{c}'), ref_trj, nodes=list(range(0, flight_duration)))
+            else:
+                Journal.log(self.__class__.__name__,
+                    "_init_contact_timelines",
+                    f"contact pos traj tracking task z_{c} not found-> it won't be used",
+                    LogType.WARN,
+                    throw_when_excep=True)
+            # flight vel
+            if self._ti.getTask(f'vz_{c}') is not None:
+                ref_vtrj = np.zeros(shape=[1, flight_duration])
+                ref_vtrj[:, :] = np.atleast_2d(self._tg.derivative_of_trajectory(flight_duration, init_z_foot, init_z_foot, step_height, 
+                    derivatives=der,
+                    second_der=second_der))
+                flight_phase.addItemReference(self._ti.getTask(f'vz_{c}'), ref_vtrj, nodes=list(range(0, flight_duration)))
+            else:
+                Journal.log(self.__class__.__name__,
+                    "_init_contact_timelines",
+                    f"contact vel traj tracking task vz_{c} not found-> it won't be used",
+                    LogType.WARN,
+                    throw_when_excep=True)
+            
+            cstr = self._prb.createConstraint(f'{c}_vert', ee_vel[0:2], [])
+            flight_phase.addConstraint(cstr, nodes=[0, flight_duration-1])
+
+            if keep_yaw_vert:
+                # keep ankle vertical
+                c_ori = self._model.kd.fk(c)(q=self._model.q)['ee_rot'][2, :]
+                cost_ori = self._prb.createResidual(f'{c}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
+                # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
+
+        self._reset_contact_timelines()
+
     def _init_rhc_task_cmds(self):
-        pass
+        
+        rhc_refs = HybridQuadRhcRefs(gait_manager=self._gm,
+            robot_index=self.controller_index,
+            namespace=self.namespace,
+            safe=False, 
+            verbose=self._verbose,
+            vlevel=VLevel.V2)
+        
+        rhc_refs.run()
+
+        rhc_refs.rob_refs.set_jnts_remapping(jnts_remapping=self._to_controller)
+        rhc_refs.rob_refs.set_q_remapping(q_remapping=self._get_quat_remap())
+              
+        # writing initializations
+        rhc_refs.reset(p_ref=np.atleast_2d(self._base_init)[:, 0:3], 
+            q_ref=np.atleast_2d(self._base_init)[:, 3:7] # will be remapped according to just set q_remapping
+            )
+        
+        return rhc_refs
     
     def get_vertex_fnames_from_ti(self):
         tasks=self._ti.task_list
@@ -208,11 +578,24 @@ class HybridQuadRhc(RHController):
         #     twist_base_local[:, 3:6] = r_base_rhc @ twist_base_local[0, 3:6]
         return twist_base_local
 
-    def _get_jnt_q_from_sol(self, node_idx=1):
+    def _get_jnt_q_from_sol(self, node_idx=1, 
+            reduce: bool = True,
+            clamp: bool = True):
         
-        full_q=self._ti.solution['q'] # assuming floating base robot
-        return np.fmod(full_q[7:, node_idx], 2*np.pi).reshape(1,  
-                self._nq_jnts)
+        full_jnts_q=self._ti.solution['q'][7:, node_idx:node_idx+1].reshape(1,-1)
+
+        if self._custom_opts["replace_continuous_joints"] or (not reduce):
+            if clamp:
+                return np.fmod(full_jnts_q, 2*np.pi)
+            else:
+                return full_jnts_q
+        else:
+            cos_sin=full_jnts_q[:,self._continuous_joints_idxs].reshape(-1,2)
+            # copy rev joint vals
+            self._jnts_q_reduced[:, self._rev_joints_idxs_red]=np.fmod(full_jnts_q[:, self._rev_joints_idxs], 2*np.pi).reshape(1, -1)
+            # and continuous
+            self._jnts_q_reduced[:, self._continuous_joints_idxs_red]=np.arctan2(cos_sin[:, 1], cos_sin[:, 0]).reshape(1,-1)
+            return self._jnts_q_reduced
         
     def _get_jnt_v_from_sol(self, node_idx=1):
 
@@ -258,20 +641,25 @@ class HybridQuadRhc(RHController):
                         close_all: bool=False):
 
         # overrides parent
-        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        p = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
+        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
+        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
+        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
+        p = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(1, -1)
+        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
+        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(1, -1)
 
+        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
+            # copy rev joints
+            self._jnts_q_expanded[:, self._rev_joints_idxs]=q_jnts[:, self._rev_joints_idxs_red]
+            self._jnts_q_expanded[:, self._continuous_joints_idxs_cos]=np.cos(q_jnts[:, self._continuous_joints_idxs_red]) # cos
+            self._jnts_q_expanded[:, self._continuous_joints_idxs_sin]=np.sin(q_jnts[:, self._continuous_joints_idxs_red]) # sin
+            q_jnts=self._jnts_q_expanded
         # meas twist is assumed to be provided in BASE link!!!
         if not close_all: # use internal MPC for the base and joints
-            p[0:3,:]=self._get_root_full_q_from_sol(node_idx=1).reshape(-1,1)[0:3, :] # base pos is open loop
-            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1).reshape(-1,1)[0:3, :]
-            q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1).reshape(-1,1)
-            v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1).reshape(-1,1)
-
+            p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
+            # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[0:3, :]
+            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
+            v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
         if x_opt is not None:
@@ -282,12 +670,12 @@ class HybridQuadRhc(RHController):
             state_quat_conjugate[:3] *= -1.0
             # normalize the quaternion
             state_quat_conjugate = state_quat_conjugate / np.linalg.norm(x_opt[3:7, 0])
-            diff_quat = self._quaternion_multiply(q_root, state_quat_conjugate)
+            diff_quat = self._quaternion_multiply(q_root.flatten(), state_quat_conjugate)
             if diff_quat[3] < 0:
-                q_root[:] = -q_root
+                q_root[:, :] = -q_root[:, :]
         
         return np.concatenate((p, q_root, q_jnts, v_root, omega, v_jnts),
-                axis=0)
+                axis=1).reshape(-1,1)
     
     def _set_ig(self):
 
@@ -469,7 +857,21 @@ class HybridQuadRhc(RHController):
         return constr_names, constr_dims
     
     def _get_q_from_sol(self):
-        return self._ti.solution['q']
+        full_q=self._ti.solution['q']
+        if self._custom_opts["replace_continuous_joints"]:
+            return full_q
+        else:
+            cont_jnts=full_q[self._continuous_joints_idxs_qfull, :]
+            cos=cont_jnts[::2, :]
+            sin=cont_jnts[1::2, :]
+            # copy root
+            self._full_q_reduced[0:7, :]=full_q[0:7, :]
+            # copy rev joint vals
+            self._full_q_reduced[self._rev_joints_idxs_red_qfull, :]=full_q[self._rev_joints_idxs_qfull, :]
+            # and continuous
+            angle=np.arctan2(sin, cos)
+            self._full_q_reduced[self._continuous_joints_idxs_red_qfull, :]=angle
+            return self._full_q_reduced
 
     def _get_v_from_sol(self):
         return self._ti.solution['v']
