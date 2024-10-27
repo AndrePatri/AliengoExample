@@ -421,10 +421,11 @@ class HybridQuadRhc(RHController):
             stance_phase_short = self._c_timelines[c].createPhase(short_stance_duration, f'stance_{c}_short')
             if self._ti.getTask(f'{c}') is not None:
                 stance_phase_short.addItem(self._ti.getTask(f'{c}'))
-                ref_trj = np.zeros(shape=[7, short_stance_duration])
-                ref_trj[2, :]=init_z_foot
-                stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
-                    ref_trj, nodes=list(range(0, short_stance_duration)))
+                if self._ti.getTask(f'z_{c}') is not None:
+                    ref_trj = np.zeros(shape=[7, short_stance_duration])
+                    ref_trj[2, :]=init_z_foot
+                    stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
+                        ref_trj, nodes=list(range(0, short_stance_duration)))
             else:
                 Journal.log(self.__class__.__name__,
                     "_init_contact_timelines",
@@ -449,11 +450,12 @@ class HybridQuadRhc(RHController):
             if not post_landing_stance<1:
                 if self._ti.getTask(f'{c}') is not None:
                     flight_phase.addItem(self._ti.getTask(f'{c}'), nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
-                    ref_trj = np.zeros(shape=[7, post_landing_stance])
-                    ref_trj[2, :]=init_z_foot
-                    flight_phase.addItemReference(self._ti.getTask(f'z_{c}'),
-                        ref_trj,
-                        nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
+                    if self._ti.getTask(f'z_{c}') is not None:
+                        ref_trj = np.zeros(shape=[7, post_landing_stance])
+                        ref_trj[2, :]=init_z_foot
+                        flight_phase.addItemReference(self._ti.getTask(f'z_{c}'),
+                            ref_trj,
+                            nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
                     i=0
                     for force in self._ti.model.cmap[c]:
                         force_reg=self._prb.getCosts(f'{c}_force_reg_f{i}')
@@ -661,8 +663,8 @@ class HybridQuadRhc(RHController):
         # meas twist is assumed to be provided in BASE link!!!
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
-            # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[0:3, :]
-            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
+            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
+            q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
