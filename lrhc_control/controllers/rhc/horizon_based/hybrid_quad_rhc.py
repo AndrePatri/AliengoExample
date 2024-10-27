@@ -80,7 +80,7 @@ class HybridQuadRhc(RHController):
         self._c_timelines = dict()
         self._f_reg_timelines = dict()
         
-        self._custom_opts={}
+        self._custom_opts={"replace_continuous_joints": True}
         self._custom_opts.update(custom_opts)
 
         super().__init__(srdf_path=srdf_path,
