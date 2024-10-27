@@ -80,9 +80,7 @@ class HybridQuadRhc(RHController):
         self._c_timelines = dict()
         self._f_reg_timelines = dict()
         
-        self._custom_opts={
-            "replace_continuous_joints": True # whether to replace continuous joints with revolute
-            }
+        self._custom_opts={}
         self._custom_opts.update(custom_opts)
 
         super().__init__(srdf_path=srdf_path,
@@ -128,9 +126,13 @@ class HybridQuadRhc(RHController):
                         casadi_type=cs.SX)
         self._prb.setDt(self._dt)
 
-        if self._custom_opts["replace_continuous_joints"]:
+        if "replace_continuous_joints" in self._custom_opts:
             # continous joints are parametrized in So2
+            if self._custom_opts["replace_continuous_joints"]:
+                self.urdf = self.urdf.replace('continuous', 'revolute')
+        else:
             self.urdf = self.urdf.replace('continuous', 'revolute')
+            
         self._kin_dyn = casadi_kin_dyn.CasadiKinDyn(self.urdf) # used for getting joint names 
         self._assign_controller_side_jnt_names(jnt_names=self._get_robot_jnt_names())
         
@@ -160,7 +162,7 @@ class HybridQuadRhc(RHController):
             self._init_robot_homer()
 
         # handle continuous joints (need to change homing and retrieve
-        # cont jnts indexes)
+        # cont jnts indexes) and homing
         self._continuous_joints=self._get_continuous_jnt_names()
         # reduced
         self._continuous_joints_idxs=[]
@@ -209,6 +211,13 @@ class HybridQuadRhc(RHController):
 
         self._jnts_q_reduced=None
         if not len(self._continuous_joints)==0: 
+            cont_joints=", ".join(self._continuous_joints)
+
+            Journal.log(self.__class__.__name__,
+                "_init_problem",
+                f"The following continuous joints were found: \n{cont_joints}",
+                LogType.INFO,
+                throw_when_excep=True)
             # preallocating data 
             self._jnts_q_reduced=np.zeros((1,self.nv()-6),dtype=self._dtype)
             self._jnts_q_expanded=np.zeros((1,self.nq()-7),dtype=self._dtype)
@@ -663,7 +672,7 @@ class HybridQuadRhc(RHController):
         # meas twist is assumed to be provided in BASE link!!!
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
-            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
+            # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
             q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
