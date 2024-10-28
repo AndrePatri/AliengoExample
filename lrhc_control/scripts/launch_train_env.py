@@ -85,6 +85,9 @@ if __name__ == "__main__":
             debug=args.env_db,
             override_agent_refs=args.override_agent_refs,
             timeout_ms=args.timeout_ms)
+    if not env.is_ready(): # something went wrong
+        exit()
+
     env_type="training" if not args.eval else "evaluation"
     Journal.log("launch_train_env.py",
             "",

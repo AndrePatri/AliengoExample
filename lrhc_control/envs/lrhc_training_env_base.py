@@ -55,7 +55,7 @@ class LRhcTrainingEnvBase(ABC):
             n_steps_task_rand_ub: int,
             action_repeat: int = 1,
             env_name: str = "",
-            n_preinit_steps: int = 0,
+            n_preinit_steps: int = 1,
             verbose: bool = False,
             vlevel: VLevel = VLevel.V1,
             debug: bool = True,
@@ -109,7 +109,7 @@ class LRhcTrainingEnvBase(ABC):
         self._act_membf_size = round(act_membf_size/self._action_repeat) 
 
         self._closed = False
-
+        self._ready=False
         self._override_agent_refs = override_agent_refs
 
         self._episode_timeout_lb = round(episode_timeout_lb/self._action_repeat) 
@@ -193,9 +193,7 @@ class LRhcTrainingEnvBase(ABC):
 
         self._custom_post_init()
 
-        # self._wait_for_sim_env()
-
-        self._init_step()
+        self._ready=self._init_step()
 
     def __del__(self):
 
@@ -255,15 +253,27 @@ class LRhcTrainingEnvBase(ABC):
         # just an auxiliary tensor
         initial_reset_aux = self._terminations.get_torch_mirror(gpu=self._use_gpu).clone()
         initial_reset_aux[:, :] = True # we reset all sim envs first
-        self._remote_sim_step() 
-        self._remote_reset(reset_mask=initial_reset_aux) 
+        init_step_ok=True
+        init_step_ok=self._remote_sim_step() and init_step_ok
+        if not init_step_ok:
+            return False
+        init_step_ok=self._remote_reset(reset_mask=initial_reset_aux) and init_step_ok
+        if not init_step_ok:
+            return False
+            
         for i in range(self._n_preinit_steps): # perform some
             # dummy remote env stepping to make sure to have meaningful 
             # initializations (doesn't increment step counter)
-            self._remote_sim_step() # 1 remote sim. step
-            self._send_remote_reset_req() # fake reset request 
-
+            init_step_ok=self._remote_sim_step() and init_step_ok # 1 remote sim. step
+            if not init_step_ok:
+                return False
+            init_step_ok=self._send_remote_reset_req() and init_step_ok # fake reset request 
+            if not init_step_ok:
+                return False
+            
         self.reset()
+
+        return init_step_ok
 
     def _debug(self):
 
@@ -320,7 +330,7 @@ class LRhcTrainingEnvBase(ABC):
         remote_reset_ok = self._send_remote_reset_req() # process remote request
 
         if reset_mask is not None:
-            self._synch_obs(gpu=self._use_gpu) # if some env was reset, we use _obs
+            self._synch_state(gpu=self._use_gpu) # if some env was reset, we use _obs
             # to hold the states, including resets, while _next_obs will always hold the 
             # state right after stepping the sim env
             # (could be a bit more efficient, since in theory we only need to read the envs
@@ -374,8 +384,9 @@ class LRhcTrainingEnvBase(ABC):
             stepping_ok = stepping_ok and self._check_controllers_registered(retry=False) # does not make sense to run training
             # if we lost some controllers
             stepping_ok = stepping_ok and self._remote_sim_step() # blocking, 
+
             # no sim substepping is allowed to fail
-            self._synch_obs(gpu=self._use_gpu) # read obs from shared mem (done in substeps also, 
+            self._synch_state(gpu=self._use_gpu) # read state from shared mem (done in substeps also, 
             # since substeps rewards will need updated substep obs)
             
             self._custom_post_substp_pre_rew() # custom substepping logic
@@ -550,7 +561,7 @@ class LRhcTrainingEnvBase(ABC):
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset_all()
 
-        self._synch_obs(gpu=self._use_gpu) # read obs from shared mem
+        self._synch_state(gpu=self._use_gpu) # read obs from shared mem
         obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
         next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
         self._fill_obs(obs) # initialize observations 
@@ -566,6 +577,9 @@ class LRhcTrainingEnvBase(ABC):
         self._prev_root_p_substep[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
         self._prev_root_q_substep[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
 
+    def is_ready(self):
+        return self._ready
+    
     def close(self):
         
         if not self._closed:
@@ -964,7 +978,25 @@ class LRhcTrainingEnvBase(ABC):
     def _attach_to_shared_mem(self):
 
         # runs shared mem clients for getting observation and setting RHC commands
-    
+
+        # remote stepping data
+        self._remote_stepper = RemoteStepperSrvr(namespace=self._namespace,
+                            verbose=self._verbose,
+                            vlevel=self._vlevel,
+                            force_reconnection=True)
+        self._remote_stepper.run()
+        self._remote_resetter = RemoteResetSrvr(namespace=self._namespace,
+                            verbose=self._verbose,
+                            vlevel=self._vlevel,
+                            force_reconnection=True)
+        self._remote_resetter.run()
+        self._remote_reset_req = RemoteResetRequest(namespace=self._namespace,
+                                            is_server=False, 
+                                            verbose=self._verbose,
+                                            vlevel=self._vlevel,
+                                            safe=True)
+        self._remote_reset_req.run()
+
         self._robot_state = RobotState(namespace=self._namespace,
                                 is_server=False, 
                                 safe=self._safe_shared_mem,
@@ -1005,11 +1037,18 @@ class LRhcTrainingEnvBase(ABC):
                                 with_torch_view=True)
         
         self._robot_state.run()
+        self._n_envs = self._robot_state.n_robots()
+        self._n_jnts = self._robot_state.n_jnts()
+        self._n_contacts = self._robot_state.n_contacts() # we assume same n contacts for all rhcs for now
+
         self._rhc_cmds.run()
         self._rhc_pred.run()
         self._rhc_refs.run()
         self._rhc_status.run()
         # we read rhc info now and just this time, since it's assumed to be static 
+        self._check_controllers_registered(retry=True) # blocking
+        # (we need controllers to be connected to read meaningful data)
+
         self._rhc_status.rhc_static_info.synch_all(read=True,retry=True)
         if self._use_gpu:
             self._rhc_status.rhc_static_info.synch_mirror(from_gpu=False,non_blocking=False)
@@ -1032,15 +1071,11 @@ class LRhcTrainingEnvBase(ABC):
                 "_attach_to_shared_mem",
                 "Found at least one robot with 0 mass from RHC static info!!",
                 LogType.EXCEP,
-                throw_when_excep = False)
+                throw_when_excep=True)
 
         self._rhc_robot_weight=robot_mass*9.81
         self._pred_node_idxs_rhc=pred_node_idxs_rhc
         self._pred_horizon_rhc=self._pred_node_idxs_rhc*self._rhc_dts
-
-        self._n_envs = self._robot_state.n_robots()
-        self._n_jnts = self._robot_state.n_jnts()
-        self._n_contacts = self._robot_state.n_contacts() # we assume same n contacts for all rhcs for now
 
         # run server for agent commands
         self._agent_refs = AgentRefs(namespace=self._namespace,
@@ -1057,24 +1092,6 @@ class LRhcTrainingEnvBase(ABC):
                                 vlevel=self._vlevel,
                                 fill_value=0)
         self._agent_refs.run()
-        
-        # remote stepping data
-        self._remote_stepper = RemoteStepperSrvr(namespace=self._namespace,
-                            verbose=self._verbose,
-                            vlevel=self._vlevel,
-                            force_reconnection=True)
-        self._remote_stepper.run()
-        self._remote_resetter = RemoteResetSrvr(namespace=self._namespace,
-                            verbose=self._verbose,
-                            vlevel=self._vlevel,
-                            force_reconnection=True)
-        self._remote_resetter.run()
-        self._remote_reset_req = RemoteResetRequest(namespace=self._namespace,
-                                            is_server=False, 
-                                            verbose=self._verbose,
-                                            vlevel=self._vlevel,
-                                            safe=True)
-        self._remote_reset_req.run()
 
         # episode steps counters (for detecting episode truncations for 
         # time limits) 
@@ -1143,7 +1160,7 @@ class LRhcTrainingEnvBase(ABC):
         self._rhc_status.activation_state.get_torch_mirror()[:, :] = True
         self._rhc_status.activation_state.synch_all(read=False, retry=True) # activates all controllers
     
-    def _synch_obs(self,
+    def _synch_state(self,
             gpu: bool = True):
 
         # read from shared memory on CPU
@@ -1268,7 +1285,7 @@ class LRhcTrainingEnvBase(ABC):
             self._rhc_status.controllers_counter.synch_all(read=True, retry=True)
             n_connected_controllers = self._rhc_status.controllers_counter.get_torch_mirror()[0, 0].item()
             while not (n_connected_controllers == self._n_envs):
-                warn = f"Expected {self._n_envs} controllers to be active during training, " + \
+                warn = f"Expected {self._n_envs} controllers to be connected during training, " + \
                     f"but got {n_connected_controllers}. Will wait for all to be connected..."
                 Journal.log(self.__class__.__name__,
                     "_check_controllers_registered",
@@ -1290,7 +1307,7 @@ class LRhcTrainingEnvBase(ABC):
             self._rhc_status.controllers_counter.synch_all(read=True, retry=True)
             n_connected_controllers = self._rhc_status.controllers_counter.get_torch_mirror()[0, 0].item()
             if not (n_connected_controllers == self._n_envs):
-                exception = f"Expected {self._n_envs} controllers to be active during training, " + \
+                exception = f"Expected {self._n_envs} controllers to be connected during training, " + \
                     f"but got {n_connected_controllers}. Aborting..."
                 Journal.log(self.__class__.__name__,
                     "_check_controllers_registered",
