@@ -46,7 +46,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True
         self._add_gn_rhc_loc=True
-        self._use_linvel_from_rhc=True
+        self._use_linvel_from_rhc=False
         self._use_rhc_avrg_vel_pred=False
         self._use_vel_err_sig_smoother=False # whether to smooth vel error signal
         self._vel_err_smoother=None
