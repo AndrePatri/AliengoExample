@@ -94,6 +94,8 @@ class HybridQuadRhc(RHController):
 
         self._rhc_fpaths.append(self.config_path)
 
+    def _post_problem_init(self):
+
         self.rhc_costs={}
         self.rhc_constr={}
 
@@ -104,7 +106,7 @@ class HybridQuadRhc(RHController):
         self._nq_jnts=self._nq-7# assuming floating base
         self._nv=self.nv()
         self._nv_jnts=self._nv-6
-    
+
     def _init_problem(self,
             fixed_jnt_patterns: List[str] = None,
             foot_linkname: str = None,
@@ -841,10 +843,11 @@ class HybridQuadRhc(RHController):
     def _reset(self):
         
         # reset task interface (ig, solvers, etc..) + 
-        # phase manager
+        # phase manager and sets bootstap as solution
         self._gm.reset()
         # we also re-initialize contact timelines
         self._reset_contact_timelines()
+        
         # resets rhc references
         if self.rhc_refs is not None:
             self.rhc_refs.reset(p_ref=np.atleast_2d(self._base_init)[:, 0:3], 
