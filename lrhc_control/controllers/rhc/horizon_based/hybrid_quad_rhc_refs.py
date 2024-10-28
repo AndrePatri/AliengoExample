@@ -207,8 +207,8 @@ class HybridQuadRhcRefs(RhcRefs):
                 self.base_height.setRef(root_pose)
         
     def reset(self,
-            p_ref: np.ndarray,
-            q_ref: np.ndarray):
+            p_ref: np.ndarray = None,
+            q_ref: np.ndarray = None):
 
         if self.is_running():
 
@@ -218,8 +218,11 @@ class HybridQuadRhcRefs(RhcRefs):
             contact_flags_current[self.robot_index, :] = np.full((1, self.n_contacts()), dtype=np.bool_, fill_value=True)
             phase_id_current[self.robot_index, :] = -1 # defaults to custom phase id
 
-            self.rob_refs.root_state.set(data_type="p", data=p_ref, robot_idxs=self.robot_index_np)
-            self.rob_refs.root_state.set(data_type="q", data=q_ref, robot_idxs=self.robot_index_np)
+            if p_ref is not None:
+                self.rob_refs.root_state.set(data_type="p", data=p_ref, robot_idxs=self.robot_index_np)
+            if q_ref is not None:
+                self.rob_refs.root_state.set(data_type="q", data=q_ref, robot_idxs=self.robot_index_np)
+            
             self.rob_refs.root_state.set(data_type="twist", data=np.zeros((1, 6)), robot_idxs=self.robot_index_np)
                                            
             self.contact_flags.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.contact_flags.n_cols,
