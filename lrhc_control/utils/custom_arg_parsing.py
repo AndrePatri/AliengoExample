@@ -38,6 +38,9 @@ def generate_custom_arg_dict(args: argparse.Namespace):
                 elif dtype == "xacro":
                     val_str=str(val)
                     custom_opt[name] = f"{name}:="+val_str
+                elif dtype == "strlist":
+                    # Split the value by commas and strip whitespace from each item
+                    custom_opt[name] = [item.strip() for item in val.split(",")]
                 else:  # Default is string
                     custom_opt[name] = val
             except ValueError as e:

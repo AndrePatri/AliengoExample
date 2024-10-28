@@ -518,7 +518,9 @@ class LRhcEnvBase(ABC):
                 env_indxs=env_indxs)
             if f_contact is not None:
                 self.cluster_servers[robot_name].get_state().contact_wrenches.set(data=f_contact, data_type="f",
-                                contact_name=contact_link, robot_idxs = env_indxs, gpu=self._use_gpu)
+                                contact_name=contact_link, 
+                                robot_idxs = env_indxs, 
+                                gpu=self._use_gpu)
                     
     def _init_safe_cluster_actions(self,
                             robot_name: str):
@@ -1152,14 +1154,12 @@ class LRhcEnvBase(ABC):
     @abstractmethod
     def _sim_is_running(self) -> bool:
         pass
-
+    
+    @abstractmethod
     def _get_contact_f(self, 
         robot_name: str, 
         contact_link: str,
         env_indxs: torch.Tensor) -> torch.Tensor:
-        return None
-    
-    def _contacts(self, robot_name: str) -> List[str]:
         return None
     
     @abstractmethod
