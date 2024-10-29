@@ -129,8 +129,13 @@ class HybridQuadRhcRefs(RhcRefs):
 
         phase_id = self.phase_id.read_retry(row_index=self.robot_index,
                                 col_index=0)[0]
-        pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 
-                robot_idxs=self.robot_index_np).reshape(-1, 1)
+        # pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 
+        #         robot_idxs=self.robot_index_np).reshape(-1, 1)
+        
+        # flight_pos=self.flight_info.get(data_type="pos", 
+        #         robot_idxs=self.robot_index_np).reshape(1, 1)
+        # flight_len=self.flight_info.get(data_type="len", 
+        #         robot_idxs=self.robot_index_np).reshape(1, 1)
         
         if phase_id == -1: # boolean stepping 
             contact_flags_refs = self.contact_flags.get_numpy_mirror()[self.robot_index, :]
@@ -148,6 +153,20 @@ class HybridQuadRhcRefs(RhcRefs):
                     #     contact_force_ref.assign(self._total_weight/scale)
                     if timeline.getEmptyNodes() > 0: # if there's space, always add a stance
                         self.gait_manager.add_stand(timeline_name)
+
+                self._flight_info=self.gait_manager.get_flight_info(timeline_name)
+                if self._flight_info is not None:
+                    pos=self._flight_info[0]
+                    length=len(self._flight_info[1])
+                    self.flight_info.write_retry(pos, 
+                        row_index=self.robot_index,
+                        col_index=i)
+                else:
+                    length=0
+                self.flight_info.write_retry(length, 
+                    row_index=self.robot_index,
+                    col_index=len(is_contact)+i)
+                    # self._flight_info[2] # n nodes
 
             for timeline_name in self._timeline_names: # sanity check on the timeline to avoid nasty empty nodes
                 timeline = self.gait_manager._contact_timelines[timeline_name]
@@ -218,6 +237,12 @@ class HybridQuadRhcRefs(RhcRefs):
             contact_flags_current[self.robot_index, :] = np.full((1, self.n_contacts()), dtype=np.bool_, fill_value=True)
             phase_id_current[self.robot_index, :] = -1 # defaults to custom phase id
 
+            contact_pos_current=self.rob_refs.contact_pos.get_numpy_mirror()
+            contact_pos_current[self.robot_index, :] = 0.0
+
+            flight_info_current=self.flight_info.get_numpy_mirror()
+            flight_info_current[self.robot_index, :] = 0.0
+
             if p_ref is not None:
                 self.rob_refs.root_state.set(data_type="p", data=p_ref, robot_idxs=self.robot_index_np)
             if q_ref is not None:
@@ -232,8 +257,16 @@ class HybridQuadRhcRefs(RhcRefs):
             self.rob_refs.root_state.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.rob_refs.root_state.n_cols,
                                     read=False)
 
+            self.rob_refs.contact_pos.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.rob_refs.contact_pos.n_cols,
+                                    read=False)
+            
+            self.flight_info.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.flight_info.n_cols,
+                                read=False)
+            
             # should also empty the timeline for stepping phases
             self._step_idx = 0
+
+            self._flight_info=None
 
         else:
             exception = f"Cannot call reset() since run() was not called!"

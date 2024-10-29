@@ -51,6 +51,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_vel_err_sig_smoother=False # whether to smooth vel error signal
         self._vel_err_smoother=None
         self._use_prob_based_stepping=False
+        self._add_flight_info=True
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -88,6 +89,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=6
         if self._add_prev_actions_stats_to_obs:
             obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
+        if self._add_flight_info:
+            obs_dim+=2*self._n_contacts 
 
         # health reward 
         self._health_value = 10.0
@@ -212,6 +215,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self.custom_db_info["use_pof0"] = self._use_pof0
         self.custom_db_info["pof0"] = self._pof0
         self.custom_db_info["action_repeat"] = self._action_repeat
+        self.custom_db_info["add_flight_info"] = self._add_flight_info
 
     def _custom_post_init(self):
 
@@ -387,7 +391,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         robot_twist_rhc_base_loc = self._rhc_cmds.root_state.get(data_type="twist",gpu=self._use_gpu)
         robot_jnt_q_meas = self._robot_state.jnts_state.get(data_type="q",gpu=self._use_gpu)
         robot_jnt_v_meas = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
-        
+        flight_info_now = self._rhc_refs.flight_info.get(data_type="all",gpu=self._use_gpu)
+
         # refs
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
@@ -428,6 +433,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
             next_idx+=self.actions_dim()
             obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
+            next_idx+=self.actions_dim()
+        if self._add_flight_info:
+            flight_info_size=2*len(self._contact_names)
+            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now
+            next_idx+=flight_info_size
 
     def _get_custom_db_data(self, 
             episode_finished):
@@ -633,6 +643,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=self.actions_dim()
             for prev_act_mean in range(self.actions_dim()):
                 obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_std"
+            next_idx+=self.actions_dim()
+        if self._add_flight_info:
+            flight_info_size=2*len(self._contact_names)
+            for i in range(len(self._contact_names)):
+                obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
+                obs_names[next_idx+i+len(self._contact_names)] = "flight_length_"+ contact
+            next_idx+=flight_info_size
         return obs_names
 
     def _get_action_names(self):
