@@ -19,6 +19,7 @@ class GaitManager:
 
         self._contact_timelines = dict()
         self._flight_phases = {}
+        self._ref_trjs = {}
 
         if injection_node is None:
             self._injection_node = round(self.task_interface.prb.getNNodes()/2.0)
@@ -30,8 +31,11 @@ class GaitManager:
         for contact_name, timeline_name in contact_map.items():
             self._contact_timelines[contact_name] = self.phase_manager.getTimelines()[timeline_name]
             self._timeline_names.append(contact_name)
-            self._flight_phases[contact_name]=self._contact_timelines[contact_name].getRegisteredPhase(f'flight_{contact_name}')
-            
+            flight_short=self._contact_timelines[contact_name].getRegisteredPhase(f'flight_{contact_name}_short')
+            flight=self._contact_timelines[contact_name].getRegisteredPhase(f'flight_{contact_name}')
+            self._flight_phases[contact_name]=flight_short if flight_short is not None else flight
+            self._ref_trjs[contact_name]=np.zeros(shape=[7, self._flight_phases[contact_name].getNNodes()])
+
     def reset(self):
         # self.phase_manager.clear()
         self.task_interface.reset()
@@ -40,7 +44,16 @@ class GaitManager:
         timeline = self._contact_timelines[timeline_name]
         timeline.addPhase(timeline.getRegisteredPhase(f'stance_{timeline_name}_short'))
     
-    def add_flight(self, timeline_name):
+    def add_flight(self, timeline_name,
+        ref_height:np.array=None):
+        
+        if ref_height is not None:
+            # set reference 
+            self._ref_trjs[timeline_name][2, :]=ref_height
+            self._flight_phases[timeline_name].addItemReference(self.task_interface.getTask(f'z_{timeline_name}'),
+                self._ref_trjs[timeline_name], 
+                nodes=list(range(0, 1)))
+    
         timeline = self._contact_timelines[timeline_name]
         timeline.addPhase(self._flight_phases[timeline_name], 
             pos=self._injection_node, absolute_position=True)

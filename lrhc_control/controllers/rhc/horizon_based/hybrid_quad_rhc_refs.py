@@ -17,9 +17,11 @@ class HybridQuadRhcRefs(RhcRefs):
             gait_manager: GaitManager, 
             robot_index: int,
             namespace: str, # namespace used for shared mem
-            verbose = True,
-            vlevel = VLevel.V2,
-            safe = True):
+            verbose: bool = True,
+            vlevel: bool = VLevel.V2,
+            safe: bool = True,
+            use_force_feedback: bool = False,
+            use_fixed_flights: bool = False):
         
         self.robot_index = robot_index
         self.robot_index_np = np.array(self.robot_index)
@@ -28,6 +30,9 @@ class HybridQuadRhcRefs(RhcRefs):
         self._print_frequency = 100
 
         self._verbose = verbose
+
+        self._use_force_feedback=use_force_feedback
+        self._use_fixed_flights=use_fixed_flights
 
         super().__init__( 
                 is_server=False,
@@ -101,8 +106,9 @@ class HybridQuadRhcRefs(RhcRefs):
                 LogType.EXCEP,
                 throw_when_excep = True)
                         
-    def step(self, q_base: np.ndarray = None):
-        
+    def step(self, q_base: np.ndarray = None,
+        force_norm: np.ndarray = None):
+
         if self.is_running():
             
             # updates robot refs from shared mem
@@ -115,6 +121,9 @@ class HybridQuadRhcRefs(RhcRefs):
             # updated internal references with latest available ones
             self._apply_refs_to_tasks(q_base=q_base)
             
+            if self._use_force_feedback:
+                self._set_force_feedback(force_norm=force_norm)
+
             self._step_idx +=1
         
         else:
@@ -129,8 +138,8 @@ class HybridQuadRhcRefs(RhcRefs):
 
         phase_id = self.phase_id.read_retry(row_index=self.robot_index,
                                 col_index=0)[0]
-        # pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 
-        #         robot_idxs=self.robot_index_np).reshape(-1, 1)
+        pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 
+                robot_idxs=self.robot_index_np).reshape(-1, 1)
         
         # flight_pos=self.flight_info.get(data_type="pos", 
         #         robot_idxs=self.robot_index_np).reshape(1, 1)
@@ -145,16 +154,22 @@ class HybridQuadRhcRefs(RhcRefs):
                 timeline_name = self._timeline_names[i]
                 timeline = self.gait_manager._contact_timelines[timeline_name]
                 if is_contact[i]==False: # flight phase
-                    self.gait_manager.add_flight(timeline_name)
+                    if self._use_fixed_flights:
+                        self.gait_manager.add_flight(timeline_name, 
+                            ref_height=None)
+                    else:
+                        self.gait_manager.add_flight(timeline_name, 
+                            ref_height=pz_ref[i,:])
                 else: # contact phase
-                    # for contact_force_ref in self._f_reg_ref[i]: # set for references depending on n of contacts and contact forces per-contact
-                    #     # scale=self._n_forces_per_contact[i]*target_n_limbs_in_contact
-                    #     scale=4 # just regularize
-                    #     contact_force_ref.assign(self._total_weight/scale)
+                    for contact_force_ref in self._f_reg_ref[i]: # set for references depending on n of contacts and contact forces per-contact
+                        scale=self._n_forces_per_contact[i]*target_n_limbs_in_contact
+                        # scale=4 # just regularize
+                        contact_force_ref.assign(self._total_weight/scale)
                     if timeline.getEmptyNodes() > 0: # if there's space, always add a stance
                         self.gait_manager.add_stand(timeline_name)
 
                 self._flight_info=self.gait_manager.get_flight_info(timeline_name)
+                # self._flight_info=None
                 if self._flight_info is not None:
                     pos=self._flight_info[0]
                     length=len(self._flight_info[1])
@@ -224,7 +239,13 @@ class HybridQuadRhcRefs(RhcRefs):
                 self.base_lin_velz.setRef(root_twist_ref[2:3, :])
             if self.base_height is not None:
                 self.base_height.setRef(root_pose)
-        
+    
+    def _set_force_feedback(self,
+            force_norm: np.ndarray = None):
+        is_contact=force_norm>1.0
+
+        # for i in range(len(is_contact)):
+            
     def reset(self,
             p_ref: np.ndarray = None,
             q_ref: np.ndarray = None):
