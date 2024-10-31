@@ -450,8 +450,6 @@ class HybridQuadRhc(RHController):
                 if self._ti.getTask(f'z_{c}') is not None:
                     ref_trj = np.zeros(shape=[7, unit_phase_duration])
                     ref_trj[2, :]=init_z_foot+step_height
-                    # stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
-                    #     ref_trj, nodes=list(range(0, unit_phase_duration)))
                     flight_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
                         ref_trj, nodes=list(range(0, unit_phase_duration)))
                 else:
