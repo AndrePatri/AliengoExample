@@ -336,14 +336,7 @@ class LRhcTrainingEnvBase(ABC):
             # (could be a bit more efficient, since in theory we only need to read the envs
             # corresponding to the reset_mask)
             
-            # updating also prev pos and orientation in case some env was reset
-            self._prev_root_p_substep[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
-            self._prev_root_q_substep[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
-
-            obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
-            self._fill_obs(obs)
-            self._clamp_obs(obs)
-        
+            
         return remote_reset_ok
     
     def _send_remote_reset_req(self):
@@ -357,7 +350,7 @@ class LRhcTrainingEnvBase(ABC):
                 throw_when_excep = False)
             return False
         return True
-
+    
     def step(self, 
             action):
 
@@ -467,12 +460,20 @@ class LRhcTrainingEnvBase(ABC):
             to_be_reset[:, :] = torch.logical_or(to_be_reset,to_be_reset_custom)
         rm_reset_ok = self._remote_reset(reset_mask=to_be_reset)
         
+        self._custom_post_step(episode_finished=episode_finished) # any additional logic from child env  
+        # here, before actual reset taskes place  (at this point the state is the reset one)
+
+        # updating also prev pos and orientation in case some env was reset
+        self._prev_root_p_substep[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
+        self._prev_root_q_substep[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
+
+        obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
+        self._fill_obs(obs)
+        self._clamp_obs(obs)
+
         # updating prev step quantities
         self._prev_root_p_step[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
         self._prev_root_q_step[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
-
-        self._custom_post_step(episode_finished=episode_finished) # any additional logic from child env  
-        # here after reset, so that is can access all states post reset if necessary      
 
         # synchronize and reset counters for finished episodes
         self._ep_timeout_counter.reset(to_be_reset=episode_finished_cpu)
@@ -559,9 +560,17 @@ class LRhcTrainingEnvBase(ABC):
             self._rand_safety_reset_counter.reset()
 
         if self._act_mem_buffer is not None:
-            self._act_mem_buffer.reset_all()
+            self._act_mem_buffer.reset_all(init_data=self._defaut_act_buffer_action)
 
         self._synch_state(gpu=self._use_gpu) # read obs from shared mem
+
+        # just calling custom post step to ensure tak refs are updated 
+        terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
+        truncated = self._truncations.get_torch_mirror(gpu=self._use_gpu)
+        episode_finished = torch.logical_or(terminated,
+                            truncated)
+        self._custom_post_step(episode_finished=episode_finished)
+
         obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
         next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
         self._fill_obs(obs) # initialize observations 
@@ -1179,6 +1188,7 @@ class LRhcTrainingEnvBase(ABC):
         self._rhc_refs.rob_refs.root_state.synch_all(read = True, retry = True)
         self._rhc_refs.contact_flags.synch_all(read = True, retry = True)
         self._rhc_refs.flight_info.synch_all(read = True, retry = True)
+        self._rhc_refs.rob_refs.contact_pos.synch_all(read = True, retry = True)
         # rhc cost
         self._rhc_status.rhc_cost.synch_all(read = True, retry = True)
         # rhc constr. violations
@@ -1203,6 +1213,8 @@ class LRhcTrainingEnvBase(ABC):
             # self._rhc_pred.contact_wrenches.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_refs.rob_refs.root_state.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_refs.contact_flags.synch_mirror(from_gpu=False,non_blocking=True)
+            self._rhc_refs.rob_refs.contact_pos.synch_mirror(from_gpu=False,non_blocking=True)
+            self._rhc_refs.flight_info.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.rhc_cost.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.rhc_constr_viol.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.fails.synch_mirror(from_gpu=False,non_blocking=True)

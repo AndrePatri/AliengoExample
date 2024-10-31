@@ -63,6 +63,10 @@ class HybridQuadRhcRefs(RhcRefs):
         # task interfaces from horizon for setting commands to rhc
         self._get_tasks()
 
+        self._p_ref_default=np.zeros((1, 3))
+        self._q_ref_default=np.zeros((1, 4))
+        self._q_ref_default[0, 0]=1
+
     def _get_tasks(self):
         # can be overridden by child
         # cartesian tasks are in LOCAL_WORLD_ALIGNED (frame centered at distal link, oriented as WORLD)
@@ -279,10 +283,15 @@ class HybridQuadRhcRefs(RhcRefs):
         is_contact=force_norm>1.0
 
         # for i in range(len(is_contact)):
-            
-    def reset(self,
-            p_ref: np.ndarray = None,
-            q_ref: np.ndarray = None):
+    
+    def set_default_refs(self,
+        p_ref: np.ndarray,
+        q_ref: np.ndarray):
+
+        self._p_ref_default[:, :]=p_ref
+        self._q_ref_default[:, :]=q_ref
+
+    def reset(self):
 
         if self.is_running():
 
@@ -298,10 +307,8 @@ class HybridQuadRhcRefs(RhcRefs):
             flight_info_current=self.flight_info.get_numpy_mirror()
             flight_info_current[self.robot_index, :] = 0.0
 
-            if p_ref is not None:
-                self.rob_refs.root_state.set(data_type="p", data=p_ref, robot_idxs=self.robot_index_np)
-            if q_ref is not None:
-                self.rob_refs.root_state.set(data_type="q", data=q_ref, robot_idxs=self.robot_index_np)
+            self.rob_refs.root_state.set(data_type="p", data=self._p_ref_default, robot_idxs=self.robot_index_np)
+            self.rob_refs.root_state.set(data_type="q", data=self._q_ref_default, robot_idxs=self.robot_index_np)
             
             self.rob_refs.root_state.set(data_type="twist", data=np.zeros((1, 6)), robot_idxs=self.robot_index_np)
                                            

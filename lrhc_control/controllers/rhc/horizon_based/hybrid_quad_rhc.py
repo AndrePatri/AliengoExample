@@ -609,11 +609,9 @@ class HybridQuadRhc(RHController):
 
         rhc_refs.rob_refs.set_jnts_remapping(jnts_remapping=self._to_controller)
         rhc_refs.rob_refs.set_q_remapping(q_remapping=self._get_quat_remap())
-              
-        # writing initializations
-        rhc_refs.reset(p_ref=np.atleast_2d(self._base_init)[:, 0:3], 
-            q_ref=np.atleast_2d(self._base_init)[:, 3:7] # will be remapped according to just set q_remapping
-            )
+        
+        rhc_refs.set_default_refs(p_ref=np.atleast_2d(self._base_init)[:, 0:3],
+            q_ref=np.atleast_2d(self._base_init)[:, 3:7])
         
         return rhc_refs
     
@@ -939,12 +937,6 @@ class HybridQuadRhc(RHController):
         self._gm.reset()
         # we also re-initialize contact timelines
         self._reset_contact_timelines()
-        
-        # resets rhc references
-        if self.rhc_refs is not None:
-            self.rhc_refs.reset(p_ref=np.atleast_2d(self._base_init)[:, 0:3], 
-                        q_ref=np.atleast_2d(self._base_init)[:, 3:7]
-                        )
 
     def _get_cost_data(self):
         

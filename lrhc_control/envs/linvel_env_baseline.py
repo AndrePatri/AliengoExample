@@ -51,7 +51,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_vel_err_sig_smoother=False # whether to smooth vel error signal
         self._vel_err_smoother=None
         self._use_prob_based_stepping=False
-        self._add_flight_info=True
+        self._add_flight_info=False
+        self._use_pos_control=True
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -220,8 +221,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def _custom_post_init(self):
 
         self._n_noisy_envs=math.ceil(self._n_envs*1/100)
-        if not self._use_prob_based_stepping:
-            self._is_continuous_actions[:,6:10]=False
+        if not self._use_pos_control:
+            if not self._use_prob_based_stepping:
+                self._is_continuous_actions[:,6:10]=False
+        else:
+            self._is_continuous_actions[:,6:10]=True
 
         # overriding parent's defaults 
         self._reward_thresh_lb[:, :]=0 # (neg rewards can be nasty, especially if they all become negative)
@@ -236,12 +240,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
         self._actions_ub[:, 3:6] = omega_cmd_max  
-        if self._use_prob_based_stepping:
-            self._actions_lb[:, 6:10] = 0.0 # contact flags
-            self._actions_ub[:, 6:10] = 1.0 
+        if not self._use_pos_control:
+            if self._use_prob_based_stepping:
+                self._actions_lb[:, 6:10] = 0.0 # contact flags
+                self._actions_ub[:, 6:10] = 1.0 
+            else:
+                self._actions_lb[:, 6:10] = -1.0 
+                self._actions_ub[:, 6:10] = 1.0 
         else:
-            self._actions_lb[:, 6:10] = -1.0 
-            self._actions_ub[:, 6:10] = 1.0 
+            self._actions_lb[:, 6:10] = 0.0
+            self._actions_ub[:, 6:10] = 0.5
+
         # some aux data to avoid allocations at training runtime
         self._rhc_twist_cmd_rhc_world=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()
         self._rhc_twist_cmd_rhc_h=self._rhc_twist_cmd_rhc_world.detach().clone()
@@ -313,6 +322,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         else:
             return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
     
+    def reset(self):
+        super().reset()
+
     def _pre_step(self): 
         pass
 
@@ -324,11 +336,20 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         else:
             time_to_rand_or_ep_finished = torch.logical_or(self._task_rand_counter.time_limits_reached(),episode_finished)
             self.randomize_task_refs(env_indxs=time_to_rand_or_ep_finished.flatten())
-                
+        # task refs are randomized in world frame -> we rotate them in base local
+        # (not super efficient, we should do it just for the finished envs)
+        self._update_loc_twist_refs()
+
         if self._vel_err_smoother is not None: # reset smoother
             self._vel_err_smoother.reset(to_be_reset=episode_finished.flatten())
 
     def _custom_post_substp_pre_rew(self):
+        self._update_loc_twist_refs()
+        
+    def _custom_post_substp_post_rew(self):
+        pass
+    
+    def _update_loc_twist_refs(self):
         # get fresh robot orientation
         robot_q = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
         # rotate agent ref from world to robot base
@@ -338,9 +359,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._agent_refs.rob_refs.root_state.set(data_type="twist", data=self._agent_twist_ref_current_base_loc,
                                             gpu=self._use_gpu)
         
-    def _custom_post_substp_post_rew(self):
-        pass
-
     def _apply_actions_to_rhc(self):
         
         agent_action = self.get_actions() # see _get_action_names() to get 
@@ -348,6 +366,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         rhc_latest_twist_cmd = self._rhc_refs.rob_refs.root_state.get(data_type="twist", gpu=self._use_gpu)
         rhc_latest_contact_ref = self._rhc_refs.contact_flags.get_torch_mirror(gpu=self._use_gpu)
+        rhc_latest_pos_ref = self._rhc_refs.rob_refs.contact_pos.get(data_type="p_z", gpu=self._use_gpu)
         rhc_q=self._rhc_cmds.root_state.get(data_type="q",gpu=self._use_gpu) # this is always 
         # avaialble
 
@@ -365,22 +384,27 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             gpu=self._use_gpu) 
         
         # contact flags
-
-        if self._use_prob_based_stepping:
-            # encode actions as probs
-            self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
-            rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
-            # probability agent_action[:, 6:10]
-        else: # just use a threshold
-            rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] > 0
-        # actually apply actions to controller
+        if not self._use_pos_control:
+            if self._use_prob_based_stepping:
+                # encode actions as probs
+                self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
+                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
+                # probability agent_action[:, 6:10]
+            else: # just use a threshold
+                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] > 0
+            # actually apply actions to controller
+        else:
+            rhc_latest_pos_ref[:, :] = agent_action[:, 6:10]
 
         if self._use_gpu:
             # GPU->CPU --> we cannot use asynchronous data transfer since it's unsafe
             self._rhc_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=False) # write from gpu to cpu mirror
             self._rhc_refs.contact_flags.synch_mirror(from_gpu=True,non_blocking=False)
+            self._rhc_refs.rob_refs.contact_pos.synch_mirror(from_gpu=True,non_blocking=False)
+
         self._rhc_refs.rob_refs.root_state.synch_all(read=False, retry=True) # write mirror to shared mem
         self._rhc_refs.contact_flags.synch_all(read=False, retry=True)
+        self._rhc_refs.rob_refs.contact_pos.synch_all(read=False, retry=True)
 
     def _fill_obs(self,
             obs: torch.Tensor):
@@ -570,7 +594,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             torch.nn.init.uniform_(random_uniform, a=-1, b=1)
             self._agent_twist_ref_current_w[env_indxs, :] = random_uniform * self._twist_ref_scale + self._twist_ref_offset
             self._agent_twist_ref_current_w[env_indxs, :] = self._agent_twist_ref_current_w[env_indxs, :]*self._bernoulli_coeffs[env_indxs, :]
-    
+
     def _get_obs_names(self):
 
         obs_names = [""] * self.obs_dim()
@@ -661,10 +685,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_names[3] = "roll_twist_cmd"
         action_names[4] = "pitch_twist_cmd"
         action_names[5] = "yaw_twist_cmd"
-        action_names[6] = "contact_0"
-        action_names[7] = "contact_1"
-        action_names[8] = "contact_2"
-        action_names[9] = "contact_3"
+        if not self._use_pos_control:
+            action_names[6] = "contact_0"
+            action_names[7] = "contact_1"
+            action_names[8] = "contact_2"
+            action_names[9] = "contact_3"
+        else:
+            action_names[6] = "contact_pref_0"
+            action_names[7] = "contact_pref_1"
+            action_names[8] = "contact_pref_2"
+            action_names[9] = "contact_pref_3"
 
         return action_names
 
