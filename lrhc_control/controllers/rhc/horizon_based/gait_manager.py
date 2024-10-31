@@ -46,18 +46,21 @@ class GaitManager:
     
     def add_flight(self, timeline_name,
         ref_height:np.array=None):
+    
+        timeline = self._contact_timelines[timeline_name]
+        timeline.addPhase(self._flight_phases[timeline_name], 
+            pos=self._injection_node, 
+            absolute_position=True)
         
         if ref_height is not None:
             # set reference 
             self._ref_trjs[timeline_name][2, :]=ref_height
-            self._flight_phases[timeline_name].addItemReference(self.task_interface.getTask(f'z_{timeline_name}'),
-                self._ref_trjs[timeline_name], 
-                nodes=list(range(0, 1)))
-    
-        timeline = self._contact_timelines[timeline_name]
-        timeline.addPhase(self._flight_phases[timeline_name], 
-            pos=self._injection_node, absolute_position=True)
-    
+            flight_token_idxs=self._contact_timelines[timeline_name].getPhaseIdx(self._flight_phases[timeline_name])
+            active_phases=self._contact_timelines[timeline_name].getActivePhases()
+
+            print(flight_token_idxs)
+            # flight_token=active_phases[last_flight_token_idxs[0]]
+            
     def get_flight_info(self, timeline_name):
         # phase indexes over timeline
         phase_idxs=self._contact_timelines[timeline_name].getPhaseIdx(self._flight_phases[timeline_name])
@@ -71,3 +74,19 @@ class GaitManager:
             start_pos=active_phases[phase_idx].getPosition()
             n_nodes=active_phases[phase_idx].getNNodes()
             return (start_pos, active_nodes, n_nodes)
+    
+    def set_ref_pos(self,
+        timeline_name:str,
+        ref_height: np.array = None,
+        threshold: float = 0.05):
+        
+        if ref_height is not None:
+            self._ref_trjs[timeline_name][2, :]=ref_height
+            if ref_height>threshold:
+                self.add_flight(timeline_name=timeline_name)
+                this_flight_token_idx=self._contact_timelines[timeline_name].getPhaseIdx(self._flight_phases[timeline_name])[-1]
+                active_phases=self._contact_timelines[timeline_name].getActivePhases()
+                active_phases[this_flight_token_idx].setItemReference(f'z_{timeline_name}',
+                    self._ref_trjs[timeline_name])
+            else:
+                self.add_stand(timeline_name=timeline_name)
