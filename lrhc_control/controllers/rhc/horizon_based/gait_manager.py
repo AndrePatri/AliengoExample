@@ -19,6 +19,7 @@ class GaitManager:
 
         self._contact_timelines = dict()
         self._flight_phases = {}
+        self._contact_phases = {}
         self._ref_trjs = {}
 
         if injection_node is None:
@@ -31,6 +32,7 @@ class GaitManager:
         for contact_name, timeline_name in contact_map.items():
             self._contact_timelines[contact_name] = self.phase_manager.getTimelines()[timeline_name]
             self._timeline_names.append(contact_name)
+            self._contact_phases[contact_name]=self._contact_timelines[contact_name].getRegisteredPhase(f'short_{contact_name}_stance')
             flight_short=self._contact_timelines[contact_name].getRegisteredPhase(f'flight_{contact_name}_short')
             flight=self._contact_timelines[contact_name].getRegisteredPhase(f'flight_{contact_name}')
             self._flight_phases[contact_name]=flight_short if flight_short is not None else flight
@@ -90,3 +92,13 @@ class GaitManager:
                     self._ref_trjs[timeline_name])
             else:
                 self.add_stand(timeline_name=timeline_name)
+
+    def set_force_feedback(self,
+        timeline_name: str,
+        force_norm: float):
+        
+        flight_tokens=self._contact_timelines[timeline_name].getPhaseIdx(self._flight_phases[timeline_name])
+        contact_tokens=self._contact_phases[timeline_name].getPhaseIdx(self._contact_phases[timeline_name])
+        if not len(flight_tokens)==0:
+            first_flight=flight_tokens[0]
+            first_flight
