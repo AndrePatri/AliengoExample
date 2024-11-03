@@ -80,9 +80,9 @@ class HybridQuadRhc(RHController):
         self._c_timelines = dict()
         self._f_reg_timelines = dict()
         
-        self._custom_opts={"replace_continuous_joints": True,
+        self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
-            "fixed_flights": False}
+            "fixed_flights": True}
 
         self._custom_opts.update(custom_opts)
 
@@ -227,6 +227,8 @@ class HybridQuadRhc(RHController):
             self._jnts_q_reduced=np.zeros((1,self.nv()-6),dtype=self._dtype)
             self._jnts_q_expanded=np.zeros((1,self.nq()-7),dtype=self._dtype)
             self._full_q_reduced=np.zeros((7+len(jnt_names), self._n_nodes),dtype=self._dtype)
+        else:
+            self._custom_opts["replace_continuous_joints"]=True
 
         self._f0 = [0, 0, self._kin_dyn.mass()/4*9.81]
         
@@ -750,7 +752,7 @@ class HybridQuadRhc(RHController):
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
             # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
-            q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
+            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
