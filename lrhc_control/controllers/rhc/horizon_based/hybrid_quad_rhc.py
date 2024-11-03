@@ -229,6 +229,11 @@ class HybridQuadRhc(RHController):
             self._full_q_reduced=np.zeros((7+len(jnt_names), self._n_nodes),dtype=self._dtype)
         else:
             self._custom_opts["replace_continuous_joints"]=True
+            Journal.log(self.__class__.__name__,
+                "_init_problem",
+                f"No continuous joints were found.",
+                LogType.INFO,
+                throw_when_excep=True)
 
         self._f0 = [0, 0, self._kin_dyn.mass()/4*9.81]
         
@@ -752,7 +757,7 @@ class HybridQuadRhc(RHController):
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
             # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
-            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
+            q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
