@@ -128,8 +128,8 @@ class HybridQuadRhcRefs(RhcRefs):
             # updated internal references with latest available ones
             self._apply_refs_to_tasks(q_base=q_base)
             
-            if self._use_force_feedback:
-                self._set_force_feedback(force_norm=force_norm)
+            # if self._use_force_feedback:
+            #     self._set_force_feedback(force_norm=force_norm)
 
             self._step_idx +=1
         
@@ -156,7 +156,7 @@ class HybridQuadRhcRefs(RhcRefs):
             # set for references depending on expected contacts
             for contact_force_ref in self._f_reg_ref[i]: 
                 scale=self._n_forces_per_contact[i]*target_n_limbs_in_contact
-                # scale=4 # just regularize
+                scale=4 # just regularize
                 contact_force_ref.assign(self._total_weight/scale)
 
             if is_contact[i]==False: # flight phase
@@ -278,12 +278,19 @@ class HybridQuadRhcRefs(RhcRefs):
             if self.base_height is not None:
                 self.base_height.setRef(root_pose)
     
-    def _set_force_feedback(self,
-            force_norm: np.ndarray = None):
-        is_contact=force_norm>1.0
-
-        # for i in range(len(is_contact)):
+    # def _set_force_feedback(self,
+    #         force_norm: np.ndarray = None):
     
+    #     is_contact=force_norm>1.0
+
+    #     for i in range(len(is_contact)):
+    #         timeline_name = self._timeline_names[i]
+    #         self.gait_manager.set_force_feedback(timeline_name=timeline_name,
+    #             force_norm=force_norm[i])
+
+    #         if not is_contact[i]:
+
+
     def set_default_refs(self,
         p_ref: np.ndarray,
         q_ref: np.ndarray):
