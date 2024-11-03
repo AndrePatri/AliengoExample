@@ -155,7 +155,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                             fill_value=0.8)
         
         # task reference parameters (specified in world frame)
-        self.max_ref=0.5
+        self.max_ref=1.0
         self._twist_ref_lb[0, 0] = -self.max_ref
         self._twist_ref_lb[0, 1] = -self.max_ref
         self._twist_ref_lb[0, 2] = 0.0
