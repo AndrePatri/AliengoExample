@@ -85,7 +85,7 @@ class HybridQuadRhc(RHController):
             "fixed_flights": True}
 
         self._custom_opts.update(custom_opts)
-
+        
         super().__init__(srdf_path=srdf_path,
                         n_nodes=n_nodes,
                         dt=dt,
@@ -120,6 +120,12 @@ class HybridQuadRhc(RHController):
             yaw_vertical_weight: float = 2.0,
             phase_force_reg: float = 1e-2,
             vel_bounds_weight: float = 1.0):
+        
+        Journal.log(self.__class__.__name__,
+            "_init_problem",
+            f" Will use horizon config file at {self.config_path}",
+            LogType.INFO,
+            throw_when_excep=True)
         
         self._vel_bounds_weight=vel_bounds_weight
         self._phase_force_reg=phase_force_reg
