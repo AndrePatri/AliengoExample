@@ -51,14 +51,8 @@ class HybridQuadRhcRefs(RhcRefs):
                 throw_when_excep = True)
                
         self.gait_manager = gait_manager
-        self._kin_dyn = self.gait_manager.task_interface.model.kd
-        self._ti=self.gait_manager.task_interface
-        self._prb=self._ti.prb
 
-        self._timelines = self.gait_manager._contact_timelines
-        self._timeline_names = self.gait_manager._timeline_names
-
-        self._total_weight = np.atleast_2d(np.array([0, 0, self._kin_dyn.mass() * 9.81])).T # the robot's weight
+        self.timeline_names = self.gait_manager.timeline_names
 
         # task interfaces from horizon for setting commands to rhc
         self._get_tasks()
@@ -75,21 +69,6 @@ class HybridQuadRhcRefs(RhcRefs):
         self.base_omega = self.gait_manager.task_interface.getTask('base_omega')
         self.base_height = self.gait_manager.task_interface.getTask('base_height')
 
-        self._f_reg_ref=[None]*len(self._timeline_names)
-        self._n_forces_per_contact=[1]*len(self._timeline_names)
-        i=0
-        for timeline in self._timeline_names:
-            self._f_reg_ref[i]=[]
-            j=0
-            forces_on_contact=self._ti.model.cmap[timeline]
-            self._n_forces_per_contact[i]=len(forces_on_contact)
-            scale=4*self._n_forces_per_contact[i] # just regularize over 1/4 of the  weight
-            for force in forces_on_contact:
-                self._f_reg_ref[i].append(self._prb.getParameters(name=f"{timeline}_force_reg_f{j}_ref"))
-                self._f_reg_ref[i][j].assign(self._total_weight/scale)
-                j+=1
-            i+=1
-
     def run(self):
 
         super().run()
@@ -101,7 +80,7 @@ class HybridQuadRhcRefs(RhcRefs):
                 exception,
                 LogType.EXCEP,
                 throw_when_excep = True)
-        contact_names = self._ti.model.cmap.keys()
+        contact_names = self.gait_manager.task_interface.model.cmap.keys()
         if not (self.n_contacts() == len(contact_names)):
             exception = f"N of contacts within problem {len(contact_names)} does not match n of contacts {self.n_contacts()}"
             Journal.log(self.__class__.__name__,
@@ -110,7 +89,7 @@ class HybridQuadRhcRefs(RhcRefs):
                 LogType.EXCEP,
                 throw_when_excep = True)
                         
-    def step(self, q_base: np.ndarray = None,
+    def step(self, q_full: np.ndarray = None,
         force_norm: np.ndarray = None):
 
         if self.is_running():
@@ -120,12 +99,10 @@ class HybridQuadRhcRefs(RhcRefs):
             self.phase_id.synch_all(read=True, retry=True)
             self.contact_flags.synch_all(read=True, retry=True)
             
-            if self._use_fixed_flights:
-                self._handle_contact_phases_fixed()
-            else:
-                self._handle_contact_phases_free()
+            self._set_contact_phases(q_full=q_full)
 
             # updated internal references with latest available ones
+            q_base=q_full[3:7,0:1] # quaternion
             self._apply_refs_to_tasks(q_base=q_base)
             
             # if self._use_force_feedback:
@@ -141,32 +118,29 @@ class HybridQuadRhcRefs(RhcRefs):
                 LogType.EXCEP,
                 throw_when_excep = True)
     
-    def _handle_contact_phases_fixed(self):
+    def _set_contact_phases(self,
+        q_full: np.ndarray):
 
-        phase_id = self.phase_id.read_retry(row_index=self.robot_index,
-                                col_index=0)[0]
+        # phase_id = self.phase_id.read_retry(row_index=self.robot_index,
+        #                         col_index=0)[0]
         
         contact_flags_refs = self.contact_flags.get_numpy_mirror()[self.robot_index, :]
         target_n_limbs_in_contact=np.sum(contact_flags_refs).item()
         if target_n_limbs_in_contact==0:
             target_n_limbs_in_contact=4
+
         is_contact = contact_flags_refs.flatten().tolist() 
         for i in range(len(is_contact)): # loop through contact timelines
-            timeline_name = self._timeline_names[i]
-            timeline = self.gait_manager._contact_timelines[timeline_name]
-
-            # set for references depending on expected contacts
-            for contact_force_ref in self._f_reg_ref[i]: 
-                scale=self._n_forces_per_contact[i]*target_n_limbs_in_contact
-                scale=4 # just regularize
-                contact_force_ref.assign(self._total_weight/scale)
+            timeline_name = self.timeline_names[i]
+            
+            self.gait_manager.set_f_reg(contact_name=timeline_name,
+                scale=target_n_limbs_in_contact)
 
             if is_contact[i]==False: # flight phase
-                self.gait_manager.add_flight(timeline_name, 
-                    ref_height=None)
+                self.gait_manager.add_flight(contact_name=timeline_name,
+                    robot_q=q_full)
             else: # contact phase
-                if timeline.getEmptyNodes() > 0: # if there's space, always add a stance
-                    self.gait_manager.add_stand(timeline_name)
+                self.gait_manager.add_stand(contact_name=timeline_name)
 
             self._flight_info=self.gait_manager.get_flight_info(timeline_name)
             # self._flight_info=None
@@ -182,16 +156,8 @@ class HybridQuadRhcRefs(RhcRefs):
                 row_index=self.robot_index,
                 col_index=len(is_contact)+i)
                 # self._flight_info[2] # n nodes
-
-        for timeline_name in self._timeline_names: # sanity check on the timeline to avoid nasty empty nodes
-            timeline = self.gait_manager._contact_timelines[timeline_name]
-            if timeline.getEmptyNodes() > 0:
-                error = f"Empty nodes detected over the horizon! Make sure to fill the whole horizon with valid phases!!"
-                Journal.log(self.__class__.__name__,
-                    "step",
-                    error,
-                    LogType.EXCEP,
-                    throw_when_excep = True)
+            
+            self.gait_manager.check_horizon_full(timeline_name=timeline_name)
 
     def _handle_contact_phases_free(self):
 

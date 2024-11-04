@@ -117,7 +117,6 @@ class HybridQuadRhc(RHController):
             fixed_jnt_patterns: List[str] = None,
             foot_linkname: str = None,
             flight_duration: int = 10,
-            post_landing_stance: int = 5,
             step_height: float = 0.12,
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = 2.0,
@@ -276,16 +275,19 @@ class HybridQuadRhc(RHController):
         if base_pos is not None:
             base_pos.setRef(np.atleast_2d(self._base_init).T)
 
-        self._tg = trajectoryGenerator.TrajectoryGenerator()
-
         self._pm = pymanager.PhaseManager(self._n_nodes, debug=False) # intervals or nodes?????
 
-        self._init_contact_timelines(flight_duration=flight_duration,
-            post_landing_stance=post_landing_stance,
+        self._gm = GaitManager(self._ti, 
+            self._pm, 
+            self._injection_node,
+            keep_yaw_vert=keep_yaw_vert,
+            yaw_vertical_weight=self._yaw_vertical_weight,
+            phase_force_reg=self._phase_force_reg,
+            custom_opts=self._custom_opts,
+            flight_duration=flight_duration,
             step_height=step_height,
-            keep_yaw_vert=keep_yaw_vert)
-        # self._add_zmp()
-            
+            dh=0.0)
+                
         self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
         self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
         self._ti.model.q.setInitialGuess(self._ti.model.q0)
@@ -316,10 +318,6 @@ class HybridQuadRhc(RHController):
 
         self._ti.init_inv_dyn_for_res() # we initialize some objects for sol. postprocessing purposes
         self._ti.load_initial_guess()
-
-        contact_phase_map = {c: f'{c}_timeline' for c in self._model.cmap.keys()}
-        
-        self._gm = GaitManager(self._ti, self._pm, contact_phase_map, self._injection_node)
 
         self.n_dofs = self._get_ndofs() # after loading the URDF and creating the controller we
         # know n_dofs -> we assign it (by default = None)
@@ -417,203 +415,6 @@ class HybridQuadRhc(RHController):
     def _get_jnt_id(self, jnt_name):
         return self._kin_dyn.joint_iq(jnt_name)
     
-    def _reset_contact_timelines(self):
-        for c in self._model.cmap.keys():
-            # fill timeline with stances
-            contact_timeline=self._c_timelines[c]
-            contact_timeline.clear() # remove phases
-            short_stance_phase = contact_timeline.getRegisteredPhase(f'stance_{c}_short')
-            while contact_timeline.getEmptyNodes() > 0:
-                contact_timeline.addPhase(short_stance_phase)
-            # f reg
-            # if self._add_f_reg_timeline:
-            #     freg_tline=self._f_reg_timelines[c]
-            #     freg_tline.clear()
-            #     f_stance = freg_tline.getRegisteredPhase(f'freg_{c}_short')
-            #     for i in range(self._n_nodes-1): # not defined on last node
-            #         freg_tline.addPhase(f_stance)
-    
-    def _init_contact_timelines(self,
-            flight_duration: int = 10,
-            post_landing_stance: int = 5,
-            step_height: float = 0.12,
-            keep_yaw_vert: bool = False):
-        
-        if self._custom_opts["fixed_flights"]:
-            self._init_contact_timelines_fixf(flight_duration=flight_duration,
-                post_landing_stance=post_landing_stance,
-                step_height=step_height,
-                keep_yaw_vert=keep_yaw_vert)
-        else:
-            self._init_contact_timelines_frf(step_height_default=step_height,
-                keep_yaw_vert=keep_yaw_vert)
-            
-    def _init_contact_timelines_frf(self,
-            step_height_default: float = 0.15,
-            keep_yaw_vert: bool = False):
-        
-        unit_phase_duration=1
-
-        step_height=step_height_default
-
-        for c in self._model.cmap.keys():
-            
-            init_z_foot = self._model.kd.fk(c)(q=self._model.q0)['ee_pos'].elements()[2]
-
-            # stance phases
-            self._c_timelines[c] = self._pm.createTimeline(f'{c}_timeline')
-            stance_phase_short=self._c_timelines[c].createPhase(unit_phase_duration, f'stance_{c}_short')
-            flight_phase_short=self._c_timelines[c].createPhase(unit_phase_duration, f'flight_{c}_short')
-
-            if self._ti.getTask(f'{c}') is not None:
-                stance_phase_short.addItem(self._ti.getTask(f'{c}'))
-                if self._ti.getTask(f'z_{c}') is not None:
-                    ref_trj = np.zeros(shape=[7, unit_phase_duration])
-                    ref_trj[2, :]=init_z_foot+step_height
-                    flight_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
-                        ref_trj, nodes=list(range(0, unit_phase_duration)))
-                else:
-                    Journal.log(self.__class__.__name__,
-                        "_init_contact_timelines",
-                        f"pos task z_{c} not found",
-                        LogType.EXCEP,
-                        throw_when_excep=True)
-            else:
-                Journal.log(self.__class__.__name__,
-                    "_init_contact_timelines",
-                    f"contact task {c} not found",
-                    LogType.EXCEP,
-                    throw_when_excep=True)
-            
-            # manually defining force regularization
-            n_forces=len(self._ti.model.cmap[c])
-            i=0
-            for force in self._ti.model.cmap[c]:
-                f_ref=self._prb.createParameter(name=f"{c}_force_reg_f{i}_ref",
-                    dim=3) 
-                force_reg=self._prb.createResidual(f'{c}_force_reg_f{i}', self._phase_force_reg * (force - f_ref), 
-                    nodes=[])
-                f_ref.assign(np.atleast_2d(np.array(self._f0)).T/n_forces)    
-                stance_phase_short.addCost(force_reg, nodes=list(range(0, unit_phase_duration)))
-                i+=1
-        
-            if keep_yaw_vert:
-                # keep ankle vertical
-                c_ori = self._model.kd.fk(c)(q=self._model.q)['ee_rot'][2, :]
-                cost_ori = self._prb.createResidual(f'{c}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
-                # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
-
-        self._reset_contact_timelines()
-        
-    def _init_contact_timelines_fixf(self,
-            flight_duration: int = 10,
-            post_landing_stance: int = 5,
-            step_height: float = 0.12,
-            keep_yaw_vert: bool = False):
-        
-        short_stance_duration = 1
-        flight_duration = flight_duration
-        post_landing_stance = post_landing_stance
-        step_height=step_height
-
-        for c in self._model.cmap.keys():
-            
-            init_z_foot = self._model.kd.fk(c)(q=self._model.q0)['ee_pos'].elements()[2]
-            ee_vel = self._model.kd.frameVelocity(c, self._model.kd_frame)(q=self._model.q, 
-                        qdot=self._model.v)['ee_vel_linear']
-
-            # stance phases
-            self._c_timelines[c] = self._pm.createTimeline(f'{c}_timeline')
-            stance_phase_short = self._c_timelines[c].createPhase(short_stance_duration, f'stance_{c}_short')
-            if self._ti.getTask(f'{c}') is not None:
-                stance_phase_short.addItem(self._ti.getTask(f'{c}'))
-                # if self._ti.getTask(f'z_{c}') is not None:
-                #     ref_trj = np.zeros(shape=[7, short_stance_duration])
-                #     ref_trj[2, :]=init_z_foot
-                #     stance_phase_short.addItemReference(self._ti.getTask(f'z_{c}'),
-                #         ref_trj, nodes=list(range(0, short_stance_duration)))
-            else:
-                Journal.log(self.__class__.__name__,
-                    "_init_contact_timelines",
-                    f"contact task {c} not found",
-                    LogType.EXCEP,
-                    throw_when_excep=True)
-            i=0
-            n_forces=len(self._ti.model.cmap[c])
-            for force in self._ti.model.cmap[c]:
-                f_ref=self._prb.createParameter(name=f"{c}_force_reg_f{i}_ref",
-                    dim=3) 
-                force_reg=self._prb.createResidual(f'{c}_force_reg_f{i}', self._phase_force_reg * (force - f_ref), 
-                    nodes=[])
-                f_ref.assign(np.atleast_2d(np.array(self._f0)).T/n_forces)    
-                stance_phase_short.addCost(force_reg, nodes=list(range(0, short_stance_duration)))
-                i+=1
-
-            # flight phases
-            flight_phase = self._c_timelines[c].createPhase(flight_duration+post_landing_stance, f'flight_{c}')
-            
-            # post landing contact + force reg
-            if not post_landing_stance<1:
-                if self._ti.getTask(f'{c}') is not None:
-                    flight_phase.addItem(self._ti.getTask(f'{c}'), nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
-                    # if self._ti.getTask(f'z_{c}') is not None:
-                    #     ref_trj = np.zeros(shape=[7, post_landing_stance])
-                    #     ref_trj[2, :]=init_z_foot
-                    #     flight_phase.addItemReference(self._ti.getTask(f'z_{c}'),
-                    #         ref_trj,
-                    #         nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
-                    i=0
-                    for force in self._ti.model.cmap[c]:
-                        force_reg=self._prb.getCosts(f'{c}_force_reg_f{i}')
-                        flight_phase.addCost(force_reg, nodes=list(range(flight_duration, flight_duration+post_landing_stance)))
-                        i+=1
-                else:
-                    Journal.log(self.__class__.__name__,
-                        "_init_contact_timelines",
-                        f"contact task {c} not found!",
-                        LogType.EXCEP,
-                        throw_when_excep=True)
-            # reference traj
-            der= [None, 0, 0]
-            second_der=[None, 0, 0]
-            # flight pos
-            if self._ti.getTask(f'z_{c}') is not None:
-                ref_trj = np.zeros(shape=[7, flight_duration])
-                ref_trj[2, :] = np.atleast_2d(self._tg.from_derivatives(flight_duration, init_z_foot, init_z_foot, step_height,
-                    derivatives=der,
-                    second_der=second_der))
-                flight_phase.addItemReference(self._ti.getTask(f'z_{c}'), ref_trj, nodes=list(range(0, flight_duration)))
-            else:
-                Journal.log(self.__class__.__name__,
-                    "_init_contact_timelines",
-                    f"contact pos traj tracking task z_{c} not found-> it won't be used",
-                    LogType.WARN,
-                    throw_when_excep=True)
-            # flight vel
-            if self._ti.getTask(f'vz_{c}') is not None:
-                ref_vtrj = np.zeros(shape=[1, flight_duration])
-                ref_vtrj[:, :] = np.atleast_2d(self._tg.derivative_of_trajectory(flight_duration, init_z_foot, init_z_foot, step_height, 
-                    derivatives=der,
-                    second_der=second_der))
-                flight_phase.addItemReference(self._ti.getTask(f'vz_{c}'), ref_vtrj, nodes=list(range(0, flight_duration)))
-            else:
-                Journal.log(self.__class__.__name__,
-                    "_init_contact_timelines",
-                    f"contact vel traj tracking task vz_{c} not found-> it won't be used",
-                    LogType.WARN,
-                    throw_when_excep=True)
-            
-            cstr = self._prb.createConstraint(f'{c}_vert', ee_vel[0:2], [])
-            flight_phase.addConstraint(cstr, nodes=[0, flight_duration-1])
-
-            if keep_yaw_vert:
-                # keep ankle vertical
-                c_ori = self._model.kd.fk(c)(q=self._model.q)['ee_rot'][2, :]
-                cost_ori = self._prb.createResidual(f'{c}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
-                # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
-
-        self._reset_contact_timelines()
-
     def _init_rhc_task_cmds(self):
         
         rhc_refs = HybridQuadRhcRefs(gait_manager=self._gm,
@@ -679,6 +480,10 @@ class HybridQuadRhc(RHController):
     def _get_root_full_q_from_sol(self, node_idx=1):
 
         return self._ti.solution['q'][0:7, node_idx].reshape(1, 7)
+    
+    def _get_full_q_from_sol(self, node_idx=1):
+
+        return self._ti.solution['q'][:, node_idx].reshape(1, -1)
     
     def _get_root_twist_from_sol(self, node_idx=1):
         # provided in world frame
@@ -770,7 +575,7 @@ class HybridQuadRhc(RHController):
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
             # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
-            q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
+            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
@@ -866,7 +671,7 @@ class HybridQuadRhc(RHController):
         if self._refs_in_hor_frame:
             # q_base=self.robot_state.root_state.get(data_type="q", 
             #     robot_idxs=self.controller_index).reshape(-1, 1)
-            q_base=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)[3:7,0:1]
+            q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
             # using internal base pose from rhc. in case of closed loop, it will be the meas state
             force_norm=None
             if self._custom_opts["use_force_feedback"]:
@@ -874,7 +679,7 @@ class HybridQuadRhc(RHController):
                     robot_idxs=self.controller_index_np,
                     contact_name=None).reshape(self.n_contacts,3)
                 force_norm=np.linalg.norm(contact_forces, axis=1)
-            self.rhc_refs.step(q_base=q_base,
+            self.rhc_refs.step(q_full=q_full,
                 force_norm=force_norm)
         else:
             self.rhc_refs.step()
@@ -904,7 +709,7 @@ class HybridQuadRhc(RHController):
         if self._refs_in_hor_frame:
             # q_base=self.robot_state.root_state.get(data_type="q", 
             #     robot_idxs=self.controller_index).reshape(-1, 1)
-            q_base=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)[3:7,0:1]
+            q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
             # using internal base pose from rhc. in case of closed loop, it will be the meas state
             force_norm=None
             if self._custom_opts["use_force_feedback"]:
@@ -912,7 +717,7 @@ class HybridQuadRhc(RHController):
                     robot_idxs=self.controller_index_np,
                     contact_name=None).reshape(self.n_contacts,3)
                 force_norm=np.linalg.norm(contact_forces, axis=1)
-            self.rhc_refs.step(q_base=q_base,
+            self.rhc_refs.step(q_full=q_full,
                 force_norm=force_norm)
         else:
             self.rhc_refs.step()
@@ -955,8 +760,6 @@ class HybridQuadRhc(RHController):
         # reset task interface (ig, solvers, etc..) + 
         # phase manager and sets bootstap as solution
         self._gm.reset()
-        # we also re-initialize contact timelines
-        self._reset_contact_timelines()
 
     def _get_cost_data(self):
         
