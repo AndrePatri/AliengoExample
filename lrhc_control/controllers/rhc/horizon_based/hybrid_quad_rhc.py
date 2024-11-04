@@ -124,6 +124,8 @@ class HybridQuadRhc(RHController):
             phase_force_reg: float = 1e-2,
             vel_bounds_weight: float = 1.0):
         
+        self._fixed_jnt_patterns=fixed_jnt_patterns
+
         self._config_override()
         
         Journal.log(self.__class__.__name__,
@@ -156,9 +158,9 @@ class HybridQuadRhc(RHController):
 
         # handle fixed joints
         fixed_joint_map={}
-        if fixed_jnt_patterns is not None:
+        if self._fixed_jnt_patterns is not None:
             for jnt_name in self._get_robot_jnt_names():
-                for fixed_jnt_pattern in fixed_jnt_patterns:
+                for fixed_jnt_pattern in self._fixed_jnt_patterns:
                     if fixed_jnt_pattern in jnt_name: 
                         fixed_joint_map.update({f"{jnt_name}":
                             self._homer.get_homing_val(jnt_name=jnt_name)})
