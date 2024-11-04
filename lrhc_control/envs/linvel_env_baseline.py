@@ -53,6 +53,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_prob_based_stepping=False
         self._add_flight_info=False
         self._use_pos_control=False
+        self._add_rhc_cmds_to_obs=True
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -92,6 +93,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
         if self._add_flight_info:
             obs_dim+=2*self._n_contacts 
+        if self._add_rhc_cmds_to_obs:
+            obs_dim+=3*n_jnts 
 
         # health reward 
         self._health_value = 10.0
@@ -412,9 +415,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # measured stuff
         robot_gravity_norm_base_loc = self._robot_state.root_state.get(data_type="gn",gpu=self._use_gpu)
         robot_twist_meas_base_loc = self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu)
-        robot_twist_rhc_base_loc = self._rhc_cmds.root_state.get(data_type="twist",gpu=self._use_gpu)
         robot_jnt_q_meas = self._robot_state.jnts_state.get(data_type="q",gpu=self._use_gpu)
         robot_jnt_v_meas = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
+        
+        # twist estimate from mpc
+        robot_twist_rhc_base_loc_next = self._rhc_cmds.root_state.get(data_type="twist",gpu=self._use_gpu)
+        # cmds for jnt imp to be applied next
+        robot_jnt_q_rhc_applied_next=self._rhc_cmds.jnts_state.get(data_type="q",gpu=self._use_gpu)
+        robot_jnt_v_rhc_applied_next=self._rhc_cmds.jnts_state.get(data_type="v",gpu=self._use_gpu)
+        robot_jnt_eff_rhc_applied_next=self._rhc_cmds.jnts_state.get(data_type="eff",gpu=self._use_gpu)
+
         flight_info_now = self._rhc_refs.flight_info.get(data_type="all",gpu=self._use_gpu)
 
         # refs
@@ -424,7 +434,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs[:, next_idx:(next_idx+3)] = robot_gravity_norm_base_loc # norm. gravity vector in base frame
         next_idx+=3
         if self._use_linvel_from_rhc:
-            obs[:, next_idx:(next_idx+3)] = robot_twist_rhc_base_loc[:, 0:3]
+            obs[:, next_idx:(next_idx+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
         else:
             obs[:, next_idx:(next_idx+3)] = robot_twist_meas_base_loc[:, 0:3]
         next_idx+=3
@@ -462,6 +472,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             flight_info_size=2*len(self._contact_names)
             obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now
             next_idx+=flight_info_size
+        if self._add_rhc_cmds_to_obs:
+            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
+            next_idx+=self._n_jnts
+            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_v_rhc_applied_next
+            next_idx+=self._n_jnts
+            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_eff_rhc_applied_next
+            next_idx+=self._n_jnts
 
     def _get_custom_db_data(self, 
             episode_finished):
@@ -674,6 +691,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
                 obs_names[next_idx+i+len(self._contact_names)] = "flight_length_"+ contact
             next_idx+=flight_info_size
+        if self._add_rhc_cmds_to_obs:
+            for i in range(self._n_jnts): # jnt obs (pos):
+                obs_names[next_idx+i] = f"rhc_cmd_q_{jnt_names[i]}"
+            next_idx+=self._n_jnts
+            for i in range(self._n_jnts): # jnt obs (pos):
+                obs_names[next_idx+i] = f"rhc_cmd_v_{jnt_names[i]}"
+            next_idx+=self._n_jnts
+            for i in range(self._n_jnts): # jnt obs (pos):
+                obs_names[next_idx+i] = f"rhc_cmd_eff_{jnt_names[i]}"
+            next_idx+=self._n_jnts
+
         return obs_names
 
     def _get_action_names(self):
