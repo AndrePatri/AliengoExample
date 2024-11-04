@@ -97,6 +97,9 @@ class HybridQuadRhc(RHController):
 
         self._rhc_fpaths.append(self.config_path)
 
+    def _config_override(self):
+        pass
+
     def _post_problem_init(self):
 
         self.rhc_costs={}
@@ -120,6 +123,8 @@ class HybridQuadRhc(RHController):
             yaw_vertical_weight: float = 2.0,
             phase_force_reg: float = 1e-2,
             vel_bounds_weight: float = 1.0):
+        
+        self._config_override()
         
         Journal.log(self.__class__.__name__,
             "_init_problem",
