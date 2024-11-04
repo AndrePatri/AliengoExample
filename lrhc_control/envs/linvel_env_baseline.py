@@ -52,7 +52,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._vel_err_smoother=None
         self._use_prob_based_stepping=False
         self._add_flight_info=False
-        self._use_pos_control=True
+        self._use_pos_control=False
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
