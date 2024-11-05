@@ -626,9 +626,12 @@ class HybridQuadRhc(RHController):
 
         xig, _ = self._set_ig()
 
+        robot_state=xig[:, 0]
         # open loop update:
-        self._prb.setInitialState(x0=xig[:, 0]) # (xig has been shifted, so node 0
+        self._prb.setInitialState(x0=robot_state) # (xig has been shifted, so node 0
         # is node 1 in the last opt solution)
+
+        return robot_state
     
     def _update_closed_loop(self):
 
@@ -650,6 +653,7 @@ class HybridQuadRhc(RHController):
         else: # just set the measured state
             self._prb.setInitialState(x0=
                             robot_state)
+        return robot_state
     
     def _solve(self):
         
@@ -660,18 +664,19 @@ class HybridQuadRhc(RHController):
         
     def _min_solve(self):
         # minimal solve version -> no debug 
+        robot_state=None
         if self._open_loop:
-            self._update_open_loop() # updates the TO ig and 
+            robot_state=self._update_open_loop() # updates the TO ig and 
             # initial conditions using data from the solution itself
         else: 
-            self._update_closed_loop() # updates the TO ig and 
+            robot_state=self._update_closed_loop() # updates the TO ig and 
             # initial conditions using robot measurements
     
         self._pm.shift() # shifts phases of one dt
         if self._refs_in_hor_frame:
             # q_base=self.robot_state.root_state.get(data_type="q", 
             #     robot_idxs=self.controller_index).reshape(-1, 1)
-            q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
+            # q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
             # using internal base pose from rhc. in case of closed loop, it will be the meas state
             force_norm=None
             if self._custom_opts["use_force_feedback"]:
@@ -679,7 +684,7 @@ class HybridQuadRhc(RHController):
                     robot_idxs=self.controller_index_np,
                     contact_name=None).reshape(self.n_contacts,3)
                 force_norm=np.linalg.norm(contact_forces, axis=1)
-            self.rhc_refs.step(q_full=q_full,
+            self.rhc_refs.step(q_full=robot_state,
                 force_norm=force_norm)
         else:
             self.rhc_refs.step()
