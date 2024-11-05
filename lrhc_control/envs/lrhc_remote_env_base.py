@@ -586,17 +586,6 @@ class LRhcEnvBase(ABC):
                     self._wait_for_remote_step_req(robot_name=robot_name)
                 else:
                     if failed is not None:
-                        print("BEFOOOOOREEEEE")
-                        print("joints q")
-                        print(self.jnts_q(robot_name=robot_name))
-                        print("joints v")
-                        print(self.jnts_v(robot_name=robot_name))
-                        print("jnts efforts")
-                        print(self.jnts_eff(robot_name=robot_name))
-                        print("root v")
-                        print(self.root_v(robot_name=robot_name))
-                        print("root omega")
-                        print(self.root_omega(robot_name=robot_name))
                         self._reset(env_indxs=failed,
                             robot_name=robot_name,
                             reset_cluster=True,
@@ -604,19 +593,6 @@ class LRhcEnvBase(ABC):
                             randomize=True)
                         self._set_startup_jnt_imp_gains(robot_name=robot_name,
                             env_indxs=failed)
-
-                        print("AAAAAAAAAAAAAAAAAAA")
-                        print("joints q")
-                        print(self.jnts_q(robot_name=robot_name))
-                        print("joints v")
-                        print(self.jnts_v(robot_name=robot_name))
-                        print("jnts efforts")
-                        print(self.jnts_eff(robot_name=robot_name))
-                        print("root v")
-                        print(self.root_v(robot_name=robot_name))
-                        print("root omega")
-                        print(self.root_omega(robot_name=robot_name))
-                        exit()
 
                     control_cluster.activate_controllers(idxs=control_cluster.get_inactive_controllers())
 
