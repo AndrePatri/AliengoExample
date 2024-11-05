@@ -167,7 +167,8 @@ class GaitManager:
         scale: float = 4.0):
         f_refs=self._f_reg_ref[contact_name]
         for force in f_refs:
-            force.assign(self._total_weight/(scale*len(f_refs)))
+            ref=self._total_weight/(scale*len(f_refs))
+            force.assign(ref)
 
     def add_stand(self, contact_name):
         # always add stand at the end of the horizon
