@@ -280,7 +280,6 @@ class RosBagDumper():
             start_rosbag=req_data[:, 0].item()
             stop_rosbag=req_data[:, 1].item()
             terminate_bag_proc=req_data[:, 2].item()
-            print(req_data)
             if start_rosbag and not rosbag_started:
                 proc=run_bag(command)
                 stop_rosbag=False
