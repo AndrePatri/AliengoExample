@@ -115,6 +115,7 @@ class SActorCriticAlgoBase(ABC):
 
         if not self._collect_transition():
             return False
+        self._vec_transition_counter+=1
 
         self._collection_t = time.perf_counter()
         
