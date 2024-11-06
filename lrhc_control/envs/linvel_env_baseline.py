@@ -354,13 +354,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     
     def _update_loc_twist_refs(self):
         # get fresh robot orientation
-        robot_q = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
-        # rotate agent ref from world to robot base
-        world2base_frame(t_w=self._agent_twist_ref_current_w, q_b=robot_q, 
-            t_out=self._agent_twist_ref_current_base_loc)
-        # write it to agent refs tensors
-        self._agent_refs.rob_refs.root_state.set(data_type="twist", data=self._agent_twist_ref_current_base_loc,
-                                            gpu=self._use_gpu)
+        if not self._override_agent_refs:
+            robot_q = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
+            # rotate agent ref from world to robot base
+            world2base_frame(t_w=self._agent_twist_ref_current_w, q_b=robot_q, 
+                t_out=self._agent_twist_ref_current_base_loc)
+            # write it to agent refs tensors
+            self._agent_refs.rob_refs.root_state.set(data_type="twist", data=self._agent_twist_ref_current_base_loc,
+                                                gpu=self._use_gpu)
         
     def _apply_actions_to_rhc(self):
         
