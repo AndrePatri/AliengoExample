@@ -80,10 +80,6 @@ if __name__ == '__main__':
     parser.add_argument('--env_idx', type=int, help='env index of which data is to be published', default=0)
     parser.add_argument('--stime_trgt', type=float, default=None, help='sim time for which this bridge runs (None -> indefinetly)')
     parser.add_argument('--srdf_path', type=str, help='path to SRDF path specifying homing configuration, to be used for missing joints', default=None)
-    parser.add_argument('--dump_rosbag',action='store_true', help='whether to dump a rosbag of the published topics')
-    parser.add_argument('--dump_path', type=str, default="/tmp", help='where bag will be dumped')
-    parser.add_argument('--use_shared_drop_dir',action='store_true', 
-        help='if true use the shared drop dir to drop the data where all the other training data is dropeer')
     parser.add_argument('--abort_wallmin', type=float, default=5.0, help='abort bridge if no response wihtin this timeout')
 
     args = parser.parse_args()
@@ -93,27 +89,7 @@ if __name__ == '__main__':
     update_dt = args.dt
     debug = args.debug
     verbose = args.verbose
-    dump_rosbag=args.dump_rosbag
-    dump_path=args.dump_path
-    stime_trgt=args.stime_trgt
-    if stime_trgt is None and dump_rosbag:
-        # set a default stime trgt, otherwise the bag file could become of gigantic size
-        stime_trgt=60.0
-    shared_drop_dir=None
-    shared_drop_dir_val=[""]
-    if args.use_shared_drop_dir and dump_rosbag:
-        shared_drop_dir=StringTensorClient(basename="SharedTrainingDropDir", 
-                        name_space=args.ns,
-                        verbose=True, 
-                        vlevel=VLevel.V2)
-        shared_drop_dir.run()
-        shared_drop_dir_val=[""]*shared_drop_dir.length()
-        while not shared_drop_dir.read_vec(shared_drop_dir_val, 0):
-            ns=1000000000
-            PerfSleep.thread_sleep(ns)
-            continue
-        dump_path=shared_drop_dir_val[0]
-    
+
     bridge = None
     if not args.ros2: 
         from lrhc_control.utils.rhc_viz.rhc2viz import RhcToVizBridge
@@ -126,7 +102,7 @@ if __name__ == '__main__':
                         rhc_refs_in_h_frame=args.rhc_refs_in_h_frame,
                         agent_refs_in_h_frame=args.agent_refs_in_h_frame,
                         env_idx=args.env_idx,
-                        sim_time_trgt=stime_trgt,
+                        sim_time_trgt=args.stime_trgt,
                         srdf_homing_file_path=args.srdf_path,
                         abort_wallmin=args.abort_wallmin)
     else:
@@ -141,36 +117,13 @@ if __name__ == '__main__':
                         rhc_refs_in_h_frame=args.rhc_refs_in_h_frame,
                         agent_refs_in_h_frame=args.agent_refs_in_h_frame,
                         env_idx=args.env_idx,
-                        sim_time_trgt=stime_trgt,
+                        sim_time_trgt=args.stime_trgt,
                         srdf_homing_file_path=args.srdf_path,
-                        abort_wallmin=args.abort_wallmin)
+                        abort_wallmin=args.abort_wallmin,
+                        update_dt=update_dt)
 
-    # spawn a process to record bag if required
-    bag_proc=None
-    term_trigger=None
-    if dump_rosbag:
-        term_trigger=RemoteTriggererSrvr(namespace=args.ns+f"SharedTerminator",
-                                            verbose=verbose,
-                                            vlevel=VLevel.V1,
-                                            force_reconnection=True)
-        term_trigger.run()
+    bridge.run()
 
-        import multiprocess as mp
-        ctx = mp.get_context('forkserver')
-        bag_proc=ctx.Process(target=launch_rosbag, 
-                            name="rosbag_recorder_"+f"{args.ns}",
-                            args=(args.ns,dump_path,timeout_ms))
-        bag_proc.start()
-    
-    bridge.run(update_dt=update_dt)
+    bridge.close()
 
-    if bag_proc is not None:
-        term_trigger.trigger()
-        bag_proc.join()
-    
-    if term_trigger is not None:
-        term_trigger.close()
-
-    if shared_drop_dir is not None:
-        shared_drop_dir.close()
 

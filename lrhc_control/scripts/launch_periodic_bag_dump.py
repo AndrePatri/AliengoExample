@@ -24,21 +24,25 @@ if __name__ == '__main__':
     parser.add_argument('--env_idx', type=int, help='env index of which data is to be published', default=0)
     parser.add_argument('--srdf_path', type=str, help='path to SRDF path specifying homing configuration, to be used for missing joints', default=None)
     parser.add_argument('--dump_path', type=str, default="/tmp", help='where bag will be dumped')
+    parser.add_argument('--is_training',action='store_true', 
+        help='')
     parser.add_argument('--use_shared_drop_dir',action='store_true', 
         help='if true use the shared drop dir to drop the data where all the other training data is dropeer')
 
     args = parser.parse_args()
+    if args.is_training:
+        if not args.use_shared_drop_dir:
+            args.use_shared_drop_dir=True
 
-    training_done=False
-    while True:
-        
-        bag_dumper=RosBagDumper(ns=args.ns,
+    bag_dumper=RosBagDumper(ns=args.ns,
             remap_ns=args.remap_ns,
             ros_bridge_dt=args.ros_bridge_dt,
             bag_sdt=args.bag_sdt,
+            wall_dt=args.dump_dt_min,
             debug=args.debug,
             verbose=args.verbose,
             dump_path=args.dump_path,
+            is_training=args.is_training,
             use_shared_drop_dir=args.use_shared_drop_dir,
             ros2=args.ros2,
             env_idx=args.env_idx,
@@ -47,21 +51,7 @@ if __name__ == '__main__':
             with_agent_refs=args.with_agent_refs,
             rhc_refs_in_h_frame=args.rhc_refs_in_h_frame,
             agent_refs_in_h_frame=args.agent_refs_in_h_frame)
-
-        if bag_dumper.training_done():
-            break
-            
-        start_time=time.monotonic() 
-        bag_dumper.init() 
-        while True:
-            done=not bag_dumper.step()
-            if done:
-                break
-        bag_dumper.close()
-
-        elapsed_min=(time.monotonic()-start_time)*1.0/60.0
-        remaining_min=args.dump_dt_min-elapsed_min
-        if remaining_min>0.0: # wait 
-            time.sleep(remaining_min*60.0)
+    bag_dumper.run()
+    bag_dumper.close()
 
         

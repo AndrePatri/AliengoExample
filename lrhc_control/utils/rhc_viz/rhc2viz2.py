@@ -53,7 +53,8 @@ class RhcToViz2Bridge:
             sim_time_trgt: float = None,
             srdf_homing_file_path: str = None,
             abort_wallmin: float = 5.0,
-            use_static_idx: bool = True):
+            use_static_idx: bool = True,
+            update_dt: float = 0.1):
         
         self._srdf_homing_file_path=srdf_homing_file_path # used to retrieve homing
         self._homer=None
@@ -111,7 +112,10 @@ class RhcToViz2Bridge:
         self._stime_before=-1.0
 
         self._initialize()
-           
+        
+        self._update_dt=update_dt
+        self.init(update_dt=self._update_dt)
+
     def __del__(self):
         self.close()
 
@@ -362,6 +366,9 @@ class RhcToViz2Bridge:
             LogType.INFO,
             throw_when_excep = True)
 
+        self._reset()
+
+    def _reset(self):
         self._sim_time = 0 
         self._sim_time_init = self._sim_data.get()[self._simtime_idx].item()
         self._stime_before=self._sim_time # record stime now
@@ -369,6 +376,26 @@ class RhcToViz2Bridge:
         self._safety_check_start_time = time.monotonic() 
         self._sporadic_log_freq=500
         self._log_counter=0
+
+    def run(self, sim_time: float = None):
+
+        if sim_time is not None:
+            self._sim_time_trgt=sim_time
+        else:
+            self._sim_time_trgt=np.inf
+
+        self._reset() # reset counters
+        # run bridge for some sim time
+        finished=False
+        while not finished and (self._is_running and not self._closed):
+            try:
+                finished=not self.step()
+            except KeyboardInterrupt:
+                break
+        self._is_running=False
+        
+        return finished
+        
 
     def step(self):
 
@@ -420,22 +447,6 @@ class RhcToViz2Bridge:
             PerfSleep.thread_sleep(self._time_to_sleep_ns) 
             
         return True
-
-    def run(self,
-        update_dt: float = 0.01):
-
-        self.init(update_dt)
-
-        while (self._is_running and not self._closed):
-
-            try:
-                if not self.step():
-                    break                 
-
-            except KeyboardInterrupt:
-                self.close()
-
-        self._is_running=False
 
     def _update(self):
         
