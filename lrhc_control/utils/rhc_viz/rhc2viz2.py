@@ -392,7 +392,6 @@ class RhcToViz2Bridge:
                 finished=not self.step()
             except KeyboardInterrupt:
                 break
-        self._is_running=False
         
         return finished
         
@@ -500,6 +499,7 @@ class RhcToViz2Bridge:
             self.node.destroy_node()
             # rclpy.shutdown()
             self._closed=True
+            self._is_running=False
     
     def _sporadic_log(self,
                 calling_methd: str,

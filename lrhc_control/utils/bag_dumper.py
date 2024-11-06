@@ -280,6 +280,8 @@ class RosBagDumper():
             start_rosbag=req_data[:, 0].item()
             stop_rosbag=req_data[:, 1].item()
             terminate_bag_proc=req_data[:, 2].item()
+            print("received request:")
+            print(req_data)
             if start_rosbag and not rosbag_started:
                 proc=run_bag(command)
                 stop_rosbag=False
@@ -305,32 +307,59 @@ class RosBagDumper():
                 rosbag_started=False
 
             exit_req=terminate_bag_proc
+            term_trigger.ack()
         
         term_trigger.close()
+        Journal.log(self.__class__.__name__,
+            "launch_rosbag",
+            f"exiting recording loop",
+            LogType.INFO)
     
     def _start_bag_recording(self):
-        self._term_trigger.trigger() # triggering process termination and joining
         bag_data=self._bag_req.get_numpy_mirror()
         bag_data[:, 0] = True
         bag_data[:, 1] = False
         bag_data[:, 2] = False
         self._bag_req.synch_all(read=False,retry=True)
+        self._term_trigger.trigger() # triggering process termination and joining
+        if not self._term_trigger.wait_ack_from(1, 
+                self._timeout_ms):
+            Journal.log(self.__class__.__name__,
+                "_start_bag_recording",
+                f"Didn't receive ack!",
+                LogType.EXCEP,
+                throw_when_excep = True)
 
     def _stop_bag_recording(self):
-        self._term_trigger.trigger() # triggering process termination and joining
         bag_data=self._bag_req.get_numpy_mirror()
         bag_data[:, 0] = False
         bag_data[:, 1] = True
         bag_data[:, 2] = False
         self._bag_req.synch_all(read=False,retry=True)
+        self._term_trigger.trigger() # triggering process termination and joining
+        if not self._term_trigger.wait_ack_from(1, 
+                self._timeout_ms):
+            Journal.log(self.__class__.__name__,
+                "_start_bag_recording",
+                f"Didn't receive ack!",
+                LogType.EXCEP,
+                throw_when_excep = True)
+        
         
     def _close_rosbag_proc(self):
-        self._term_trigger.trigger() # triggering process termination and joining
         bag_data=self._bag_req.get_numpy_mirror()
         bag_data[:, 0] = False
         bag_data[:, 1] = True # close in case was running
         bag_data[:, 2] = True
         self._bag_req.synch_all(read=False,retry=True)
+        self._term_trigger.trigger() # triggering process termination and joining
+        if not self._term_trigger.wait_ack_from(1, 
+                self._timeout_ms):
+            Journal.log(self.__class__.__name__,
+                "_start_bag_recording",
+                f"Didn't receive ack!",
+                LogType.EXCEP,
+                throw_when_excep = True)
 
     def _close_rosbag(self):
         if self._bag_proc is not None:
