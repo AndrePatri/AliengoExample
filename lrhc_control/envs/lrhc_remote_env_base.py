@@ -931,7 +931,6 @@ class LRhcEnvBase(ABC):
             
     def _write_state_to_jnt_imp(self,
         robot_name: str):
-        pass
      
         # always update ,imp. controller internal state (jnt imp control is supposed to be
         # always running)
@@ -1054,7 +1053,8 @@ class LRhcEnvBase(ABC):
 
         # self._write_state_to_jnt_imp(robot_name=robot_name)
         # actually applies reset commands to the articulation
-        # self._jnt_imp_controllers[robot_name].apply_cmds()          
+        self._write_state_to_jnt_imp(robot_name=robot_name)
+        self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
 
     def _synch_default_root_states(self,
             robot_name: str,
