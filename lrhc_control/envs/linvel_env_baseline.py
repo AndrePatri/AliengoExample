@@ -223,6 +223,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def _custom_post_init(self):
 
+        device = "cuda" if self._use_gpu else "cpu"
+
+        all_available_jnts=self._robot_state.jnt_names()        
+        pattern="wheel" # we don't want to observe wheels positions
+        blacklist=[]
+        for i in range(len(all_available_jnts)):
+            if pattern in all_available_jnts[i]:
+                blacklist.append(i)
+        self._jnt_q_blacklist_idxs=None
+        if not len(blacklist)==0:
+            self._jnt_q_blacklist_idxs=torch.tensor(blacklist, dtype=torch.int, device=device)
+
         self._n_noisy_envs=math.ceil(self._n_envs*1/100)
         if not self._use_pos_control:
             if not self._use_prob_based_stepping:
@@ -264,10 +276,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._root_twist_avrg_rhc_base_loc=self._rhc_twist_cmd_rhc_world.detach().clone()
         self._root_twist_avrg_rhc_base_loc_next=self._rhc_twist_cmd_rhc_world.detach().clone()
         
-        device = "cuda" if self._use_gpu else "cpu"
+        
         self._random_thresh_contacts=torch.rand((self._n_envs,self._n_contacts), device=device)
         # task aux data
-        device = "cuda" if self._use_gpu else "cpu"
         self._task_err_scaling = torch.zeros((self._n_envs, 1),dtype=self._dtype,device=device)
 
         self._pof1_b = torch.full(size=(self._n_envs,1),dtype=self._dtype,device=device,fill_value=1-self._pof0)
@@ -417,6 +428,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         robot_gravity_norm_base_loc = self._robot_state.root_state.get(data_type="gn",gpu=self._use_gpu)
         robot_twist_meas_base_loc = self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu)
         robot_jnt_q_meas = self._robot_state.jnts_state.get(data_type="q",gpu=self._use_gpu)
+        if self._jnt_q_blacklist_idxs is not None: # we don't want to read joint pos from blacklist
+            robot_jnt_q_meas[:, self._jnt_q_blacklist_idxs]=0.0
         robot_jnt_v_meas = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
         
         # twist estimate from mpc
@@ -630,7 +643,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs_names[next_idx+4] = "omega_y_base_loc"
         obs_names[next_idx+5] = "omega_z_base_loc"
         next_idx+=6
-        jnt_names = self._robot_state.jnt_names()
+        jnt_names=self.get_observed_joints()
         for i in range(self._n_jnts): # jnt obs (pos):
             obs_names[next_idx+i] = f"q_{jnt_names[i]}"
         next_idx+=self._n_jnts
