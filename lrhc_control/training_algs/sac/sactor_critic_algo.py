@@ -227,7 +227,10 @@ class SActorCriticAlgoBase(ABC):
                     run_name=self._run_name)
                 
             self._load_model(self._model_path)
-            
+        
+        # reset environment
+        self._env.reset()
+
         # create dump directory + copy important files for debug
         self._init_drop_dir(drop_dir_name)
         self._hyperparameters["drop_dir"]=self._drop_dir
@@ -248,8 +251,6 @@ class SActorCriticAlgoBase(ABC):
             self._log_alpha = torch.zeros(1, requires_grad=True, device=self._torch_device)
             self._alpha = self._log_alpha.exp().item()
             self._a_optimizer = optim.Adam([self._log_alpha], lr=self._lr_q)
-    
-        # self._env.reset()
         
         if (self._debug):
             if self._remote_db:
@@ -319,7 +320,7 @@ class SActorCriticAlgoBase(ABC):
         agent_state_dict=self._agent.state_dict()
         if not self._eval: # training
             # we log the joints which were observed during training
-            agent_state_dict["observed_jnt_names"]=self._env.get_observed_joints()
+            agent_state_dict["observed_jnts"]=self._env.get_observed_joints()
 
         torch.save(agent_state_dict, path) # saves whole agent state
         # torch.save(self._agent.parameters(), path) # only save agent parameters
@@ -465,10 +466,8 @@ class SActorCriticAlgoBase(ABC):
         model_dict=torch.load(model_path, 
                     map_location=self._torch_device)
         
-        self.add_observed_joints_to_model(model_path, self._env.get_observed_joints())
-
         observed_joints=self._env.get_observed_joints()
-        required_joints=model_dict["observed_jnt_names"]
+        required_joints=model_dict["observed_jnts"]
 
         self._check_observed_joints(observed_joints,required_joints)
 
@@ -481,6 +480,37 @@ class SActorCriticAlgoBase(ABC):
 
         observed=set(observed_joints)
         required=set(required_joints)
+
+        all_required_joints_avail = required.issubset(observed)
+        if not all_required_joints_avail:
+            missing=[item for item in required if item not in observed]
+            missing_str=', '.join(missing)
+            Journal.log(self.__class__.__name__,
+                "_check_observed_joints",
+                f"not all required joints are available. Missing {missing_str}",
+                LogType.EXCEP,
+                throw_when_excep = True)
+        exceeding=observed-required
+        if not len(exceeding)==0:
+            # do not support having more joints than the required
+            exc_jnts=" ".join(list(exceeding))
+            Journal.log(self.__class__.__name__,
+                "_check_observed_joints",
+                f"more than the required joints found in the observed joint: {exc_jnts}",
+                LogType.EXCEP,
+                throw_when_excep = True)
+        
+        # here we are sure that required and observed sets match
+        self._to_agent_jnt_remap=None
+        if not required_joints==observed_joints:
+            Journal.log(self.__class__.__name__,
+                "_check_observed_joints",
+                f"required jnt obs from agent have different ordering from observed ones. Will compute a remapping.",
+                LogType.WARN,
+                throw_when_excep = True)
+            self._to_agent_jnt_remap = [observed_joints.index(element) for element in required_joints]
+        
+        self._env.set_jnts_remapping(remapping= self._to_agent_jnt_remap)
 
     def _set_all_deterministic(self):
         import random

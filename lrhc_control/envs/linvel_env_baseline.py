@@ -221,19 +221,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self.custom_db_info["action_repeat"] = self._action_repeat
         self.custom_db_info["add_flight_info"] = self._add_flight_info
 
+    def _set_jnts_blacklist_pattern(self):
+        self._jnt_q_blacklist_patterns=["wheel"]
+
     def _custom_post_init(self):
 
         device = "cuda" if self._use_gpu else "cpu"
 
-        all_available_jnts=self._robot_state.jnt_names()        
-        pattern="wheel" # we don't want to observe wheels positions
-        blacklist=[]
-        for i in range(len(all_available_jnts)):
-            if pattern in all_available_jnts[i]:
-                blacklist.append(i)
-        self._jnt_q_blacklist_idxs=None
-        if not len(blacklist)==0:
-            self._jnt_q_blacklist_idxs=torch.tensor(blacklist, dtype=torch.int, device=device)
+        self._update_jnt_blacklist()
 
         self._n_noisy_envs=math.ceil(self._n_envs*1/100)
         if not self._use_pos_control:

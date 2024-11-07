@@ -737,10 +737,13 @@ class LRhcTrainingEnvBase(ABC):
         # to be overridden by child class
         pass
     
-    def _set_observed_joints(self):
+    def set_observed_joints(self):
         # ny default observe all joints available 
         return self._robot_state.jnt_names()
     
+    def _set_jnts_blacklist_pattern(self):
+        self._jnt_q_blacklist_patterns=[]
+
     def get_observed_joints(self):
         return self._observed_jnt_names
     
@@ -995,7 +998,20 @@ class LRhcTrainingEnvBase(ABC):
                 with_gpu_mirror=self._use_gpu,
                 fill_value=False)
         self._sub_truncations.run()
-        
+    
+    def _update_jnt_blacklist(self):
+        device = "cuda" if self._use_gpu else "cpu"
+        all_available_jnts=self.get_observed_joints()        
+        blacklist=[]
+        for i in range(len(all_available_jnts)):
+            for pattern in self._jnt_q_blacklist_patterns:
+                if pattern in all_available_jnts[i]:
+                    # stop at first pattern match
+                    blacklist.append(i)
+                    break
+        if not len(blacklist)==0:
+            self._jnt_q_blacklist_idxs=torch.tensor(blacklist, dtype=torch.int, device=device)
+            
     def _attach_to_shared_mem(self):
 
         # runs shared mem clients for getting observation and setting RHC commands
@@ -1017,6 +1033,9 @@ class LRhcTrainingEnvBase(ABC):
                                             vlevel=self._vlevel,
                                             safe=True)
         self._remote_reset_req.run()
+
+        self._jnts_remapping=None
+        self._jnt_q_blacklist_idxs=None
 
         self._robot_state = RobotState(namespace=self._namespace,
                                 is_server=False, 
@@ -1172,12 +1191,14 @@ class LRhcTrainingEnvBase(ABC):
                 vlevel=self._vlevel)
         self._training_sim_info.run()
 
+        self._observed_jnt_names=self.set_observed_joints()
+        self._set_jnts_blacklist_pattern()
+        self._update_jnt_blacklist()
+
         self._prev_root_p_substep=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu).clone()
         self._prev_root_q_substep=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu).clone()
         self._prev_root_p_step=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu).clone()
         self._prev_root_q_step=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu).clone()
-
-        self._observed_jnt_names=self._set_observed_joints()
         
     def _activate_rhc_controllers(self):
         self._rhc_status.activation_state.get_torch_mirror()[:, :] = True
@@ -1279,6 +1300,23 @@ class LRhcTrainingEnvBase(ABC):
     def get_actions_offset(self):
         return self._actions_offset
     
+    def set_jnts_remapping(self, 
+        remapping: List = None):
+
+        self._jnts_remapping=remapping
+        if self._jnts_remapping is not None:
+            self._robot_state.set_jnts_remapping(jnts_remapping=self._jnts_remapping)
+            self._rhc_cmds.set_jnts_remapping(jnts_remapping=self._jnts_remapping)
+            self._rhc_pred.set_jnts_remapping(jnts_remapping=self._jnts_remapping)
+            # we need to also update the list of observed joints to match
+            available_joints=self._robot_state.jnt_names()
+            # the remapping ordering 
+            self._observed_jnt_names=[]
+            for i in range(len(available_joints)):
+                self._observed_jnt_names.append(available_joints[self._jnts_remapping[i]])
+
+            self._update_jnt_blacklist()
+
     def _check_finite(self, 
                 tensor: torch.Tensor,
                 name: str, 
