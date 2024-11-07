@@ -38,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
     parser.add_argument('--eval',action='store_true', help='Whether to perform an evaluation run')
+    parser.add_argument('--override_agent_refs',action='store_true', help='Whether to override automatically generated agent refs (useful for debug)')
+    parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
     parser.add_argument('--n_eval_timesteps', type=int, help='Total number of timesteps to be evaluated', default=int(1e6))
     parser.add_argument('--mpath', type=str, help='Model path to be used for policy evaluation', default=None)
     parser.add_argument('--mname', type=str, help='Model name', default=None)
@@ -49,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument('--db',action='store_true', help='Whether to enable local data logging for the algorithm (reward metrics, etc.)')
     parser.add_argument('--env_db',action='store_true', help='Whether to enable env db data logging on shared mem (e.g. reward metrics are not available for reading anymore)')
     parser.add_argument('--rmdb',action='store_true', help='Whether to enable remote debug (e.g. data logging on remote servers)')
-    parser.add_argument('--override_agent_refs',action='store_true', help='Whether to override automatically generated agent refs (useful for debug)')
+    
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
     parser.add_argument('--actor_size', type=int, help='Actor network size', default=256)
@@ -70,7 +72,7 @@ if __name__ == "__main__":
     env_classname = args.env_classname
     env_path=""
     env_module=None
-    if not args.eval:
+    if (not args.eval) or (args.override_env):
         env_path = f"lrhc_control.envs.{env_fname}"
         env_module = importlib.import_module(env_path)
     else:
@@ -176,17 +178,3 @@ if __name__ == "__main__":
             break
     
     if not args.eval:
-        try:
-            while not algo.is_done():
-                if not algo.learn():
-                    algo.done()
-        except KeyboardInterrupt:
-            algo.done() # in case it's interrupted by user
-    else: # eval phase
-        with torch.no_grad(): # no need for grad computation
-            try:
-                while not algo.is_done():
-                    if not algo.eval():
-                        algo.done()
-            except KeyboardInterrupt:
-                algo.done() # in case it's interrupted by user
