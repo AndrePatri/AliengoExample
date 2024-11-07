@@ -178,3 +178,17 @@ if __name__ == "__main__":
             break
     
     if not args.eval:
+        try:
+            while not algo.is_done():
+                if not algo.learn():
+                    algo.done()
+        except KeyboardInterrupt:
+            algo.done() # in case it's interrupted by user
+    else: # eval phase
+        with torch.no_grad(): # no need for grad computation
+            try:
+                while not algo.is_done():
+                    if not algo.eval():
+                        algo.done()
+            except KeyboardInterrupt:
+                algo.done() # in case it's interrupted by user

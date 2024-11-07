@@ -706,6 +706,9 @@ class LRhcTrainingEnvBase(ABC):
         # to be overridden by child class
         return None
     
+    def get_robot_jnt_names(self):
+        return self._robot_state.jnt_names()
+
     def _get_action_names(self):
         # to be overridden by child class
         return None
@@ -733,7 +736,14 @@ class LRhcTrainingEnvBase(ABC):
     def _get_custom_db_data(self, episode_finished):
         # to be overridden by child class
         pass
-
+    
+    def _set_observed_joints(self):
+        # ny default observe all joints available 
+        return self._robot_state.jnt_names()
+    
+    def get_observed_joints(self):
+        return self._observed_jnt_names
+    
     def _init_obs(self):
         
         obs_threshold_default = 100.0
@@ -1166,6 +1176,8 @@ class LRhcTrainingEnvBase(ABC):
         self._prev_root_q_substep=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu).clone()
         self._prev_root_p_step=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu).clone()
         self._prev_root_q_step=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu).clone()
+
+        self._observed_jnt_names=self._set_observed_joints()
         
     def _activate_rhc_controllers(self):
         self._rhc_status.activation_state.get_torch_mirror()[:, :] = True

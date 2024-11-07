@@ -316,7 +316,12 @@ class SActorCriticAlgoBase(ABC):
             info,
             LogType.INFO,
             throw_when_excep = True)
-        torch.save(self._agent.state_dict(), path) # saves whole agent state
+        agent_state_dict=self._agent.state_dict()
+        if not self._eval: # training
+            # we log the joints which were observed during training
+            agent_state_dict["observed_jnt_names"]=self._env.get_observed_joints()
+
+        torch.save(agent_state_dict, path) # saves whole agent state
         # torch.save(self._agent.parameters(), path) # only save agent parameters
         info = f"Done."
         Journal.log(self.__class__.__name__,
@@ -457,10 +462,25 @@ class SActorCriticAlgoBase(ABC):
             info,
             LogType.INFO,
             throw_when_excep = True)
+        model_dict=torch.load(model_path, 
+                    map_location=self._torch_device)
         
-        self._agent.load_state_dict(torch.load(model_path, 
-                    map_location=self._torch_device))
+        self.add_observed_joints_to_model(model_path, self._env.get_observed_joints())
+
+        observed_joints=self._env.get_observed_joints()
+        required_joints=model_dict["observed_jnt_names"]
+
+        self._check_observed_joints(observed_joints,required_joints)
+
+        self._agent.load_state_dict(model_dict)
         self._switch_training_mode(False)
+
+    def _check_observed_joints(self,
+            observed_joints,
+            required_joints):
+
+        observed=set(observed_joints)
+        required=set(required_joints)
 
     def _set_all_deterministic(self):
         import random
