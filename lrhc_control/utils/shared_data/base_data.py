@@ -96,6 +96,11 @@ class NamedSharedTWrapper(SharedTWrapper):
     def reset(self):
 
         self.to_zero()
+    
+    def update_names(self):
+        # writes latest values of _col_names/_row_names on
+        # shared mem or reads them
+        self._write_or_retrieve_names()
 
     def _write_or_retrieve_names(self):
          
@@ -103,16 +108,12 @@ class NamedSharedTWrapper(SharedTWrapper):
             
             # column names
             if self._col_names is None:
-                    
                 self._col_names = [""] * self.n_cols
-
             else:
 
                 if not len(self._col_names) == self.n_cols:
-
                     exception = f"Col. names list length {len(self._col_names)} " + \
                         f"does not match the number of joints {self.n_cols}"
-                
                     Journal.log(self.__class__.__name__,
                         "_write_or_retrieve_names",
                         exception,
@@ -122,9 +123,7 @@ class NamedSharedTWrapper(SharedTWrapper):
             col_names_written = self._col_names_shared.write_vec(self._col_names, 0)
 
             if not col_names_written:
-                
                 exception = "Could not write column names on shared memory!"
-
                 Journal.log(self.__class__.__name__,
                     "_write_or_retrieve_names",
                     exception,
@@ -133,16 +132,11 @@ class NamedSharedTWrapper(SharedTWrapper):
             
             # row names
             if self._row_names is None:
-                    
                 self._row_names = [""] * self.n_rows
-
             else:
-
                 if not len(self._row_names) == self.n_rows:
-
                     exception = f"Row names list length {len(self._row_names)} " + \
                         f"does not match the number of joints {self.n_rows}"
-
                     Journal.log(self.__class__.__name__,
                         "_write_or_retrieve_names",
                         exception,
@@ -152,9 +146,7 @@ class NamedSharedTWrapper(SharedTWrapper):
             row_names_written = self._row_names_shared.write_vec(self._row_names, 0)
 
             if not row_names_written:
-                
                 exception = "Could not write row names on shared memory!"
-
                 Journal.log(self.__class__.__name__,
                     "_write_or_retrieve_names",
                     exception,
@@ -169,9 +161,7 @@ class NamedSharedTWrapper(SharedTWrapper):
             col_names_read = self._col_names_shared.read_vec(self._col_names, 0)
 
             if not col_names_read:
-                
                 exception = "Could not read columns names on shared memory!"
-
                 Journal.log(self.__class__.__name__,
                     "_write_or_retrieve_names",
                     exception,
@@ -184,9 +174,7 @@ class NamedSharedTWrapper(SharedTWrapper):
             row_names_read = self._row_names_shared.read_vec(self._row_names, 0)
 
             if not row_names_read:
-                
                 exception = "Could not read row names on shared memory!"
-
                 Journal.log(self.__class__.__name__,
                     "_write_or_retrieve_names",
                     exception,
