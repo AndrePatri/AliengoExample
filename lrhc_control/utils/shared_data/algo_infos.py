@@ -15,6 +15,32 @@ import numpy as np
 import torch
 
 # Training env info
+class QfVal(SharedTWrapper):
+                 
+    def __init__(self,
+        namespace = "",
+        is_server = False, 
+        n_envs: int = -1, 
+        verbose: bool = False, 
+        vlevel: VLevel = VLevel.V0,
+        force_reconnection: bool = False,
+        safe: bool = True):
+
+        basename = "QFValues" 
+
+        super().__init__(namespace = namespace,
+            basename = basename,
+            is_server = is_server, 
+            n_rows = n_envs, 
+            n_cols = 1, 
+            verbose = verbose, 
+            vlevel = vlevel,
+            dtype=sharsor_dtype.Float,
+            fill_value=np.nan,
+            safe = safe,
+            force_reconnection=force_reconnection,
+            with_gpu_mirror=False,
+            with_torch_view=True)
 
 class RLAlgorithmDebData(SharedTWrapper):
                  

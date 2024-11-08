@@ -1,6 +1,6 @@
 from lrhc_control.agents.sactor_critic.sac import SACAgent
 
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
 import torch 
 import torch.optim as optim
 import torch.nn as nn
@@ -138,6 +138,7 @@ class SActorCriticAlgoBase(ABC):
             verbose: bool = False,
             drop_dir_name: str = None,
             eval: bool = False,
+            load_qf: bool = False,
             model_path: str = None,
             n_eval_timesteps: int = None,
             comment: str = "",
@@ -151,6 +152,9 @@ class SActorCriticAlgoBase(ABC):
         self._dump_checkpoints = dump_checkpoints
         
         self._eval = eval
+        self._load_qf=False
+        if self._eval:
+            self._load_qf=load_qf
         try:
             self._det_eval=custom_args["det_eval"]
         except:
@@ -190,6 +194,7 @@ class SActorCriticAlgoBase(ABC):
                     device=self._torch_device,
                     dtype=self._dtype,
                     is_eval=self._eval,
+                    load_qf=self._load_qf,
                     debug=self._debug,
                     layer_size_actor=layer_size_actor,
                     layer_size_critic=layer_size_critic)
@@ -1354,3 +1359,12 @@ class SActorCriticAlgoBase(ABC):
         # write some initializations
         self._shared_algo_data.write(dyn_info_name=["is_done"],
                 val=[0.0])
+        
+        self._qf_vals=QfVal(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._qf_vals.run()

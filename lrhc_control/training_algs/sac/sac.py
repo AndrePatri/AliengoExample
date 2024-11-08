@@ -36,8 +36,17 @@ class SAC(SActorCriticAlgoBase):
             self._eval:
             actions, _, mean = self._agent.get_action(x=obs)
             actions = actions.detach()
+            
             if (self._eval and self._det_eval): # use mean instead of stochastic policy
                 actions[:, :] = mean.detach()
+
+            if self._load_qf:
+                qf1_v=self._agent.get_qf1_val(x=obs,a=actions)
+                qf2_v=self._agent.get_qf2_val(x=obs,a=actions)
+                qf_v=(qf1_v+qf2_v)/2 # use average
+                qf_vals=self._qf_vals.get_torch_mirror(gpu=False)
+                qf_vals[:, :]=qf_v.cpu()
+                self._qf_vals.synch_all(read=False,retry=False)
 
             if not self._eval and self._n_expl_envs>0 and \
                     (self._vec_transition_counter%self._noise_freq==0 or \

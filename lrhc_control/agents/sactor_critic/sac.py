@@ -22,6 +22,7 @@ class SACAgent(nn.Module):
             device:str="cuda",
             dtype=torch.float32,
             is_eval:bool=False,
+            load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
             layer_size_actor:int=256,
@@ -58,7 +59,8 @@ class SACAgent(nn.Module):
                     dtype=dtype,
                     layer_size=layer_size_critic)
 
-        if not is_eval: # just needed for training
+        if (not is_eval) or load_qf: # just needed for training or during eval
+            # for debug, if enabled
             self.qf1_target = CriticQ(obs_dim=obs_dim,
                         actions_dim=actions_dim,
                         device=device,

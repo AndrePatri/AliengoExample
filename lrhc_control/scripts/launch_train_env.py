@@ -38,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
     parser.add_argument('--eval',action='store_true', help='Whether to perform an evaluation run')
+    parser.add_argument('--load_qf',action='store_true', help='whether to load the q function during eval')
     parser.add_argument('--override_agent_refs',action='store_true', help='Whether to override automatically generated agent refs (useful for debug)')
     parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
     parser.add_argument('--n_eval_timesteps', type=int, help='Total number of timesteps to be evaluated', default=int(1e6))
@@ -155,6 +156,7 @@ if __name__ == "__main__":
         custom_args=custom_args,
         comment=args.comment,
         eval=args.eval,
+        load_qf=args.load_qf,
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,

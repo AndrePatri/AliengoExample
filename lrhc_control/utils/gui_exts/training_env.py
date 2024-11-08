@@ -15,7 +15,7 @@ from lrhc_control.utils.shared_data.training_env import TotRewards
 from lrhc_control.utils.shared_data.training_env import Terminations, SubTerminations
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
 from lrhc_control.utils.shared_data.training_env import EpisodesCounter
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
 
 import numpy as np
 
@@ -129,6 +129,12 @@ class TrainingEnvData(SharedDataWindow):
         self.shared_data_clients.append(AgentRefs(namespace=self.namespace,
                                 is_server=False,
                                 with_gpu_mirror=False,
+                                safe=False,
+                                verbose=True,
+                                vlevel=VLevel.V2))
+        
+        self.shared_data_clients.append(QfVal(namespace=self.namespace,
+                                is_server=False,
                                 safe=False,
                                 verbose=True,
                                 vlevel=VLevel.V2))
@@ -267,6 +273,17 @@ class TrainingEnvData(SharedDataWindow):
                                     legend_list=[""], 
                                     ylabel="[int]"))
         
+        self.rt_plotters.append(RtPlotWindow(data_dim=1,
+                n_data = n_envs,
+                update_data_dt=self.update_data_dt, 
+                update_plot_dt=self.update_plot_dt,
+                window_duration=self.window_duration, 
+                parent=None, 
+                base_name=f"Estimated Q value", 
+                window_buffer_factor=self.window_buffer_factor, 
+                legend_list=[""], 
+                ylabel="[float]"))
+        
         self.grid.addFrame(self.rt_plotters[0].base_frame, 0, 0)
         self.grid.addFrame(self.rt_plotters[1].base_frame, 0, 1)
         self.grid.addFrame(self.rt_plotters[2].base_frame, 1, 0)
@@ -278,6 +295,7 @@ class TrainingEnvData(SharedDataWindow):
         self.grid.addFrame(self.rt_plotters[8].base_frame, 4, 0)
         self.grid.addFrame(self.rt_plotters[9].base_frame, 4, 1)
         self.grid.addFrame(self.rt_plotters[10].base_frame, 5, 0)
+        self.grid.addFrame(self.rt_plotters[11].base_frame, 5, 1)
 
     def _finalize_grid(self):
                 
@@ -335,6 +353,8 @@ class TrainingEnvData(SharedDataWindow):
 
             self.shared_data_clients[11].rob_refs.root_state.synch_all(read=True, retry=True) # agent refs
 
+            self.shared_data_clients[12].synch_all(read=True, retry=True) # q fun
+
             # update plots
             self.rt_plotters[0].rt_plot_widget.update(env_data)
             self.rt_plotters[1].rt_plot_widget.update(algo_data)
@@ -347,3 +367,4 @@ class TrainingEnvData(SharedDataWindow):
             self.rt_plotters[8].rt_plot_widget.update(np.transpose(self.shared_data_clients[8].get_numpy_mirror()))
             self.rt_plotters[9].rt_plot_widget.update(np.transpose(self.shared_data_clients[9].get_numpy_mirror()))
             self.rt_plotters[10].rt_plot_widget.update(np.transpose(self.shared_data_clients[10].counter().get_numpy_mirror()))
+            self.rt_plotters[11].rt_plot_widget.update(np.transpose(self.shared_data_clients[12].get_numpy_mirror()))
