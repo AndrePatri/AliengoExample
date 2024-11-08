@@ -1,4 +1,4 @@
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
 from lrhc_control.agents.dummies.dummy import DummyAgent
 
 import torch 
@@ -102,6 +102,7 @@ class DummyTestAlgoBase(ABC):
             verbose: bool = False,
             drop_dir_name: str = None,
             eval: bool = True,
+            load_qf: bool = False,
             model_path: str = None,
             comment: str = "",
             dump_checkpoints: bool = False,
@@ -114,7 +115,9 @@ class DummyTestAlgoBase(ABC):
         self._verbose = verbose
 
         self._ns=ns # only used for shared mem stuff
-        
+            
+        self._load_qf=load_qf
+
         self._run_name = run_name
         from datetime import datetime
         self._time_id = datetime.now().strftime('d%Y_%m_%d_h%H_m%M_s%S')
@@ -702,6 +705,15 @@ class DummyTestAlgoBase(ABC):
         # write some initializations
         self._shared_algo_data.write(dyn_info_name=["is_done"],
                 val=[0.0])
+        
+        self._qf_vals=QfVal(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._qf_vals.run()
     
     def _switch_training_mode(self, 
                     train: bool = True):
