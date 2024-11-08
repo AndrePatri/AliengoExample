@@ -14,6 +14,8 @@ from lrhc_control.utils.episodic_data import EpisodicData
 from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 import math
 
+from lrhc_control.utils.math_utils import check_capsize
+
 class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def __init__(self,
@@ -101,7 +103,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # task tracking
         self._task_offset = 10.0
-        self._task_scale = 1.5 
+        self._task_scale = 10.0 
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
         self._task_err_weights[0, 0] = 1.0
@@ -325,6 +327,22 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._single_task_ref_per_episode:
             sub_truncations[:, 1:2] = self._task_rand_counter.time_limits_reached()
     
+    def _check_sub_terminations(self):
+        # default behaviour-> to be overriden by child
+        sub_terminations = self._sub_terminations.get_torch_mirror(gpu=self._use_gpu)
+        robot_q_meas = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
+        robot_q_pred = self._rhc_cmds.root_state.get(data_type="q",gpu=self._use_gpu)
+
+        # terminate when either the real robot or the prediction from the MPC are capsized
+        check_capsize(quat=robot_q_meas,max_angle=self._max_pitch_angle,
+            output_t=self._is_capsized)
+        check_capsize(quat=robot_q_pred,max_angle=self._max_pitch_angle,
+            output_t=self._is_rhc_capsized)
+        
+        sub_terminations[:, 0:1] = self._rhc_status.fails.get_torch_mirror(gpu=self._use_gpu)
+        sub_terminations[:, 1:2] = self._is_capsized
+        sub_terminations[:, 2:3] = self._is_rhc_capsized
+
     def _custom_reset(self): # reset if truncated
         if self._single_task_ref_per_episode:
             return None
@@ -566,7 +584,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_error = task_error_fun(task_meas=self._step_avrg_root_twist_base_loc, 
             task_ref=agent_task_ref_base_loc,
             weights=self._task_err_weights)
-        sub_rewards[:, 0:1] = self._task_offset*torch.exp(-self._task_scale*task_error)
+        sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
 
         if self._use_rhc_avrg_vel_pred:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 
@@ -757,4 +775,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._single_task_ref_per_episode:
             sub_trunc_names.append("task_ref_rand")
         return sub_trunc_names
+
+    def _get_sub_term_names(self):
+        # to be overridden by child class
+        sub_term_names = []
+        sub_term_names.append("rhc_failure")
+        sub_term_names.append("robot_capsize")
+        sub_term_names.append("rhc_capsize")
 
