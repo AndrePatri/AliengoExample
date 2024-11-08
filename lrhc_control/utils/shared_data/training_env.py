@@ -386,6 +386,9 @@ class Observations(NamedSharedTWrapper):
                     with_gpu_mirror=with_gpu_mirror,
                     fill_value=fill_value)
 
+    def get_obs_names(self):
+        return self._col_names
+    
 class NextObservations(NamedSharedTWrapper):
 
     def __init__(self,
@@ -419,7 +422,10 @@ class NextObservations(NamedSharedTWrapper):
                     force_reconnection=force_reconnection,
                     with_gpu_mirror=with_gpu_mirror,
                     fill_value=fill_value)
-
+    
+    def get_obs_names(self):
+        return self._col_names
+    
 class Actions(NamedSharedTWrapper):
 
     def __init__(self,
