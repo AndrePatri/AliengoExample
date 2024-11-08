@@ -170,14 +170,8 @@ class SActorCriticAlgoBase(ABC):
         self._init_algo_shared_data(static_params=self._hyperparameters) # can only handle dicts with
         # numeric values
 
-        data_names={}
-        data_names["obs_names"]=self._env.obs_names()
-        data_names["action_names"]=self._env.action_names()
-        data_names["sub_reward_names"]=self._env.sub_rew_names()
-        
         self._hyperparameters["unique_run_id"]=self._unique_id
         self._hyperparameters.update(custom_args)
-        self._hyperparameters.update(data_names)
 
         self._torch_device = torch.device("cuda" if torch.cuda.is_available() and self._use_gpu else "cpu")
 
@@ -214,20 +208,25 @@ class SActorCriticAlgoBase(ABC):
                     f"When eval is True, a model_path should be provided!!",
                     LogType.EXCEP,
                     throw_when_excep = True)
-            elif n_eval_timesteps is None:
+            if  n_eval_timesteps is None:
                 Journal.log(self.__class__.__name__,
                     "setup",
                     f"When eval is True, n_eval_timesteps should be provided!!",
                     LogType.EXCEP,
                     throw_when_excep = True)
-            else: # everything is ok 
-                self._model_path = model_path
-                # overwrite init params
-                self._init_params(tot_tsteps=n_eval_timesteps,
-                    run_name=self._run_name)
-                
+            # everything is ok 
+            self._model_path = model_path
             self._load_model(self._model_path)
+
+            # overwrite init params
+            self._init_params(tot_tsteps=n_eval_timesteps,
+                run_name=self._run_name)
         
+        # adding additional db info
+        self._hyperparameters["obs_names"]=self._env.obs_names()
+        self._hyperparameters["action_names"]=self._env.action_names()
+        self._hyperparameters["sub_reward_names"]=self._env.sub_rew_names()
+
         # reset environment
         self._env.reset()
 
@@ -1096,6 +1095,7 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["n_envs"] = self._num_envs
         self._hyperparameters["obs_dim"] = self._obs_dim
         self._hyperparameters["actions_dim"] = self._actions_dim
+        
         # self._hyperparameters["critic_size"] = self._critic_size
         # self._hyperparameters["actor_size"] = self._actor_size
         self._hyperparameters["seed"] = self._seed

@@ -1317,6 +1317,17 @@ class LRhcTrainingEnvBase(ABC):
 
             self._update_jnt_blacklist()
 
+            updated_obs_names=self._get_obs_names() # get updated obs names (should use get_observed_joints
+            # internally, so that jnt names are updated)
+
+            # also update jnt obs names on shared memory
+            names_old=self._obs.get_obs_names()
+            names_old_next=self._next_obs.get_obs_names()
+            names_old[:]=updated_obs_names
+            names_old_next[:]=updated_obs_names
+            self._obs.update_names()
+            self._next_obs.update_names()
+
     def _check_finite(self, 
                 tensor: torch.Tensor,
                 name: str, 
