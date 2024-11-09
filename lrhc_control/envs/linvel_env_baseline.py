@@ -103,7 +103,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # task tracking
         self._task_offset = 10.0
-        self._task_scale = 10.0 
+        self._task_scale = 1.5
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
         self._task_err_weights[0, 0] = 1.0
@@ -584,7 +584,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_error = task_error_fun(task_meas=self._step_avrg_root_twist_base_loc, 
             task_ref=agent_task_ref_base_loc,
             weights=self._task_err_weights)
-        sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
+        sub_rewards[:, 0:1] =  self._task_offset*torch.exp(-self._task_scale*task_error)
 
         if self._use_rhc_avrg_vel_pred:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 

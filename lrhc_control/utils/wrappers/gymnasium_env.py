@@ -507,8 +507,10 @@ if __name__ == "__main__":
     parser.add_argument('--sac',action='store_true', help='')
     parser.add_argument('--use_cer',action='store_true', help='use combined experience replay')
     
-    parser.add_argument('--actor_size', type=int, help='seed', default=64)
-    parser.add_argument('--critic_size', type=int, help='seed', default=64)
+    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
+    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
+    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=2)
+    parser.add_argument('--critic_n_hlayers', type=int, help='Critic network size', default=4)
 
     parser.add_argument('--env_type', type=str, help='Name of env to be created',default="HalfCheetah-v5")
 

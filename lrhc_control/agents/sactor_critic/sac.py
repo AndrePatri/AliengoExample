@@ -25,16 +25,16 @@ class SACAgent(nn.Module):
             load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
-            layer_size_actor:int=256,
-            layer_size_critic:int=256):
+            layer_width_actor:int=256,
+            n_hidden_layers_actor:int=2,
+            layer_width_critic:int=512,
+            n_hidden_layers_critic:int=4):
 
         super().__init__()
 
         self._normalize_obs = norm_obs
 
         self._debug = debug
-        layer_size_actor=layer_size_actor
-        layer_size_critic=layer_size_critic
 
         self.actor = None
         self.qf1 = None
@@ -51,13 +51,15 @@ class SACAgent(nn.Module):
                     actions_lb=actions_lb,
                     device=device,
                     dtype=dtype,
-                    layer_size=layer_size_actor
+                    layer_width=layer_width_actor,
+                    n_hidden_layers=n_hidden_layers_actor
                     )
         self.qf1 = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_size=layer_size_critic)
+                    layer_width=layer_width_critic,
+                    n_hidden_layers=n_hidden_layers_critic)
 
         if (not is_eval) or load_qf: # just needed for training or during eval
             # for debug, if enabled
@@ -65,17 +67,20 @@ class SACAgent(nn.Module):
                         actions_dim=actions_dim,
                         device=device,
                         dtype=dtype,
-                        layer_size=layer_size_critic)
+                        layer_width=layer_width_critic,
+                        n_hidden_layers=n_hidden_layers_critic)
             self.qf2 = CriticQ(obs_dim=obs_dim,
                         actions_dim=actions_dim,
                         device=device,
                         dtype=dtype,
-                        layer_size=layer_size_critic)
+                        layer_width=layer_width_critic,
+                        n_hidden_layers=n_hidden_layers_critic)
             self.qf2_target = CriticQ(obs_dim=obs_dim,
                         actions_dim=actions_dim,
                         device=device,
                         dtype=dtype,
-                        layer_size=layer_size_critic)
+                        layer_width=layer_width_critic,
+                        n_hidden_layers=n_hidden_layers_critic)
         
             self.qf1_target.load_state_dict(self.qf1.state_dict())
             self.qf2_target.load_state_dict(self.qf2.state_dict())
@@ -132,14 +137,15 @@ class SACAgent(nn.Module):
                 "load_state_dict",
                 f"These parameters present in the provided state dictionary are not needed: {str(unexpected)}\n",
                 LogType.WARN)
-            
+
 class CriticQ(nn.Module):
     def __init__(self,
-            obs_dim: int, 
-            actions_dim: int,
-            device:str="cuda",
-            dtype=torch.float32,
-            layer_size:int=256):
+        obs_dim: int, 
+        actions_dim: int,
+        device: str = "cuda",
+        dtype = torch.float32,
+        layer_width: int = 512,
+        n_hidden_layers: int = 4):
 
         super().__init__()
 
@@ -148,50 +154,71 @@ class CriticQ(nn.Module):
 
         self._obs_dim = obs_dim
         self._actions_dim = actions_dim
-        self._q_net_dim = self._obs_dim+self._actions_dim
+        self._q_net_dim = self._obs_dim + self._actions_dim
 
-        size_internal_layer=layer_size
-    
-        self._q_net = nn.Sequential(
-            self._layer_init(layer=nn.Linear(self._q_net_dim, size_internal_layer), device=self._torch_device,dtype=self._torch_dtype),
-            nn.ReLU(),
-            self._layer_init(layer=nn.Linear(size_internal_layer, size_internal_layer), device=self._torch_device,dtype=self._torch_dtype),
-            nn.ReLU(),
-            self._layer_init(layer=nn.Linear(size_internal_layer, 1), device=self._torch_device,dtype=self._torch_dtype),
+        # Input layer
+        layers = [self._layer_init(
+            layer=nn.Linear(self._q_net_dim, layer_width),
+            device=self._torch_device,
+            dtype=self._torch_dtype
+        ), nn.ReLU()]
+
+        # Hidden layers
+        for _ in range(n_hidden_layers - 1):
+            layers.extend([
+                self._layer_init(
+                    layer=nn.Linear(layer_width, layer_width),
+                    device=self._torch_device,
+                    dtype=self._torch_dtype
+                ),
+                nn.ReLU()
+            ])
+
+        # Output layer
+        layers.append(
+            self._layer_init(
+                layer=nn.Linear(layer_width, 1),
+                device=self._torch_device,
+                dtype=self._torch_dtype
+            )
         )
-        self._q_net.type(self._torch_dtype) # ensuring compatible dtypes
+
+        # Creating the full sequential network
+        self._q_net = nn.Sequential(*layers)
+        self._q_net.to(self._torch_device).type(self._torch_dtype)
 
     def get_n_params(self):
         return sum(p.numel() for p in self.parameters())
 
     def _layer_init(self, 
-            layer, 
-            std=torch.sqrt(torch.tensor(2)), 
-            bias_const=0.0,
-            device: str = "cuda",
-            dtype = torch.float32):
-        # device
-        layer.to(device)
-        # dtype
-        layer.weight.data.type(dtype)
-        layer.bias.data.type(dtype)
+                    layer, 
+                    std=torch.sqrt(torch.tensor(2.0)), 
+                    bias_const=0.0,
+                    device: str = "cuda",
+                    dtype = torch.float32):
+        # Move to device and set dtype
+        layer.to(device).type(dtype)
+        
+        # Initialize weights and biases
         torch.nn.init.orthogonal_(layer.weight, std)
         torch.nn.init.constant_(layer.bias, bias_const)
         return layer
-    
+
     def forward(self, x, a):
         x = torch.cat([x, a], dim=1)
         return self._q_net(x)
 
 class Actor(nn.Module):
     def __init__(self,
-            obs_dim: int, 
-            actions_dim: int,
-            actions_ub: List[float] = None,
-            actions_lb: List[float] = None,
-            device:str="cuda",
-            dtype=torch.float32,
-            layer_size:int=256):
+                 obs_dim: int, 
+                 actions_dim: int,
+                 actions_ub: List[float] = None,
+                 actions_lb: List[float] = None,
+                 device: str = "cuda",
+                 dtype = torch.float32,
+                 layer_width: int = 256,
+                 n_hidden_layers: int = 2):
+        
         super().__init__()
 
         self._torch_device = device
@@ -200,7 +227,7 @@ class Actor(nn.Module):
         self._obs_dim = obs_dim
         self._actions_dim = actions_dim
         
-        # action scale and bias
+        # Action scale and bias
         if actions_ub is None:
             actions_ub = [1] * actions_dim
         if actions_lb is None:
@@ -217,6 +244,7 @@ class Actor(nn.Module):
                 f"Actions lb list length should be equal to {actions_dim}, but got {len(actions_lb)}",
                 LogType.EXCEP,
                 throw_when_excep = True)
+
         self._actions_ub = torch.tensor(actions_ub, dtype=self._torch_dtype, 
                                 device=self._torch_device)
         self._actions_lb = torch.tensor(actions_lb, dtype=self._torch_dtype,
@@ -235,45 +263,42 @@ class Actor(nn.Module):
                             device=self._torch_device)
         actions_bias[:] = (self._actions_ub+self._actions_lb)/2.0
         self.register_buffer(
-            "action_bias", actions_bias
-        )
+            "action_bias", actions_bias)
 
-        size_internal_layer = layer_size
+        # Network configuration
         self.LOG_STD_MAX = 2
         self.LOG_STD_MIN = -5
 
-        self._fc12 = nn.Sequential(
-            self._layer_init(layer=nn.Linear(self._obs_dim, size_internal_layer), device=self._torch_device,dtype=self._torch_dtype),
-            nn.ReLU(),
-            self._layer_init(layer=nn.Linear(size_internal_layer, size_internal_layer), device=self._torch_device,dtype=self._torch_dtype),
-            nn.ReLU()
-        )
-        self.fc_mean = self._layer_init(layer=nn.Linear(size_internal_layer, self._actions_dim), device=self._torch_device,dtype=self._torch_dtype)
-        self.fc_logstd = self._layer_init(layer=nn.Linear(size_internal_layer, self._actions_dim), device=self._torch_device,dtype=self._torch_dtype)
+        # Input layer followed by hidden layers
+        layers = [self._layer_init(nn.Linear(self._obs_dim, layer_width), device=self._torch_device, dtype=self._torch_dtype), nn.ReLU()]
+        for _ in range(n_hidden_layers - 1):
+            layers.extend([
+                self._layer_init(nn.Linear(layer_width, layer_width), device=self._torch_device, dtype=self._torch_dtype),
+                nn.ReLU()
+            ])
+        
+        # Sequential layers for the feature extractor
+        self._fc12 = nn.Sequential(*layers)
 
-        # ensuring correct dtypes
-        self._fc12.type(self._torch_dtype)
-        self.fc_mean.type(self._torch_dtype)
-        self.fc_logstd.type(self._torch_dtype)
+        # Mean and log_std layers
+        self.fc_mean = self._layer_init(nn.Linear(layer_width, self._actions_dim), device=self._torch_device, dtype=self._torch_dtype)
+        self.fc_logstd = self._layer_init(nn.Linear(layer_width, self._actions_dim), device=self._torch_device, dtype=self._torch_dtype)
+
+        # Move all components to the specified device and dtype
+        self._fc12.to(device=self._torch_device, dtype=self._torch_dtype)
+        self.fc_mean.to(device=self._torch_device, dtype=self._torch_dtype)
+        self.fc_logstd.to(device=self._torch_device, dtype=self._torch_dtype)
 
     def get_n_params(self):
         return sum(p.numel() for p in self.parameters())
     
-    def get_impl_path(self):
-        import os 
-        return os.path.abspath(__file__)
-    
     def _layer_init(self, 
             layer, 
-            std=torch.sqrt(torch.tensor(2)), 
-            bias_const=0.0,
-            device: str = "cuda",
+            std=torch.sqrt(torch.tensor(2.0)), 
+            bias_const=0.0, 
+            device: str = "cuda", 
             dtype = torch.float32):
-        # device
-        layer.to(device)
-        # dtype
-        layer.weight.data.type(dtype)
-        layer.bias.data.type(dtype)
+        layer.to(device=device, dtype=dtype)
         torch.nn.init.orthogonal_(layer.weight, std)
         torch.nn.init.constant_(layer.bias, bias_const)
         return layer
@@ -283,18 +308,17 @@ class Actor(nn.Module):
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
-        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX -self. LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
+        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX - self.LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
         return mean, log_std
 
     def get_action(self, x):
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
-        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+        x_t = normal.rsample()  # Reparameterization trick
         y_t = torch.tanh(x_t)
         action = y_t * self.action_scale + self.action_bias
         log_prob = normal.log_prob(x_t)
-        # Enforcing Action Bound
         log_prob = log_prob - torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias

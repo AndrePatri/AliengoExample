@@ -55,8 +55,10 @@ if __name__ == "__main__":
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
-    parser.add_argument('--actor_size', type=int, help='Actor network size', default=256)
-    parser.add_argument('--critic_size', type=int, help='Critic network size', default=256)
+    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
+    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
+    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=2)
+    parser.add_argument('--critic_n_hlayers', type=int, help='Critic network size', default=4)
 
     parser.add_argument('--env_fname', type=str, default="linvel_env_baseline", help='Training env file name (without extension)')
     parser.add_argument('--env_classname', type=str, default="LinVelTrackBaseline", help='Training env class name')

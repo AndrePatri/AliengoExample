@@ -180,11 +180,15 @@ class SActorCriticAlgoBase(ABC):
         self._torch_device = torch.device("cuda" if torch.cuda.is_available() and self._use_gpu else "cpu")
 
         try:
-            layer_size_actor=self._hyperparameters["layer_size_actor"]
-            layer_size_critic=self._hyperparameters["layer_size_critic"]
+            layer_width_actor=self._hyperparameters["actor_lwidth"]
+            layer_width_critic=self._hyperparameters["critic_lwidth"]
+            n_hidden_layers_actor=self._hyperparameters["actor_n_hlayers"]
+            n_hidden_layers_critic=self._hyperparameters["critic_n_hlayers"]
         except:
-            layer_size_actor=256
-            layer_size_critic=256
+            layer_width_actor=256
+            layer_width_critic=512
+            n_hidden_layers_actor=2
+            n_hidden_layers_critic=4
             pass
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     actions_dim=self._env.actions_dim(),
@@ -196,8 +200,11 @@ class SActorCriticAlgoBase(ABC):
                     is_eval=self._eval,
                     load_qf=self._load_qf,
                     debug=self._debug,
-                    layer_size_actor=layer_size_actor,
-                    layer_size_critic=layer_size_critic)
+                    layer_width_actor=layer_width_actor,
+                    layer_width_critic=layer_width_critic,
+                    n_hidden_layers_actor=n_hidden_layers_actor,
+                    n_hidden_layers_critic=n_hidden_layers_critic)
+
         if self._agent.running_norm is not None:
             # some db data for the agent
             self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
@@ -1101,8 +1108,6 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["obs_dim"] = self._obs_dim
         self._hyperparameters["actions_dim"] = self._actions_dim
         
-        # self._hyperparameters["critic_size"] = self._critic_size
-        # self._hyperparameters["actor_size"] = self._actor_size
         self._hyperparameters["seed"] = self._seed
         self._hyperparameters["using_gpu"] = self._use_gpu
         self._hyperparameters["total_timesteps_vec"] = self._total_timesteps_vec
