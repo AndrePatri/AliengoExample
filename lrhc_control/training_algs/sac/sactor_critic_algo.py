@@ -1024,11 +1024,11 @@ class SActorCriticAlgoBase(ABC):
         # main algo settings
 
         self._collection_freq=1
-        self._update_freq=2
+        self._update_freq=1
 
         self._replay_bf_full = False
 
-        self._replay_buffer_size_nominal = int(10e6) # 32768
+        self._replay_buffer_size_nominal = int(2e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
@@ -1107,7 +1107,7 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["n_envs"] = self._num_envs
         self._hyperparameters["obs_dim"] = self._obs_dim
         self._hyperparameters["actions_dim"] = self._actions_dim
-        
+
         self._hyperparameters["seed"] = self._seed
         self._hyperparameters["using_gpu"] = self._use_gpu
         self._hyperparameters["total_timesteps_vec"] = self._total_timesteps_vec
