@@ -289,7 +289,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             2*torch.pi,
             30.0,
             200.0,
-            self._n_nodes_rhc]
+            self._n_nodes_rhc.mean().item()]
         obs_lbs=[-1.0,
             -5*self.max_ref,
             -5*self.max_ref,
