@@ -145,7 +145,7 @@ class SACAgent(nn.Module):
                                     debug=self._debug)
             self.running_norm.type(dtype) # ensuring correct dtype for whole module
 
-        msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}] \
+        msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}] 
         and critic [{layer_width_critic}, {n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
         Journal.log(self.__class__.__name__,
             "__init__",
