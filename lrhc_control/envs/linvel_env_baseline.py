@@ -39,7 +39,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
         n_preinit_steps = 1 # one steps of the controllers to properly initialize everything
-        action_repeat = 2 # frame skipping (different agent action every action_repeat
+        action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
 
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
@@ -53,7 +53,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_vel_err_sig_smoother=False # whether to smooth vel error signal
         self._vel_err_smoother=None
         self._use_prob_based_stepping=False
-        self._add_flight_info=False
+        self._add_flight_info=True
         self._use_pos_control=False
         self._add_rhc_cmds_to_obs=True
         # temporarily creating robot state client to get some data
@@ -94,7 +94,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._add_prev_actions_stats_to_obs:
             obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
         if self._add_flight_info:
-            obs_dim+=2*self._n_contacts 
+            obs_dim+=self._n_contacts 
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
 
@@ -277,6 +277,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             "rhc_cmd_q",
             "rhc_cmd_v",
             "rhc_cmd_eff",
+            "flight_pos"
             ]
         obs_ubs=[1.0,
             5*self.max_ref,
@@ -287,7 +288,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             5.0,
             2*torch.pi,
             30.0,
-            200.0]
+            200.0,
+            self._n_nodes_rhc]
         obs_lbs=[-1.0,
             -5*self.max_ref,
             -5*self.max_ref,
@@ -297,7 +299,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             0.0,
             -2*torch.pi,
             -30.0,
-            -200.0]
+            -200.0,
+            0.0]
         obs_bounds = {name: (lb, ub) for name, lb, ub in zip(obs_patterns, obs_lbs, obs_ubs)}
         
         for i in range(len(obs_names)):
@@ -547,8 +550,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs[:, next_idx:(next_idx+6)] = self._root_twist_avrg_rhc_base_loc
             next_idx+=6
         if self._add_flight_info:
-            flight_info_size=2*len(self._contact_names)
-            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now
+            flight_info_size=len(self._contact_names)
+            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now[:, 0:flight_info_size]
             next_idx+=flight_info_size
         if self._add_rhc_cmds_to_obs:
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
@@ -760,10 +763,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_names[next_idx+5] = "omega_z_avrg_rhc"
             next_idx+=6
         if self._add_flight_info:
-            flight_info_size=2*len(self._contact_names)
+            flight_info_size=len(self._contact_names)
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
-                obs_names[next_idx+i+len(self._contact_names)] = "flight_length_"+ contact
             next_idx+=flight_info_size
         if self._add_rhc_cmds_to_obs:
             for i in range(self._n_jnts): # jnt obs (pos):
