@@ -34,6 +34,7 @@ if __name__ == "__main__":
     # Replacing argparse.BooleanOptionalAction with 'store_true' and 'store_false' for Python 3.8 compatibility
     parser.add_argument('--dump_checkpoints',action='store_true', help='Whether to dump model checkpoints during training')
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
+    parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
     parser.add_argument('--use_cer',action='store_true', help='Whether to use combined experience replay (not tested)')
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
@@ -162,7 +163,8 @@ if __name__ == "__main__":
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,
-        norm_obs=args.obs_norm)
+        norm_obs=args.obs_norm,
+        rescale_obs=args.obs_rescale)
 
     full_drop_dir=algo.drop_dir()
     shared_drop_dir = StringTensorServer(length=1, 

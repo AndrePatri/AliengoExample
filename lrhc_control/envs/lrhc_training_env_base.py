@@ -166,6 +166,8 @@ class LRhcTrainingEnvBase(ABC):
         self._rand_safety_reset_counter = None
 
         self._obs = None
+        self._obs_ub = None
+        self._obs_lb = None
         self._next_obs = None
         self._actions = None
         self._actions_ub = None
@@ -184,7 +186,7 @@ class LRhcTrainingEnvBase(ABC):
 
         self._attach_to_shared_mem()
 
-        self._init_obs()
+        self._init_obs(obs_dim)
         self._init_actions(actions_dim)
         self._init_rewards()
         self._init_terminations()
@@ -747,11 +749,20 @@ class LRhcTrainingEnvBase(ABC):
     def get_observed_joints(self):
         return self._observed_jnt_names
     
-    def _init_obs(self):
+    def _init_obs(self, obs_dim: int):
         
-        obs_threshold_default = 100.0
+        device = "cuda" if self._use_gpu else "cpu"
+        
+        obs_threshold_default = 10.0
         self._obs_threshold_lb = -obs_threshold_default # used for clipping observations
         self._obs_threshold_ub = obs_threshold_default
+        
+        self._obs_ub = torch.full((1, obs_dim), dtype=self._dtype, device=device,
+                                        fill_value=1.0) 
+        self._obs_lb = torch.full((1, obs_dim), dtype=self._dtype, device=device,
+                                        fill_value=-1.0)
+        self._obs_scale = (self._obs_ub - self._obs_lb)/2.0
+        self._obs_offset = (self._obs_ub + self._obs_lb)/2.0
 
         if not self._obs_dim==len(self._get_obs_names()):
             error=f"obs dim {self._obs_dim} does not match obs names length {len(self._get_obs_names())}!!"
@@ -1295,10 +1306,26 @@ class LRhcTrainingEnvBase(ABC):
         return self._actions_ub
     
     def get_actions_scale(self):
+        self._actions_scale = (self._actions_ub - self._actions_lb)/2.0
         return self._actions_scale
     
     def get_actions_offset(self):
+        self._actions_offset = (self._actions_ub + self._actions_lb)/2.0
         return self._actions_offset
+    
+    def get_obs_lb(self):
+        return self._obs_lb
+
+    def get_obs_ub(self):
+        return self._obs_ub
+    
+    def get_obs_scale(self):
+        self._obs_scale = (self._obs_ub - self._obs_lb)/2.0
+        return self._obs_scale
+    
+    def get_obs_offset(self):
+        self._obs_offset = (self._obs_ub + self._obs_lb)/2.0
+        return self._obs_offset
     
     def set_jnts_remapping(self, 
         remapping: List = None):

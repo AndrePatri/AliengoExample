@@ -143,7 +143,8 @@ class SActorCriticAlgoBase(ABC):
             n_eval_timesteps: int = None,
             comment: str = "",
             dump_checkpoints: bool = False,
-            norm_obs: bool = True):
+            norm_obs: bool = False,
+            rescale_obs: bool = True):
 
         self._verbose = verbose
 
@@ -191,9 +192,12 @@ class SActorCriticAlgoBase(ABC):
             n_hidden_layers_critic=4
             pass
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
+                    obs_ub=self._env.get_obs_ub().flatten().tolist(),
+                    obs_lb=self._env.get_obs_lb().flatten().tolist(),
                     actions_dim=self._env.actions_dim(),
                     actions_ub=self._env.get_actions_ub().flatten().tolist(),
                     actions_lb=self._env.get_actions_lb().flatten().tolist(),
+                    rescale_obs=rescale_obs,
                     norm_obs=norm_obs,
                     device=self._torch_device,
                     dtype=self._dtype,
@@ -1031,7 +1035,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_nominal = int(2e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 8192
+        self._batch_size = 16384
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs

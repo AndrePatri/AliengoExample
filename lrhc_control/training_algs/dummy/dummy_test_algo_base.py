@@ -106,7 +106,8 @@ class DummyTestAlgoBase(ABC):
             model_path: str = None,
             comment: str = "",
             dump_checkpoints: bool = False,
-            norm_obs: bool = True):
+            norm_obs: bool = False,
+            rescale_obs: bool = True):
 
         self._init_params(tot_tsteps=n_eval_timesteps)
         
