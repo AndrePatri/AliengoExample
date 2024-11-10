@@ -753,7 +753,7 @@ class LRhcTrainingEnvBase(ABC):
         
         device = "cuda" if self._use_gpu else "cpu"
         
-        obs_threshold_default = 10.0
+        obs_threshold_default = 1e3
         self._obs_threshold_lb = -obs_threshold_default # used for clipping observations
         self._obs_threshold_ub = obs_threshold_default
         

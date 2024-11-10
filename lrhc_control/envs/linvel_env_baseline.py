@@ -244,8 +244,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._reward_thresh_ub[:, :]=1e6
 
         # obs bounds
-        self._obs_threshold_lb = -10 # used for clipping observations
-        self._obs_threshold_ub = 10
+        self._obs_threshold_lb = -1e3 # used for clipping observations
+        self._obs_threshold_ub = 1e3
 
         # actions bounds
         v_cmd_max = 3*self.max_ref
