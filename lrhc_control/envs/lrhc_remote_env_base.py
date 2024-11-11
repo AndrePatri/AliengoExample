@@ -229,6 +229,8 @@ class LRhcEnvBase(ABC):
         self._root_p_prev = {} # used for num differentiation
         self._root_q_prev = {} # used for num differentiation
         self._jnts_q_prev = {} # used for num differentiation
+        self._root_v_prev = {} # used for num differentiation
+        self._root_omega_prev = {} # used for num differentiation
         self._root_p_default = {} 
         self._root_q_default = {}
         self._jnts_q_default = {}
@@ -242,6 +244,11 @@ class LRhcEnvBase(ABC):
         self._root_omega = {}
         self._root_omega_base_loc = {}
         self._root_omega_default = {}
+        self._root_a = {}
+        self._root_a_base_loc = {}
+        self._root_alpha = {}
+        self._root_alpha_base_loc = {}
+
         self._jnts_v = {}
         self._jnts_v_default = {}
         self._jnts_eff = {}
@@ -484,16 +491,25 @@ class LRhcEnvBase(ABC):
         control_cluster = self.cluster_servers[robot_name]
         # floating base
         rhc_state = control_cluster.get_state()
+        # configuration
         rhc_state.root_state.set(data=self.root_p_rel(robot_name=robot_name, env_idxs=env_indxs), 
                 data_type="p", robot_idxs = env_indxs, gpu=self._use_gpu)
         rhc_state.root_state.set(data=self.root_q(robot_name=robot_name, env_idxs=env_indxs), 
                 data_type="q", robot_idxs = env_indxs, gpu=self._use_gpu)
         
+        # twist
         rhc_state.root_state.set(data=self.root_v(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="v", robot_idxs = env_indxs, gpu=self._use_gpu)
         rhc_state.root_state.set(data=self.root_omega(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="omega", robot_idxs = env_indxs, gpu=self._use_gpu)
         
+        # angular accc.
+        rhc_state.root_state.set(data=self.root_a(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+                data_type="a", robot_idxs = env_indxs, gpu=self._use_gpu)
+        rhc_state.root_state.set(data=self.root_alpha(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+                data_type="alpha", robot_idxs = env_indxs, gpu=self._use_gpu)
+        
+        # gravity vec
         rhc_state.root_state.set(data=self.gravity(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="gn", robot_idxs = env_indxs, gpu=self._use_gpu)
         
@@ -504,6 +520,7 @@ class LRhcEnvBase(ABC):
             data_type="v", robot_idxs = env_indxs, gpu=self._use_gpu) 
         rhc_state.jnts_state.set(data=self.jnts_eff(robot_name=robot_name, env_idxs=env_indxs), 
             data_type="eff", robot_idxs = env_indxs, gpu=self._use_gpu) 
+        
         # Updating contact state for selected contact links
         self._update_contact_state(robot_name=robot_name, env_indxs=env_indxs)
     
@@ -787,6 +804,32 @@ class LRhcEnvBase(ABC):
         else:
             return root_omega[env_idxs, :]
     
+    def root_a(self,
+            robot_name: str,
+            env_idxs: torch.Tensor = None,
+            base_loc: bool = True):
+
+        root_a=self._root_a[robot_name]
+        if base_loc:
+            root_a=self._root_a_base_loc[robot_name]
+        if env_idxs is None:
+            return root_a
+        else:
+            return root_a[env_idxs, :]
+    
+    def root_alpha(self,
+            robot_name: str,
+            env_idxs: torch.Tensor = None,
+            base_loc: bool = True):
+
+        root_alpha=self._root_alpha[robot_name]
+        if base_loc:
+            root_alpha=self._root_alpha_base_loc[robot_name]
+        if env_idxs is None:
+            return root_alpha
+        else:
+            return root_alpha[env_idxs, :]
+        
     def gravity(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,

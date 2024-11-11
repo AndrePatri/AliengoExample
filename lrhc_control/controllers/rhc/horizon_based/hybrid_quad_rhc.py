@@ -495,7 +495,17 @@ class HybridQuadRhc(RHController):
         #     twist_base_local[:, 3:6] = r_base_rhc @ twist_base_local[0, 3:6]
         return twist_base_local
 
-    def _get_jnt_q_from_sol(self, node_idx=1, 
+    def _get_root_a_from_sol(self, node_idx=0):
+        # provided in world frame
+        a_base_local=self._get_a_from_sol()[0:6, node_idx].reshape(1, 6)
+        # if world_aligned:
+        #     q_root_rhc = self._get_root_full_q_from_sol(node_idx=node_idx)[:, 0:4]
+        #     r_base_rhc=Rotation.from_quat(q_root_rhc.flatten()).as_matrix()
+        #     a_base_local[:, 0:3] = r_base_rhc @ a_base_local[0, 0:3]
+        #     a_base_local[:, 3:6] = r_base_rhc @ v[0, 3:6]
+        return a_base_local
+    
+    def _get_jnt_q_from_sol(self, node_idx=0, 
             reduce: bool = True,
             clamp: bool = True):
         
@@ -524,7 +534,7 @@ class HybridQuadRhc(RHController):
         return self._get_a_from_sol()[6:, node_idx].reshape(1,
                     self._nv_jnts)
 
-    def _get_jnt_eff_from_sol(self, node_idx=1):
+    def _get_jnt_eff_from_sol(self, node_idx=0):
         
         efforts_on_node = self._ti.eval_efforts_on_node(node_idx=node_idx)
         
@@ -558,12 +568,19 @@ class HybridQuadRhc(RHController):
                         close_all: bool=False):
 
         # overrides parent
+
+        # jnts
         q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
         v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
+        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(1, -1)
+
+        # root
         q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
         p = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(1, -1)
         v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
+        a_root = self.robot_state.root_state.get(data_type="a", robot_idxs=self.controller_index).reshape(1, -1)
         omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(1, -1)
+        alpha_root = self.robot_state.root_state.get(data_type="alpha", robot_idxs=self.controller_index).reshape(1, -1)
 
         if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
             # copy rev joints
@@ -574,9 +591,9 @@ class HybridQuadRhc(RHController):
         # meas twist is assumed to be provided in BASE link!!!
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
-            # v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
+            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
             # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
-            v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
+            # v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
         
         if x_opt is not None:
@@ -591,8 +608,11 @@ class HybridQuadRhc(RHController):
             if diff_quat[3] < 0:
                 q_root[:, :] = -q_root[:, :]
         
-        return np.concatenate((p, q_root, q_jnts, v_root, omega, v_jnts),
+        qv_state=np.concatenate((p, q_root, q_jnts, v_root, omega, v_jnts),
                 axis=1).reshape(-1,1)
+        a_state=np.concatenate((a_root, alpha_root, a_jnts),
+                axis=1).reshape(-1,1)
+        return (qv_state, a_state)
     
     def _set_ig(self):
 
@@ -638,22 +658,18 @@ class HybridQuadRhc(RHController):
         xig, _ = self._set_ig()
 
         # sets state on node 0 from measurements
-        robot_state = self._assemble_meas_robot_state(x_opt=self._ti.solution['x_opt'],
+        qv_robot_state, a_robot_state= self._assemble_meas_robot_state(x_opt=self._ti.solution['x_opt'],
                                         close_all=self._close_loop_all)
-        
-        meas_state_p=None
-        try:
-            meas_state_p=self._prb.getParameters("measured_state")
-        except:
-            pass
-        if meas_state_p is not None: # perform a soft initial state update
-            meas_state_p.assign(val=robot_state)
-            self._prb.setInitialStateSoft(x0_meas=robot_state, 
-                x0_internal=xig[:, 0:1]) # (xig is already shifted by the set_ig method)
-        else: # just set the measured state
-            self._prb.setInitialState(x0=
-                            robot_state)
-        return robot_state
+                
+        self._prb.setInitialState(x0=
+            qv_robot_state)
+        # base_lin_a_meas=a_robot_state[0:3,:] # just root lin acc
+        # print(self._prb.getInput())
+        # exit()
+        # base_lin_a=self._prb.getInput()[,0]
+        # base_lin_a.setBounds(lb=base_lin_a_meas, 
+        #     ub=base_lin_a_meas, nodes=0)
+        return qv_robot_state
     
     def _solve(self):
         
