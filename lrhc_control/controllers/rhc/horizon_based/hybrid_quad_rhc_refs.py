@@ -142,23 +142,27 @@ class HybridQuadRhcRefs(RhcRefs):
             else: # contact phase
                 self.gait_manager.add_stand(contact_name=timeline_name)
 
-            self._flight_info=self.gait_manager.get_flight_info(timeline_name)
+            flight_info=self.gait_manager.get_flight_info(timeline_name)
             # self._flight_info=None
-            if self._flight_info is not None:
-                pos=self._flight_info[0]
-                length=len(self._flight_info[1])
+            if flight_info is not None:
+                pos=flight_info[0]
+                length=len(flight_info[1])
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
-                    col_index=i)
+                    col_index=i # contact i
+                    )
             else:
                 length=0
+
             self.flight_info.write_retry(length, 
                 row_index=self.robot_index,
                 col_index=len(is_contact)+i)
                 # self._flight_info[2] # n nodes
             
             self.gait_manager.check_horizon_full(timeline_name=timeline_name)
-
+        
+        # self.gait_manager.update()
+        
     def _handle_contact_phases_free(self):
 
         pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 

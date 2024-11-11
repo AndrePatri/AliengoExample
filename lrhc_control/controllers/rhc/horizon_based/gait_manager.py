@@ -219,7 +219,10 @@ class GaitManager:
 
         #     print(flight_token_idxs)
         #     # flight_token=active_phases[last_flight_token_idxs[0]]
-            
+    
+    def update(self):
+        self._phase_manager.update()
+        
     def get_flight_info(self, timeline_name):
         # phase indexes over timeline
         phase_idxs=self._contact_timelines[timeline_name].getPhaseIdx(self._flight_phases[timeline_name])
