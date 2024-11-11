@@ -82,7 +82,8 @@ class HybridQuadRhc(RHController):
         
         self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
-            "fixed_flights": True}
+            "fixed_flights": True,
+            "lin_a_feedback": True}
 
         self._custom_opts.update(custom_opts)
         
@@ -301,6 +302,15 @@ class HybridQuadRhc(RHController):
         import horizon.utils as utils
         self._prb.createResidual('vel_lb_barrier', self._vel_bounds_weight*utils.utils.barrier(vel_lims[7:] - self._model.v[7:]))
         self._prb.createResidual('vel_ub_barrier', self._vel_bounds_weight*utils.utils.barrier1(-1 * vel_lims[7:] - self._model.v[7:]))
+
+        self._meas_lin_a_par=None
+        # if self._custom_opts["lin_a_feedback"]:
+        #     # acceleration feedback on first node
+        #     self._meas_lin_a_par=self._prb.createParameter(name="lin_a_feedback",
+        #         dim=3, nodes=0)   
+        #     base_lin_a_prb=self._prb.getInput().getVars()[0:3] 
+        #     self._prb.createConstraint('lin_acceleration_feedback', base_lin_a_prb - self._meas_lin_a_par, 
+        #             nodes=[0])
 
         # if not self._open_loop:
         #     # we create a residual cost to be used as an attractor to the measured state on the first node
@@ -591,7 +601,7 @@ class HybridQuadRhc(RHController):
         # meas twist is assumed to be provided in BASE link!!!
         if not close_all: # use internal MPC for the base and joints
             p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
-            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3]
+            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3] # lin vel is usually not known
             # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
             # v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
         # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
@@ -663,12 +673,15 @@ class HybridQuadRhc(RHController):
                 
         self._prb.setInitialState(x0=
             qv_robot_state)
-        # base_lin_a_meas=a_robot_state[0:3,:] # just root lin acc
-        # print(self._prb.getInput())
-        # exit()
-        # base_lin_a=self._prb.getInput()[,0]
-        # base_lin_a.setBounds(lb=base_lin_a_meas, 
-        #     ub=base_lin_a_meas, nodes=0)
+        
+        if self._custom_opts["lin_a_feedback"]:
+            # write base acceleration, if constraint is available
+            base_lin_a_meas=a_robot_state[0:3,:] # just root lin acc
+            # self._meas_lin_a_par.assign(base_lin_a_meas)
+            lin_a_prb=self._prb.getVariables("a")[0:3]
+            # base_lin_a_prb=self._prb.getInput().getVars()[0:3]
+            lin_a_prb.setBounds(lb=base_lin_a_meas, 
+                ub=base_lin_a_meas, nodes=0)
         return qv_robot_state
     
     def _solve(self):
