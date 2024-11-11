@@ -230,7 +230,7 @@ class HybridQuadRhcRefs(RhcRefs):
             root_twist_ref_h = root_twist_ref.copy() 
 
             hor2w_frame(root_twist_ref, q_base, root_twist_ref_h)
-
+            
             if self.base_lin_velxy is not None:
                 self.base_lin_velxy.setRef(root_twist_ref_h[0:2, :])
             if self.base_omega is not None:

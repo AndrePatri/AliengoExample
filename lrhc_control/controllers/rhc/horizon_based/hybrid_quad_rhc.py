@@ -668,22 +668,66 @@ class HybridQuadRhc(RHController):
         xig, _ = self._set_ig()
 
         # sets state on node 0 from measurements
-        qv_robot_state, a_robot_state= self._assemble_meas_robot_state(x_opt=self._ti.solution['x_opt'],
-                                        close_all=self._close_loop_all)
+        # qv_robot_state, a_robot_state= self._assemble_meas_robot_state(x_opt=self._ti.solution['x_opt'],
+        #                                 close_all=self._close_loop_all)
                 
-        self._prb.setInitialState(x0=
-            qv_robot_state)
+        # self._prb.setInitialState(x0=
+        #     qv_robot_state)
         
-        if self._custom_opts["lin_a_feedback"]:
-            # write base acceleration, if constraint is available
-            base_lin_a_meas=a_robot_state[0:3,:] # just root lin acc
-            # self._meas_lin_a_par.assign(base_lin_a_meas)
-            lin_a_prb=self._prb.getVariables("a")[0:3]
-            # base_lin_a_prb=self._prb.getInput().getVars()[0:3]
-            lin_a_prb.setBounds(lb=base_lin_a_meas, 
-                ub=base_lin_a_meas, nodes=0)
-        return qv_robot_state
+        self._set_is_soft()
+
+        return None
     
+    def _set_is_soft(self):
+        
+        # measurements
+        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
+
+        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
+        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
+        a_lin_root = self.robot_state.root_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
+        
+        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
+        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
+        
+        # from rhc
+        root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1) # position in open loop
+        root_v_from_rhc=self._get_root_twist_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+
+        # rhc variables
+        q=self._prb.getVariables("q") # .setBounds()
+        root_p_rhc=q[0:3] # root p
+        root_q_rhc=q[3:7] # root orientation
+        jnts_q_rhc=q[7:] # jnts q
+        vel=self._prb.getVariables("v")
+        root_v_rhc=vel[0:3] # lin v.
+        root_omega_rhc=vel[3:6] # omega
+        jnts_v_rhc=vel[6:] # jnts v
+
+        acc=self._prb.getVariables("a")
+        lin_a_prb=acc[0:3]
+
+        # close state on known quantities
+        root_p_rhc.setBounds(lb=root_p_from_rhc,
+            ub=root_p_from_rhc, nodes=0)
+        root_q_rhc.setBounds(lb=q_root, 
+            ub=q_root, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts, 
+            ub=q_jnts, nodes=0)
+        # root_v_rhc.setBounds(lb=root_v_from_rhc, 
+        #     ub=root_v_from_rhc, nodes=0)
+        root_v_rhc.setBounds(lb=v_root, 
+            ub=v_root, nodes=0)
+        root_omega_rhc.setBounds(lb=omega, 
+            ub=omega, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts, 
+            ub=v_jnts, nodes=0)
+        if self._custom_opts["lin_a_feedback"]:
+            # write base lin acceleration from meas
+            lin_a_prb.setBounds(lb=a_lin_root, 
+                ub=a_lin_root, 
+                nodes=0)
+
     def _solve(self):
         
         if self._debug:
