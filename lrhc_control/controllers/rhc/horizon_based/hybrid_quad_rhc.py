@@ -714,10 +714,10 @@ class HybridQuadRhc(RHController):
             ub=q_root, nodes=0)
         jnts_q_rhc.setBounds(lb=q_jnts, 
             ub=q_jnts, nodes=0)
-        # root_v_rhc.setBounds(lb=root_v_from_rhc, 
-        #     ub=root_v_from_rhc, nodes=0)
-        root_v_rhc.setBounds(lb=v_root, 
-            ub=v_root, nodes=0)
+        root_v_rhc.setBounds(lb=root_v_from_rhc, 
+            ub=root_v_from_rhc, nodes=0)
+        # root_v_rhc.setBounds(lb=v_root, 
+        #     ub=v_root, nodes=0)
         root_omega_rhc.setBounds(lb=omega, 
             ub=omega, nodes=0)
         jnts_v_rhc.setBounds(lb=v_jnts, 
