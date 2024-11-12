@@ -738,12 +738,12 @@ class HybridQuadRhc(RHController):
         root_q_rhc=q[3:7] # root orientation
         jnts_q_rhc=q[7:] # jnts q
         vel=self._prb.getVariables("v")
-        root_v_rhc=vel[0:3] # lin v.
+        # root_v_rhc=vel[0:3] # lin v.
         root_omega_rhc=vel[3:6] # omega
         jnts_v_rhc=vel[6:] # jnts v
         acc=self._prb.getVariables("a")
         lin_a_prb=acc[0:3] # lin acc
-
+        
         # close state on known quantities
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
