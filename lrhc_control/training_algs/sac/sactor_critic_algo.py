@@ -1069,8 +1069,8 @@ class SActorCriticAlgoBase(ABC):
         self._noise_duration = 10 # should be less than _noise_freq
 
         self._is_continuous_actions=self._env.is_action_continuous()
-        self._continuous_act_expl_noise_std=0.3
-        self._discrete_act_expl_noise_std=1.0
+        self._continuous_act_expl_noise_std=0.01
+        self._discrete_act_expl_noise_std=0.5
 
         self._a_optimizer = None
         
