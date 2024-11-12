@@ -148,6 +148,8 @@ class GaitManager:
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
 
+        self.update()
+
     def _reset_contact_timelines(self):
         for contact in self._model.cmap.keys():
             # fill timeline with stances
@@ -155,7 +157,8 @@ class GaitManager:
             contact_timeline.clear() # remove phases
             short_stance_phase = contact_timeline.getRegisteredPhase(f'stance_{contact}_short')
             while contact_timeline.getEmptyNodes() > 0:
-                contact_timeline.addPhase(short_stance_phase)
+                contact_timeline.addPhase(short_stance_phase)   
+            self.update()
 
     def reset(self):
         # self.phase_manager.clear()

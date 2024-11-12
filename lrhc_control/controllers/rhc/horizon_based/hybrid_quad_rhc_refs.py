@@ -161,7 +161,7 @@ class HybridQuadRhcRefs(RhcRefs):
             
             self.gait_manager.check_horizon_full(timeline_name=timeline_name)
         
-        # self.gait_manager.update()
+        self.gait_manager.update()
         
     def _handle_contact_phases_free(self):
 
