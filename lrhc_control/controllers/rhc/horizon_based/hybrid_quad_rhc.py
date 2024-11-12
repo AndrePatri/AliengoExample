@@ -83,7 +83,7 @@ class HybridQuadRhc(RHController):
         self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
             "fixed_flights": True,
-            "lin_a_feedback": True}
+            "lin_a_feedback": False}
 
         self._custom_opts.update(custom_opts)
         
@@ -238,7 +238,7 @@ class HybridQuadRhc(RHController):
                 throw_when_excep=True)
             # preallocating data 
             self._jnts_q_reduced=np.zeros((1,self.nv()-6),dtype=self._dtype)
-            self._jnts_q_expanded=np.zeros((1,self.nq()-7),dtype=self._dtype)
+            self._jnts_q_expanded=np.zeros((self.nq()-7,1),dtype=self._dtype)
             self._full_q_reduced=np.zeros((7+len(jnt_names), self._n_nodes),dtype=self._dtype)
         else:
             self._custom_opts["replace_continuous_joints"]=True
@@ -289,8 +289,8 @@ class HybridQuadRhc(RHController):
             step_height=step_height,
             dh=0.0)
                 
-        self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
-        self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
+        # self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
+        # self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
         self._ti.model.q.setInitialGuess(self._ti.model.q0)
         self._ti.model.v.setInitialGuess(self._ti.model.v0)
         for _, cforces in self._ti.model.cmap.items():
@@ -656,45 +656,83 @@ class HybridQuadRhc(RHController):
 
         xig, _ = self._set_ig()
 
-        robot_state=xig[:, 0]
-        # open loop update:
-        self._prb.setInitialState(x0=robot_state) # (xig has been shifted, so node 0
-        # is node 1 in the last opt solution)
+        qv_state, a_state=self._set_is_open()
 
-        return robot_state
+        # robot_state=xig[:, 0]
+        # # open loop update:
+        # self._prb.setInitialState(x0=robot_state) # (xig has been shifted, so node 0
+        # # is node 1 in the last opt solution)
+
+        return qv_state, a_state
     
     def _update_closed_loop(self):
-
-        xig, _ = self._set_ig()
-
-        # sets state on node 0 from measurements
-        # qv_robot_state, a_robot_state= self._assemble_meas_robot_state(x_opt=self._ti.solution['x_opt'],
-        #                                 close_all=self._close_loop_all)
-                
-        # self._prb.setInitialState(x0=
-        #     qv_robot_state)
         
-        self._set_is_soft()
+        # set initial guess for controller
+        xig, _ = self._set_ig()
+        # set initial state
+        qv_state, a_state=self._set_is()
 
-        return None
+        return qv_state, a_state
     
-    def _set_is_soft(self):
+    def _set_is_open(self):
+        
+        # overriding states with rhc data
+        q_full_root=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
+        q_jnts=self._get_jnt_q_from_sol(node_idx=1, reduce=False).reshape(-1, 1)
+        
+        twist_root=self._get_root_twist_from_sol(node_idx=1).reshape(-1, 1)
+        v_jnts=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
+
+        # rhc variables to be set
+        q=self._prb.getVariables("q") # .setBounds()
+        root_q_full_rhc=q[0:7] # root full q
+        jnts_q_rhc=q[7:] # jnts q
+        vel=self._prb.getVariables("v")
+        root_twist_rhc=vel[0:6] # lin v.
+        jnts_v_rhc=vel[6:] # jnts v
+
+        # close state on known quantities
+        root_q_full_rhc.setBounds(lb=q_full_root,
+            ub=q_full_root, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts, 
+            ub=q_jnts, nodes=0)
+        root_twist_rhc.setBounds(lb=twist_root, 
+            ub=twist_root, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts, 
+            ub=v_jnts, nodes=0)
+        
+        # return state used for feedback
+        qv_state=np.concatenate((q_full_root, q_jnts, twist_root, v_jnts),
+                axis=0)
+        
+        return (qv_state, None)
+            
+    def _set_is(self):
         
         # measurements
+        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
         q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-
         v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
         omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_lin_root = self.robot_state.root_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
+        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
         
         q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
         v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        
-        # from rhc
-        root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1) # position in open loop
-        root_v_from_rhc=self._get_root_twist_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
 
-        # rhc variables
+        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
+            self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
+            self._jnts_q_expanded[self._continuous_joints_idxs_cos, :]=np.cos(q_jnts[self._continuous_joints_idxs_red, :]) # cos
+            self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
+            q_jnts=self._jnts_q_expanded.reshape(-1,1)
+
+        # overriding states with rhc data
+        root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+        p_root[:, :]=root_p_from_rhc # position in open loop
+        # root_v_from_rhc=self._get_root_twist_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+        # v_root[:, :]=root_v_from_rhc
+        
+        # rhc variables to be set
         q=self._prb.getVariables("q") # .setBounds()
         root_p_rhc=q[0:3] # root p
         root_q_rhc=q[3:7] # root orientation
@@ -703,19 +741,16 @@ class HybridQuadRhc(RHController):
         root_v_rhc=vel[0:3] # lin v.
         root_omega_rhc=vel[3:6] # omega
         jnts_v_rhc=vel[6:] # jnts v
-
         acc=self._prb.getVariables("a")
-        lin_a_prb=acc[0:3]
+        lin_a_prb=acc[0:3] # lin acc
 
         # close state on known quantities
-        root_p_rhc.setBounds(lb=root_p_from_rhc,
-            ub=root_p_from_rhc, nodes=0)
+        root_p_rhc.setBounds(lb=p_root,
+            ub=p_root, nodes=0)
         root_q_rhc.setBounds(lb=q_root, 
             ub=q_root, nodes=0)
         jnts_q_rhc.setBounds(lb=q_jnts, 
             ub=q_jnts, nodes=0)
-        root_v_rhc.setBounds(lb=root_v_from_rhc, 
-            ub=root_v_from_rhc, nodes=0)
         # root_v_rhc.setBounds(lb=v_root, 
         #     ub=v_root, nodes=0)
         root_omega_rhc.setBounds(lb=omega, 
@@ -724,9 +759,17 @@ class HybridQuadRhc(RHController):
             ub=v_jnts, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
             # write base lin acceleration from meas
-            lin_a_prb.setBounds(lb=a_lin_root, 
-                ub=a_lin_root, 
+            lin_a_prb.setBounds(lb=a_root[0:3, :], 
+                ub=a_root[0:3, :], 
                 nodes=0)
+        
+        # return state used for feedback
+        qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
+                axis=0)
+        a_state=np.concatenate((a_root, a_jnts),
+                axis=0)
+        
+        return (qv_state, a_state)
 
     def _solve(self):
         
@@ -739,10 +782,10 @@ class HybridQuadRhc(RHController):
         # minimal solve version -> no debug 
         robot_state=None
         if self._open_loop:
-            robot_state=self._update_open_loop() # updates the TO ig and 
+            robot_state, _ =self._update_open_loop() # updates the TO ig and 
             # initial conditions using data from the solution itself
         else: 
-            robot_state=self._update_closed_loop() # updates the TO ig and 
+            robot_state, _ =self._update_closed_loop() # updates the TO ig and 
             # initial conditions using robot measurements
     
         self._pm.shift() # shifts phases of one dt
