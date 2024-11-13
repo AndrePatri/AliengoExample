@@ -407,7 +407,7 @@ class LRhcTrainingEnvBase(ABC):
                 tot_rewards = self._tot_rewards.get_torch_mirror(gpu=self._use_gpu)
                 sub_rewards = self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)
                 self._clamp_rewards(sub_rewards) # clamp all sub rewards
-
+                
                 # compensating with action repeat to kee the same ret scale 
                 tot_rewards[:, :] = torch.sum(sub_rewards, dim=1, keepdim=True)
 
@@ -534,7 +534,7 @@ class LRhcTrainingEnvBase(ABC):
         #     self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
         sub_rewards[:, self._is_substep_rew] = sub_rewards[:, self._is_substep_rew] + \
             self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
-                    
+                            
     def randomize_task_refs(self,
                 env_indxs: torch.Tensor = None):
                     
