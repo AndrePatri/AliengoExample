@@ -163,6 +163,7 @@ class LRhcEnvBase(ABC):
         self._dtype=dtype
         self._robot_names=robot_names
         self._env_opts={}
+        self._env_opts["deact_when_failure"]=True
         self._env_opts.update(env_opts)
 
         self.step_counter = 0 # global step counter
@@ -596,7 +597,7 @@ class LRhcEnvBase(ABC):
 
                 if self._use_remote_stepping[i]:
                     self._remote_steppers[robot_name].ack() # signal cluster stepping is finished
-                    if failed is not None: # deactivate robot completely 
+                    if failed is not None and self._env_opts["deact_when_failure"]: # deactivate robot completely 
                         self._deactivate(env_indxs=failed,
                             robot_name=robot_name)
                     self._process_remote_reset_req(robot_name=robot_name) # wait for remote reset request (blocking)
@@ -648,9 +649,9 @@ class LRhcEnvBase(ABC):
 
                 if self._use_remote_stepping[i]:
                     self._remote_steppers[robot_name].ack() # signal cluster stepping is finished
-                    # if failed is not None: # deactivate robot completely 
-                    #     self._deactivate(env_indxs=failed,
-                    #         robot_name=robot_name)
+                    if failed is not None and self._env_opts["deact_when_failure"]:
+                        self._deactivate(env_indxs=failed,
+                            robot_name=robot_name)
                     self._process_remote_reset_req(robot_name=robot_name) # wait for remote reset request (blocking)
                     self._wait_for_remote_step_req(robot_name=robot_name)
                 else:
