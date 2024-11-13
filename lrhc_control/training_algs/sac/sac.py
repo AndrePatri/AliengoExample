@@ -32,26 +32,13 @@ class SAC(SActorCriticAlgoBase):
         # either terminated or truncated. CRUCIAL: we need to clone, 
         # otherwise obs is be a view and will be overridden in the call to step
         # with next_obs!!!
-        if self._vec_transition_counter > (self._warmstart_vectimesteps-1) or \
-            self._eval:
-            actions, _, mean = self._agent.get_action(x=obs)
+        if self._vec_transition_counter > (self._warmstart_vectimesteps-1):
+            actions, _, _ = self._agent.get_action(x=obs)
             actions = actions.detach()
-            
-            if (self._eval and self._det_eval): # use mean instead of stochastic policy
-                actions[:, :] = mean.detach()
-
-            if self._load_qf:
-                qf1_v=self._agent.get_qf1_val(x=obs,a=actions)
-                qf2_v=self._agent.get_qf2_val(x=obs,a=actions)
-                qf_v=(qf1_v+qf2_v)/2 # use average
-                qf_vals=self._qf_vals.get_torch_mirror(gpu=False)
-                qf_vals[:, :]=qf_v.cpu()
-                self._qf_vals.synch_all(read=False,retry=False)
-
-            if not self._eval and self._n_expl_envs>0 and \
-                    (self._vec_transition_counter%self._noise_freq==0 or \
-                    self._pert_counter>0):
-                    self._perturb_some_actions(actions=actions)
+            if self._n_expl_envs>0 and \
+                (self._vec_transition_counter%self._noise_freq==0 or \
+                self._pert_counter>0):
+                self._perturb_some_actions(actions=actions)
                 
         else:
             actions = self._sample_random_actions()
@@ -59,15 +46,53 @@ class SAC(SActorCriticAlgoBase):
         # perform a step of the (vectorized) env and retrieve trajectory
         env_step_ok = self._env.step(actions)
         
-        if not self._eval: # add experience to replay buffer
-            self._add_experience(obs=obs,
-                    actions=actions,
-                    rewards=self._env.get_rewards(clone=False), # no need to clone 
-                    next_obs=self._env.get_next_obs(clone=False), # data is copied anyway
-                    next_terminal=self._env.get_terminations(clone=False)) 
+        # add experience to replay buffer
+        self._add_experience(obs=obs,
+                actions=actions,
+                rewards=self._env.get_rewards(clone=False), # no need to clone 
+                next_obs=self._env.get_next_obs(clone=False), # data is copied anyway
+                next_terminal=self._env.get_terminations(clone=False)) 
 
         return env_step_ok
+    
+    def _collect_eval_transition(self):
         
+        # experience collection
+        self._switch_training_mode(train=False)
+
+        obs = self._env.get_obs(clone=True) # also accounts for resets when envs are 
+        # either terminated or truncated. CRUCIAL: we need to clone, 
+        # otherwise obs is be a view and will be overridden in the call to step
+        # with next_obs!!!
+
+        if not self._override_agent_action:
+            actions, _, mean = self._agent.get_action(x=obs)
+            actions = actions.detach()
+            
+            if self._det_eval: # use mean instead of stochastic policy
+                actions[:, :] = mean.detach()
+
+        else:
+
+            self._actions_override.synch_all(read=True,retry=True) # read from CPU
+            # write on GPU
+            if self._use_gpu:
+                self._actions_override.synch_mirror(from_gpu=False,non_blocking=True)
+            actions=self._actions_override.get_torch_mirror()
+
+        if self._load_qf:
+            qf1_v=self._agent.get_qf1_val(x=obs,a=actions)
+            qf2_v=self._agent.get_qf2_val(x=obs,a=actions)
+            qf_v=(qf1_v+qf2_v)/2 # use average
+            qf_vals=self._qf_vals.get_torch_mirror(gpu=False)
+            qf_vals[:, :]=qf_v.cpu()
+            self._qf_vals.synch_all(read=False,retry=False)
+                
+        # perform a step of the (vectorized) env and retrieve trajectory
+        env_step_ok = self._env.step(actions)
+
+        return env_step_ok
+    
     def _update_policy(self):
         
         # training phase

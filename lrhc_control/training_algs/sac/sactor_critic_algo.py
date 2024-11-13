@@ -113,7 +113,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._start_time = time.perf_counter()
 
-        if not self._collect_transition():
+        if not self._collect_eval_transition():
             return False
         self._vec_transition_counter+=1
 
@@ -127,6 +127,10 @@ class SActorCriticAlgoBase(ABC):
     def _collect_transition(self)->bool:
         pass
     
+    @abstractmethod
+    def _collect_eval_transition(self)->bool:
+        pass
+
     @abstractmethod
     def _update_policy(self):
         pass
@@ -160,6 +164,10 @@ class SActorCriticAlgoBase(ABC):
             self._det_eval=custom_args["det_eval"]
         except:
             pass
+        
+        self._override_agent_action=False
+        if self._eval:
+            self._override_agent_action=custom_args["override_agent_refs"]
 
         self._run_name = run_name
         from datetime import datetime
@@ -219,10 +227,12 @@ class SActorCriticAlgoBase(ABC):
         # load model if necessary 
         if self._eval: # load pretrained model
             if model_path is None:
+                msg = f"No model path provided in eval mode! Was this intentional? \
+                    No jnt remapping will be available and a randomly init agent will be used."
                 Journal.log(self.__class__.__name__,
                     "setup",
-                    f"When eval is True, a model_path should be provided!!",
-                    LogType.EXCEP,
+                    f"No model path provided in eval mode! Was this intentional? No jnt remapping will be avaial",
+                    LogType.WARN,
                     throw_when_excep = True)
             if  n_eval_timesteps is None:
                 Journal.log(self.__class__.__name__,
@@ -232,7 +242,8 @@ class SActorCriticAlgoBase(ABC):
                     throw_when_excep = True)
             # everything is ok 
             self._model_path = model_path
-            self._load_model(self._model_path)
+            if self._model_path is not None:
+                self._load_model(self._model_path)
 
             # overwrite init params
             self._init_params(tot_tsteps=n_eval_timesteps,
@@ -311,6 +322,23 @@ class SActorCriticAlgoBase(ABC):
                 dtype=torch.bool, device=self._torch_device)
             self._expl_env_idxs[self._expl_env_selector,:]=True
             self._pert_counter=0.0
+        
+        self._actions_override=None
+        if self._override_agent_action:
+            from lrhc_control.utils.shared_data.training_env import Actions
+            self._actions_override = Actions(namespace=ns+"_override",
+            n_envs=self._num_envs,
+            action_dim=actions.shape[1],
+            action_names=self._env.action_names(),
+            env_names=None,
+            is_server=True,
+            verbose=self._verbose,
+            vlevel=VLevel.V2,
+            safe=True,
+            force_reconnection=True,
+            with_gpu_mirror=self._use_gpu,
+            fill_value=0.0)
+            self._actions_override.run()
 
     def is_done(self):
 
@@ -554,7 +582,7 @@ class SActorCriticAlgoBase(ABC):
         os.makedirs(self._drop_dir)
 
         # model
-        if not self._eval:
+        if not self._eval or (self._model_path is None):
             self._model_path = self._drop_dir + "/" + self._unique_id + "_model"
         else: # we copy the model under evaluation to the drop dir
             shutil.copy(self._model_path, self._drop_dir)

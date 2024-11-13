@@ -642,7 +642,7 @@ class LRhcTrainingEnvBase(ABC):
             return self._actions.get_torch_mirror(gpu=self._use_gpu).clone().detach()
         else:
             return self._actions.get_torch_mirror(gpu=self._use_gpu).detach()
-            
+        
     def get_rewards(self, clone:bool=False):
         if clone:
             return self._tot_rewards.get_torch_mirror(gpu=self._use_gpu).clone().detach()
@@ -820,17 +820,17 @@ class LRhcTrainingEnvBase(ABC):
                 LogType.EXCEP,
                 throw_when_excep = True)
         self._actions = Actions(namespace=self._namespace,
-                            n_envs=self._n_envs,
-                            action_dim=self._actions_dim,
-                            action_names=self._get_action_names(),
-                            env_names=None,
-                            is_server=True,
-                            verbose=self._verbose,
-                            vlevel=self._vlevel,
-                            safe=True,
-                            force_reconnection=True,
-                            with_gpu_mirror=self._use_gpu,
-                            fill_value=0.0)
+            n_envs=self._n_envs,
+            action_dim=self._actions_dim,
+            action_names=self._get_action_names(),
+            env_names=None,
+            is_server=True,
+            verbose=self._verbose,
+            vlevel=self._vlevel,
+            safe=True,
+            force_reconnection=True,
+            with_gpu_mirror=self._use_gpu,
+            fill_value=0.0)
 
         self._actions.run()
 

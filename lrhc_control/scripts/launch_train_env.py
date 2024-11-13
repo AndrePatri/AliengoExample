@@ -40,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
     parser.add_argument('--eval',action='store_true', help='Whether to perform an evaluation run')
     parser.add_argument('--load_qf',action='store_true', help='whether to load the q function during eval')
+    parser.add_argument('--override_agent_actions',action='store_true', help='Whether to override agent actions with custom ones from shared mem (useful for db)')
     parser.add_argument('--override_agent_refs',action='store_true', help='Whether to override automatically generated agent refs (useful for debug)')
     parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
     parser.add_argument('--n_eval_timesteps', type=int, help='Total number of timesteps to be evaluated', default=int(1e6))
@@ -80,6 +81,12 @@ if __name__ == "__main__":
         env_path = f"lrhc_control.envs.{env_fname}"
         env_module = importlib.import_module(env_path)
     else:
+        if args.mpath is None:
+            Journal.log("launch_train_env.py",
+                "",
+                f"no mpath provided! Cannot load env. Either provide a mpath or run with --override_env",
+                LogType.EXCEP,
+                throw_when_excep = True)
         env_path=os.path.join(args.mpath, env_fname+".py")
         env_module=import_env_module(env_path)
        
@@ -96,10 +103,10 @@ if __name__ == "__main__":
 
     env_type="training" if not args.eval else "evaluation"
     Journal.log("launch_train_env.py",
-            "",
-            f"loading {env_type} env {env_classname} from {env_path}",
-            LogType.INFO,
-            throw_when_excep = True)
+        "",
+        f"loading {env_type} env {env_classname} from {env_path}",
+        LogType.INFO,
+        throw_when_excep = True)
 
     # getting some sim info for debugging
     sim_data = {}

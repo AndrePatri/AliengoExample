@@ -93,7 +93,7 @@ class DummyTestAlgoBase(ABC):
     @abstractmethod
     def _collect_transition(self)->bool:
         pass
-
+        
     def setup(self,
             run_name: str,
             ns: str,
@@ -116,7 +116,11 @@ class DummyTestAlgoBase(ABC):
         self._verbose = verbose
 
         self._ns=ns # only used for shared mem stuff
-            
+        
+        self._override_agent_action=False
+        if self._eval:
+            self._override_agent_action=custom_args["override_agent_refs"]
+
         self._load_qf=load_qf
 
         self._run_name = run_name

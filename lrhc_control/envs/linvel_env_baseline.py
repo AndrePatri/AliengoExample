@@ -798,9 +798,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_names[0] = "vx_cmd" # twist commands from agent to RHC controller
         action_names[1] = "vy_cmd"
         action_names[2] = "vz_cmd"
-        action_names[3] = "roll_twist_cmd"
-        action_names[4] = "pitch_twist_cmd"
-        action_names[5] = "yaw_twist_cmd"
+        action_names[3] = "roll_omega_cmd"
+        action_names[4] = "pitch_omega_cmd"
+        action_names[5] = "yaw_omega_cmd"
         if not self._use_pos_control:
             action_names[6] = "contact_0"
             action_names[7] = "contact_1"
