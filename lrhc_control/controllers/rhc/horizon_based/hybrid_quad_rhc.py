@@ -106,7 +106,12 @@ class HybridQuadRhc(RHController):
         self.rhc_costs={}
         self.rhc_constr={}
 
-        self._fail_idx_scale=1e-2
+        self._fail_idx_scale=0.0
+        self._expl_idx_window_size=int(1*self._n_nodes) 
+        self._explosion_idx_buffer=np.zeros((1,self._expl_idx_window_size))
+        self._expl_idx_counter=0
+        self._expl_idx_buffer_counter=0
+
         self._pred_node_idx=self._n_nodes-1
 
         self._nq=self.nq()
@@ -556,7 +561,7 @@ class HybridQuadRhc(RHController):
         return self._ti.solution["opt_cost"]
     
     def _get_rhc_constr_viol(self):
-
+        
         return self._ti.solution["residual_norm"]
     
     def _get_rhc_nodes_cost(self):
@@ -864,9 +869,21 @@ class HybridQuadRhc(RHController):
             return False
     
     def _get_fail_idx(self):
+        
+        self._explosion_idx_buffer[:, self._expl_idx_buffer_counter]=self._get_explosion_idx()
+        self._expl_idx_buffer_counter+=1
+        self._expl_idx_counter+=1
+        if self._expl_idx_counter%self._expl_idx_window_size==0:
+            self._expl_idx_buffer_counter=0 # restart from 0
+        
+        running_avrg=np.mean(self._explosion_idx_buffer).item()
+        
+        return running_avrg
+    
+    def _get_explosion_idx(self):
         explosion_index = self._get_rhc_constr_viol() + self._get_rhc_cost()*self._fail_idx_scale
         return explosion_index
-    
+
     def _update_db_data(self):
 
         self._profiling_data_dict["problem_update_dt"] = self._prb_update_time - self._timer_start
@@ -881,6 +898,9 @@ class HybridQuadRhc(RHController):
         # reset task interface (ig, solvers, etc..) + 
         # phase manager and sets bootstap as solution
         self._gm.reset()
+        self._explosion_idx_buffer[:, :]=self._get_explosion_idx() # reset with data from reset solution
+        self._expl_idx_counter=0.0
+        self._expl_idx_buffer_counter=0
 
     def _get_cost_data(self):
         
