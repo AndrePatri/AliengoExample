@@ -27,7 +27,7 @@ class RosBagDumper():
             with_agent_refs:bool=True,
             rhc_refs_in_h_frame:bool=True,
             agent_refs_in_h_frame:bool=False,
-            use_static_idx: bool = True
+            use_static_idx: bool = True,
             pub_stime: bool = True):
 
         self._closed=False
