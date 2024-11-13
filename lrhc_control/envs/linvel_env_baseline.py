@@ -34,8 +34,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
         episode_timeout_ub = 1024
-        n_steps_task_rand_lb = 600 # agent refs randomization freq
-        n_steps_task_rand_ub = 600 # lb not eq. to ub to remove correlations between episodes
+        n_steps_task_rand_lb = 300 # agent refs randomization freq
+        n_steps_task_rand_ub = 300 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
         n_preinit_steps = 1 # one steps of the controllers to properly initialize everything
@@ -401,15 +401,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         check_capsize(quat=robot_q_pred,max_angle=self._max_pitch_angle,
             output_t=self._is_rhc_capsized)
         
-        sub_terminations[:, 0:1] = self._rhc_status.fails.get_torch_mirror(gpu=self._use_gpu)
-        sub_terminations[:, 1:2] = self._is_capsized
-        sub_terminations[:, 2:3] = self._is_rhc_capsized
+        # sub_terminations[:, 0:1] = self._rhc_status.fails.get_torch_mirror(gpu=self._use_gpu)
+        sub_terminations[:, 0:1] = self._is_capsized
+        sub_terminations[:, 1:2] = self._is_rhc_capsized
 
     def _custom_reset(self): # reset if truncated
-        if self._single_task_ref_per_episode:
-            return None
-        else:
-            return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
+        # if self._single_task_ref_per_episode:
+        #     return None
+        # else:
+        #     return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
+        return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
     
     def reset(self):
         super().reset()
@@ -839,7 +840,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def _get_sub_term_names(self):
         # to be overridden by child class
         sub_term_names = []
-        sub_term_names.append("rhc_failure")
+        # sub_term_names.append("rhc_failure")
         sub_term_names.append("robot_capsize")
         sub_term_names.append("rhc_capsize")
 
