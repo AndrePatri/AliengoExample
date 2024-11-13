@@ -28,6 +28,7 @@ if __name__ == '__main__':
         help='')
     parser.add_argument('--use_shared_drop_dir',action='store_true', 
         help='if true use the shared drop dir to drop the data where all the other training data is dropeer')
+    parser.add_argument('--pub_stime', action='store_true', help='Whether to publish sim time for ros')
 
     args = parser.parse_args()
     if args.is_training:
@@ -50,7 +51,8 @@ if __name__ == '__main__':
             abort_wallmin=args.abort_wallmin,
             with_agent_refs=args.with_agent_refs,
             rhc_refs_in_h_frame=args.rhc_refs_in_h_frame,
-            agent_refs_in_h_frame=args.agent_refs_in_h_frame)
+            agent_refs_in_h_frame=args.agent_refs_in_h_frame,
+            pub_stime=args.pub_stime)
     bag_dumper.run()
     bag_dumper.close()
 

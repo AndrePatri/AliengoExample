@@ -50,12 +50,15 @@ class RhcToVizBridge:
             sim_time_trgt: float = None,
             srdf_homing_file_path: str = None,
             abort_wallmin: float = 5.0,
-            use_static_idx: bool = True):
+            use_static_idx: bool = True,
+            update_dt: float = 0.1,
+            pub_stime: float = True):
 
         self._srdf_homing_file_path=srdf_homing_file_path # used to retrieve homing
         self._homer=None
         self._some_jnts_are_missing=False
 
+        self._pub_stime=pub_stime
         self._sim_time_trgt = sim_time_trgt
         if self._sim_time_trgt is None:
             self._sim_time_trgt = np.inf # basically run indefinitely
@@ -109,6 +112,8 @@ class RhcToVizBridge:
         self._stime_before=-1.0
 
         self._initialize()
+        self._update_dt=update_dt
+        self.init(update_dt=self._update_dt)
 
     def __del__(self):
         self.close()
@@ -219,9 +224,11 @@ class RhcToVizBridge:
                             String, 
                             queue_size=10)  
 
-        self.simtime_pub = rospy.Publisher("/clock", 
-                            Clock, 
-                            queue_size=10)
+        self.simtime_pub=None
+        if self._pub_stime:
+            self.simtime_pub = rospy.Publisher("/clock", 
+                                Clock, 
+                                queue_size=10)
         
         # sim data
         self._sim_data = SharedEnvInfo(namespace=self.namespace,
@@ -346,6 +353,9 @@ class RhcToVizBridge:
             LogType.INFO,
             throw_when_excep = True)
 
+        self._reset()
+    
+    def _reset(self):
         self._sim_time = 0 
         self._sim_time_init = self._sim_data.get()[self._simtime_idx].item()
         self._stime_before=self._sim_time # record stime now
@@ -353,7 +363,7 @@ class RhcToVizBridge:
         self._safety_check_start_time = time.monotonic() 
         self._sporadic_log_freq=500
         self._log_counter=0
-    
+
     def step(self):
 
         t_before_update = time.monotonic() 
@@ -405,21 +415,24 @@ class RhcToVizBridge:
             
         return True
     
-    def run(self,
-        update_dt: float = 0.01):
+    def run(self, sim_time: float = None):
 
-        self.init(update_dt)
+        if sim_time is not None:
+            self._sim_time_trgt=sim_time
+        else:
+            self._sim_time_trgt=np.inf
 
-        while (self._is_running and not self._closed):
+        self._reset() # reset counters
+        # run bridge for some sim time
 
+        finished=False
+        while not finished and (self._is_running and not self._closed):
             try:
-                if not self.step():
-                    break                 
-
+                finished=not self.step()
             except KeyboardInterrupt:
-                self.close()
-
-        self._is_running=False
+                break
+        
+        return finished
                 
     def _update(self):
         
@@ -492,11 +505,12 @@ class RhcToVizBridge:
         return np.isnan(data).any()
     
     def _publish(self):
+        
+        if self.simtime_pub is not None:
+            self._ros_clock.clock.secs = int(self._sim_time)
+            self._ros_clock.clock.nsecs = int((self._sim_time - self._ros_clock.clock.secs) * 1e9)
 
-        self._ros_clock.clock.secs = int(self._sim_time)
-        self._ros_clock.clock.nsecs = int((self._sim_time - self._ros_clock.clock.secs) * 1e9)
-
-        self.simtime_pub.publish(self._ros_clock)
+            self.simtime_pub.publish(self._ros_clock)
         # continously publish also joint names 
         self.robot_jntnames_pub.publish(String(data=self.jnt_names_robot_encoded))
         

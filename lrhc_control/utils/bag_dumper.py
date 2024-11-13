@@ -27,10 +27,13 @@ class RosBagDumper():
             with_agent_refs:bool=True,
             rhc_refs_in_h_frame:bool=True,
             agent_refs_in_h_frame:bool=False,
-            use_static_idx: bool = True):
+            use_static_idx: bool = True
+            pub_stime: bool = True):
 
         self._closed=False
         
+        self._pub_stime=pub_stime
+
         self._ns=ns
         self._remap_ns=remap_ns
         if self._remap_ns is None: # allow to publish with different namespace (to allow
@@ -95,15 +98,21 @@ class RosBagDumper():
 
         # bridge from rhc shared data to ROS
         if not self._ros2:
-            # DEPRECATED
             from lrhc_control.utils.rhc_viz.rhc2viz import RhcToVizBridge
             self._bridge = RhcToVizBridge(namespace=self._ns, 
-                            verbose=self._verbose,
-                            rhcviz_basename="RHCViz", 
-                            robot_selector=[0, None],
-                            with_agent_refs=self._with_agent_refs,
-                            rhc_refs_in_h_frame=self._rhc_refs_in_h_frame,
-                            agent_refs_in_h_frame=self._agent_refs_in_h_frame)
+                remap_ns=self._remap_ns,
+                verbose=self._verbose,
+                rhcviz_basename="RHCViz", 
+                robot_selector=[0, None],
+                with_agent_refs=self._with_agent_refs,
+                rhc_refs_in_h_frame=self._rhc_refs_in_h_frame,
+                agent_refs_in_h_frame=self._agent_refs_in_h_frame,
+                env_idx=self._env_idx,
+                sim_time_trgt=self._bag_sdt,
+                srdf_homing_file_path=self._srdf_path,
+                abort_wallmin=self._abort_wallmin,
+                use_static_idx=self._use_static_idx,
+                pub_stime=self._pub_stime)
         else:
             from lrhc_control.utils.rhc_viz.rhc2viz2 import RhcToViz2Bridge
             self._bridge = RhcToViz2Bridge(namespace=self._ns, 
@@ -118,7 +127,8 @@ class RosBagDumper():
                 sim_time_trgt=self._bag_sdt,
                 srdf_homing_file_path=self._srdf_path,
                 abort_wallmin=self._abort_wallmin,
-                use_static_idx=self._use_static_idx)
+                use_static_idx=self._use_static_idx,
+                pub_stime=self._pub_stime)
 
         # actual process recording bag
         from control_cluster_bridge.utilities.remote_triggering import RemoteTriggererSrvr

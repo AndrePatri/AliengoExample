@@ -54,12 +54,14 @@ class RhcToViz2Bridge:
             srdf_homing_file_path: str = None,
             abort_wallmin: float = 5.0,
             use_static_idx: bool = True,
-            update_dt: float = 0.1):
+            update_dt: float = 0.1,
+            pub_stime: float = True):
         
         self._srdf_homing_file_path=srdf_homing_file_path # used to retrieve homing
         self._homer=None
         self._some_jnts_are_missing=False
 
+        self._pub_stime=pub_stime
         self._sim_time_trgt = sim_time_trgt
         if self._sim_time_trgt is None:
             self._sim_time_trgt = np.inf # basically run indefinitely
@@ -239,9 +241,11 @@ class RhcToViz2Bridge:
                                                                 namespace=self._remap_namespace),
                                             qos_profile=self._qos_settings)   
 
-        self.simtime_pub = self.node.create_publisher(Clock, 
-                                            "clock",
-                                            qos_profile=self._qos_settings)
+        self.simtime_pub=None
+        if self._pub_stime:
+            self.simtime_pub = self.node.create_publisher(Clock, 
+                                                "clock",
+                                                qos_profile=self._qos_settings)
 
         # sim data
         self._sim_data = SharedEnvInfo(namespace=self.namespace,
@@ -522,10 +526,11 @@ class RhcToViz2Bridge:
     
     def _publish(self):
         
-        self._ros_clock.clock.sec = int(self._sim_time)
-        self._ros_clock.clock.nanosec = int((self._sim_time - self._ros_clock.clock.sec)*1e9)
+        if self.simtime_pub is not None:
+            self._ros_clock.clock.sec = int(self._sim_time)
+            self._ros_clock.clock.nanosec = int((self._sim_time - self._ros_clock.clock.sec)*1e9)
 
-        self.simtime_pub.publish(self._ros_clock)
+            self.simtime_pub.publish(self._ros_clock)
         # continously publish also joint names 
         self.robot_jntnames_pub.publish(String(data=self.jnt_names_robot_encoded))
         
