@@ -155,10 +155,10 @@ class HybridQuadRhc(RHController):
                 self.urdf = self.urdf.replace('continuous', 'revolute')
         else:
             self.urdf = self.urdf.replace('continuous', 'revolute')
-            
+        
         self._kin_dyn = casadi_kin_dyn.CasadiKinDyn(self.urdf) # used for getting joint names 
         self._assign_controller_side_jnt_names(jnt_names=self._get_robot_jnt_names())
-        
+
         self._init_robot_homer()
 
         # handle fixed joints
@@ -294,8 +294,8 @@ class HybridQuadRhc(RHController):
             step_height=step_height,
             dh=0.0)
                 
-        # self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
-        # self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
+        self._ti.model.q.setBounds(self._ti.model.q0, self._ti.model.q0, nodes=0)
+        self._ti.model.v.setBounds(self._ti.model.v0, self._ti.model.v0, nodes=0)
         self._ti.model.q.setInitialGuess(self._ti.model.q0)
         self._ti.model.v.setInitialGuess(self._ti.model.v0)
         for _, cforces in self._ti.model.cmap.items():
@@ -339,6 +339,15 @@ class HybridQuadRhc(RHController):
 
         self.n_contacts = len(self._model.cmap.keys())
         
+        # remove variables bounds (before they were necessary to have a good
+        # quality bootstrap solution)
+        q_inf=np.zeros((self.nq(), 1))
+        q_inf[:, :]=np.inf
+        v_inf=np.zeros((self.nv(), 1))
+        v_inf[:, :]=np.inf
+        self._ti.model.q.setBounds(-q_inf, q_inf, nodes=0)
+        self._ti.model.v.setBounds(-v_inf, v_inf, nodes=0)
+
         # self.horizon_anal = analyzer.ProblemAnalyzer(self._prb)
 
     def get_file_paths(self):
@@ -578,57 +587,6 @@ class HybridQuadRhc(RHController):
 
         return self._ti.solution["n_iter2sol"]
     
-    def _assemble_meas_robot_state(self,
-                        x_opt = None,
-                        close_all: bool=False):
-
-        # overrides parent
-
-        # jnts
-        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
-        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
-        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(1, -1)
-
-        # root
-        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(1, -1)
-        p = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(1, -1)
-        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(1, -1)
-        a_root = self.robot_state.root_state.get(data_type="a", robot_idxs=self.controller_index).reshape(1, -1)
-        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(1, -1)
-        alpha_root = self.robot_state.root_state.get(data_type="alpha", robot_idxs=self.controller_index).reshape(1, -1)
-
-        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
-            # copy rev joints
-            self._jnts_q_expanded[:, self._rev_joints_idxs]=q_jnts[:, self._rev_joints_idxs_red]
-            self._jnts_q_expanded[:, self._continuous_joints_idxs_cos]=np.cos(q_jnts[:, self._continuous_joints_idxs_red]) # cos
-            self._jnts_q_expanded[:, self._continuous_joints_idxs_sin]=np.sin(q_jnts[:, self._continuous_joints_idxs_red]) # sin
-            q_jnts=self._jnts_q_expanded
-        # meas twist is assumed to be provided in BASE link!!!
-        if not close_all: # use internal MPC for the base and joints
-            p[:, 0:3]=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3] # base pos is open loop
-            v_root[0:3,:]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3] # lin vel is usually not known
-            # q_jnts[:, :]=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False)           
-            # v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1)
-        # r_base = Rotation.from_quat(q_root.flatten()).as_matrix() # from base to world (.T the opposite)
-        
-        if x_opt is not None:
-            # CHECKING q_root for sign consistency!
-            # numerical problem: two quaternions can represent the same rotation
-            # if difference between the base q in the state x on first node and the sensed q_root < 0, change sign
-            state_quat_conjugate = np.copy(x_opt[3:7, 0])
-            state_quat_conjugate[:3] *= -1.0
-            # normalize the quaternion
-            state_quat_conjugate = state_quat_conjugate / np.linalg.norm(x_opt[3:7, 0])
-            diff_quat = self._quaternion_multiply(q_root.flatten(), state_quat_conjugate)
-            if diff_quat[3] < 0:
-                q_root[:, :] = -q_root[:, :]
-        
-        qv_state=np.concatenate((p, q_root, q_jnts, v_root, omega, v_jnts),
-                axis=1).reshape(-1,1)
-        a_state=np.concatenate((a_root, alpha_root, a_jnts),
-                axis=1).reshape(-1,1)
-        return (qv_state, a_state)
-    
     def _set_ig(self):
 
         shift_num = -1 # shift data by one node
@@ -731,11 +689,20 @@ class HybridQuadRhc(RHController):
             self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
             q_jnts=self._jnts_q_expanded.reshape(-1,1)
 
-        # overriding states with rhc data
+        # overriding states with rhc data (-> all overridden state are open looop)
         root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
         p_root[:, :]=root_p_from_rhc # position in open loop
-        # root_v_from_rhc=self._get_root_twist_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+
+        # root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
+        # root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
+        # root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
         # v_root[:, :]=root_v_from_rhc
+        # omega[:, :]=root_omega_from_rhc
+
+        # jnt_q_from_rhc=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False).reshape(-1, 1)
+        # q_jnts[:, :]=jnt_q_from_rhc
+        # jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
+        # v_jnts[:, :]=jnt_v_from_rhc
         
         # rhc variables to be set
         q=self._prb.getVariables("q") # .setBounds()
@@ -743,7 +710,7 @@ class HybridQuadRhc(RHController):
         root_q_rhc=q[3:7] # root orientation
         jnts_q_rhc=q[7:] # jnts q
         vel=self._prb.getVariables("v")
-        # root_v_rhc=vel[0:3] # lin v.
+        root_v_rhc=vel[0:3] # lin v.
         root_omega_rhc=vel[3:6] # omega
         jnts_v_rhc=vel[6:] # jnts v
         acc=self._prb.getVariables("a")
