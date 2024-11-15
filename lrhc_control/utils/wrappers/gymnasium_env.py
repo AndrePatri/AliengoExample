@@ -170,6 +170,19 @@ class Gymnasium2LRHCEnv():
 
     def _init_shared_data(self):
         
+        device = "cuda" if self._use_gpu else "cpu"
+        
+        obs_threshold_default = 1e3
+        self._obs_threshold_lb = -obs_threshold_default # used for clipping observations
+        self._obs_threshold_ub = obs_threshold_default
+        
+        self._obs_ub = torch.full((1, self._obs_dim), dtype=self._torch_dtype, device=device,
+                                        fill_value=1) 
+        self._obs_lb = torch.full((1, self._obs_dim), dtype=self._torch_dtype, device=device,
+                                        fill_value=-1)
+        self._obs_scale = (self._obs_ub - self._obs_lb)/2.0
+        self._obs_offset = (self._obs_ub + self._obs_lb)/2.0
+        
         self._obs = Observations(namespace=self._namespace,
                             n_envs=self._n_envs,
                             obs_dim=self._obs_dim,
@@ -262,6 +275,9 @@ class Gymnasium2LRHCEnv():
             dtype=torch.bool, device=self._torch_device,
             fill_value=True) 
 
+    def get_observed_joints(self):
+        return None
+
     def is_action_continuous(self):
         return self._is_continuous_actions
     
@@ -348,6 +364,12 @@ class Gymnasium2LRHCEnv():
     def get_actions_offset(self):
         return self._actions_offset
     
+    def get_obs_lb(self):
+        return self._obs_lb
+
+    def get_obs_ub(self):
+        return self._obs_ub
+
     def name(self):
         return self._namespace
     
@@ -485,6 +507,8 @@ if __name__ == "__main__":
                             shared mem (e.g.reward metrics are not available for reading anymore)')
     parser.add_argument('--rmdb',action='store_true', help='Whether to enable remote debug (e.g. data logging on remote servers)')
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
+    parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
+
     parser.add_argument('--run_name', type=str, help='Name of training run', default="GymnasiumEnvTest")
     parser.add_argument('--drop_dir', type=str, help='Directory root where all run data will be dumped',default="/tmp")
     parser.add_argument('--comment', type=str, help='Any useful comment associated with this run',default="")
@@ -566,7 +590,8 @@ if __name__ == "__main__":
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,
-        norm_obs=args.obs_norm)
+        norm_obs=args.obs_norm,
+        rescale_obs=args.obs_rescale)
     
     if not args.eval:
         try:
