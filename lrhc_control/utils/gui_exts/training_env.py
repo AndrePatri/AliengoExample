@@ -15,7 +15,7 @@ from lrhc_control.utils.shared_data.training_env import TotRewards
 from lrhc_control.utils.shared_data.training_env import Terminations, SubTerminations
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
 from lrhc_control.utils.shared_data.training_env import EpisodesCounter
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 
 import numpy as np
 
@@ -139,6 +139,12 @@ class TrainingEnvData(SharedDataWindow):
                                 verbose=True,
                                 vlevel=VLevel.V2))
         
+        self.shared_data_clients.append(QfTrgt(namespace=self.namespace,
+                                is_server=False,
+                                safe=False,
+                                verbose=True,
+                                vlevel=VLevel.V2))
+
         for client in self.shared_data_clients:
             client.run()
 
@@ -273,15 +279,15 @@ class TrainingEnvData(SharedDataWindow):
                                     legend_list=[""], 
                                     ylabel="[int]"))
         
-        self.rt_plotters.append(RtPlotWindow(data_dim=1,
+        self.rt_plotters.append(RtPlotWindow(data_dim=2,
                 n_data = n_envs,
                 update_data_dt=self.update_data_dt, 
                 update_plot_dt=self.update_plot_dt,
                 window_duration=self.window_duration, 
                 parent=None, 
-                base_name=f"Estimated Q value", 
+                base_name=f"Q value VS Q value target", 
                 window_buffer_factor=self.window_buffer_factor, 
-                legend_list=[""], 
+                legend_list=["qf value", "qf target"], 
                 ylabel="[float]"))
         
         self.grid.addFrame(self.rt_plotters[0].base_frame, 0, 0)
@@ -354,6 +360,7 @@ class TrainingEnvData(SharedDataWindow):
             self.shared_data_clients[11].rob_refs.root_state.synch_all(read=True, retry=True) # agent refs
 
             self.shared_data_clients[12].synch_all(read=True, retry=True) # q fun
+            self.shared_data_clients[13].synch_all(read=True, retry=True) # q target
 
             # update plots
             self.rt_plotters[0].rt_plot_widget.update(env_data)
@@ -367,4 +374,7 @@ class TrainingEnvData(SharedDataWindow):
             self.rt_plotters[8].rt_plot_widget.update(np.transpose(self.shared_data_clients[8].get_numpy_mirror()))
             self.rt_plotters[9].rt_plot_widget.update(np.transpose(self.shared_data_clients[9].get_numpy_mirror()))
             self.rt_plotters[10].rt_plot_widget.update(np.transpose(self.shared_data_clients[10].counter().get_numpy_mirror()))
-            self.rt_plotters[11].rt_plot_widget.update(np.transpose(self.shared_data_clients[12].get_numpy_mirror()))
+            qf_val=self.shared_data_clients[12].get_numpy_mirror()
+            qf_trgt=self.shared_data_clients[13].get_numpy_mirror()
+            q_data_cat=np.concatenate((qf_val, qf_trgt), axis=1)
+            self.rt_plotters[11].rt_plot_widget.update(np.transpose(q_data_cat))

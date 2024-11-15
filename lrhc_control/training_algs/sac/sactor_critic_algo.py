@@ -1,6 +1,6 @@
 from lrhc_control.agents.sactor_critic.sac import SACAgent
 
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 import torch 
 import torch.optim as optim
 import torch.nn as nn
@@ -167,7 +167,7 @@ class SActorCriticAlgoBase(ABC):
         
         self._override_agent_action=False
         if self._eval:
-            self._override_agent_action=custom_args["override_agent_refs"]
+            self._override_agent_action=custom_args["override_agent_actions"]
 
         self._run_name = run_name
         from datetime import datetime
@@ -1408,3 +1408,11 @@ class SActorCriticAlgoBase(ABC):
             safe=False,
             force_reconnection=True)
         self._qf_vals.run()
+        self._qf_trgt=QfTrgt(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._qf_trgt.run()

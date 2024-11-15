@@ -78,18 +78,33 @@ class SAC(SActorCriticAlgoBase):
             # write on GPU
             if self._use_gpu:
                 self._actions_override.synch_mirror(from_gpu=False,non_blocking=True)
-            actions=self._actions_override.get_torch_mirror()
+            actions=self._actions_override.get_torch_mirror(gpu=self._use_gpu)
+
+        # perform a step of the (vectorized) env and retrieve trajectory
+        env_step_ok = self._env.step(actions)
 
         if self._load_qf:
+            # get qf value for state and action using average of 
+            # q networks
             qf1_v=self._agent.get_qf1_val(x=obs,a=actions)
             qf2_v=self._agent.get_qf2_val(x=obs,a=actions)
             qf_v=(qf1_v+qf2_v)/2 # use average
             qf_vals=self._qf_vals.get_torch_mirror(gpu=False)
             qf_vals[:, :]=qf_v.cpu()
             self._qf_vals.synch_all(read=False,retry=False)
-                
-        # perform a step of the (vectorized) env and retrieve trajectory
-        env_step_ok = self._env.step(actions)
+
+            # target qf
+            next_obs=self._env.get_next_obs(clone=False)
+            next_action, next_log_pi, _ = self._agent.get_action(next_obs)
+            qf1_v_next=self._agent.get_qf1_val(x=next_obs,a=next_action)
+            qf2_v_next=self._agent.get_qf2_val(x=next_obs,a=next_action)
+            min_qf_next_target = torch.min(qf1_v_next, qf2_v_next)
+            rew_now=self._env.get_rewards(clone=False)
+            reached_terminal_state=self._env.get_terminations(clone=False).to(torch.float32)
+            qf_trgt_v=rew_now+(1 - reached_terminal_state)*self._discount_factor*min_qf_next_target
+            qf_trgt=self._qf_trgt.get_torch_mirror(gpu=False)
+            qf_trgt[:, :]=qf_trgt_v
+            self._qf_trgt.synch_all(read=False,retry=False)
 
         return env_step_ok
     
