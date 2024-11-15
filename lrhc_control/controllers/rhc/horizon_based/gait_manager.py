@@ -18,7 +18,8 @@ class GaitManager:
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = None,
             phase_force_reg: float = None,
-            flight_duration: float = 15,
+            flight_duration: int = 15,
+            post_flight_stance: int = 3,
             step_height: float = 0.1,
             dh: float = 0.0,
             custom_opts: Dict = {}):
@@ -37,6 +38,8 @@ class GaitManager:
         self._total_weight = np.atleast_2d(np.array([0, 0, self._kin_dyn.mass() * 9.81])).T 
         
         self._flight_duration=flight_duration
+        self._post_flight_stance=post_flight_stance
+        
         self._step_height=step_height
         self._dh=dh
         self._f_reg_ref={}
@@ -188,10 +191,11 @@ class GaitManager:
             flights_on_horizon=self._contact_timelines[contact_name].getPhaseIdx(self._flight_phases[contact_name]) 
             
             last_flight_idx=self._injection_node-1 # default to make things work
-            if not len(flights_on_horizon)==0:
-                last_flight_idx=flights_on_horizon[-1]
-            if last_flight_idx<self._injection_node: # do not allow overlapping
-                # compute trajectory online
+            if not len(flights_on_horizon)==0: # some flight phases are there
+                last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
+            if last_flight_idx<self._injection_node: # allow injecting
+
+                # recompute trajectory online
                 starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
                 self._ref_trjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.from_derivatives(self._flight_duration, 
                                                                         starting_pos, 
@@ -206,7 +210,7 @@ class GaitManager:
                         absolute_position=True)
                     phase_token.setItemReference(f'z_{contact_name}',
                         self._ref_trjs[contact_name][:, i])
-
+                
         else:
             Journal.log(self.__class__.__name__,
                 "add_flight",
@@ -214,6 +218,8 @@ class GaitManager:
                 LogType.EXCEP,
                 throw_when_excep=True)
 
+        if timeline.getEmptyNodes() > 0:
+            timeline.addPhase(timeline.getRegisteredPhase(f'stance_{contact_name}_short'))
         # if ref_height is not None:
         #     # set reference 
         #     self._ref_trjs[timeline_name][2, :]=ref_height

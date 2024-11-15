@@ -123,6 +123,7 @@ class HybridQuadRhc(RHController):
             fixed_jnt_patterns: List[str] = None,
             foot_linkname: str = None,
             flight_duration: int = 10,
+            post_flight_stance: int = 3,
             step_height: float = 0.12,
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = 2.0,
@@ -291,6 +292,7 @@ class HybridQuadRhc(RHController):
             phase_force_reg=self._phase_force_reg,
             custom_opts=self._custom_opts,
             flight_duration=flight_duration,
+            post_flight_stance=post_flight_stance,
             step_height=step_height,
             dh=0.0)
                 
