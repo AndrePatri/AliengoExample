@@ -41,7 +41,7 @@ class QuadrupedGaitPatternGenerator:
         
         phase_offset = [0.0, self._phase_period / 4, self._phase_period / 2, 3 * self._phase_period / 4]  # Sequential phases
         # phase_thresh = [np.cos(3 * np.pi / 4)] * self._n_phases
-        flight_length=self._phase_period / 4
+        flight_length=self._phase_period / 32
         t_star = 3/4*self._phase_period-flight_length/2
         phase_thresh = [np.sin(2*np.pi/self._phase_period*t_star)] * self._n_phases
         return {
@@ -50,6 +50,19 @@ class QuadrupedGaitPatternGenerator:
             "phase_offset": phase_offset,
             "phase_thresh": phase_thresh
         }
+
+    # def _walk(self) -> Dict[str, Union[float, List[float]]]:
+    #     phase_offset = [0.0, self._phase_period / 3, 2 * self._phase_period / 3, self._phase_period]  # Larger phase intervals
+    #     flight_length = self._phase_period / 4
+    #     t_star = 3/4 * self._phase_period - flight_length / 2
+    #     phase_thresh = [np.sin(2 * np.pi / self._phase_period * t_star)] * self._n_phases
+        
+    #     return {
+    #         "n_phases": self._n_phases,
+    #         "phase_period": self._phase_period,
+    #         "phase_offset": phase_offset,
+    #         "phase_thresh": phase_thresh
+    #     }
 
     def _pace(self) -> Dict[str, Union[float, List[float]]]:
         
@@ -187,11 +200,11 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     # Parameters for the test
-    pattern_gen = QuadrupedGaitPatternGenerator(phase_period=1.0)
-    gait_params = pattern_gen.get_params("walk")
+    pattern_gen = QuadrupedGaitPatternGenerator(phase_period=2.0)
+    gait_params = pattern_gen.get_params("trot")
     n_phases = gait_params["n_phases"]
     n_envs = 1
-    update_dt = 0.01
+    update_dt = 0.03
     phase_period = gait_params["phase_period"]
     phase_offset = gait_params["phase_offset"]
     phase_thresh = gait_params["phase_thresh"]
@@ -209,7 +222,7 @@ if __name__ == "__main__":
     )
 
     # Run the step method for 10 iterations and collect the results
-    num_steps = round(phase_period / update_dt)
+    num_steps = round(1*phase_period / update_dt)
     signals = []
     bool_signals = []
     
@@ -221,24 +234,30 @@ if __name__ == "__main__":
     signals = np.array(signals)
     bool_signals = np.array(bool_signals)
 
-    # Plotting
-    fig, axs = plt.subplots(2, n_phases, figsize=(15, 8), sharex='all')
+    # Generate the time array in seconds
+    time_array = np.arange(num_steps + 1) * update_dt
 
-    # Plot the signals
-    for i in range(n_phases):
-        axs[0, i].plot(signals[:, i])
-        axs[0, i].set_title(f'Phase signal {i+1}')
-        axs[0, i].set_xlabel('Time Steps')
-        axs[0, i].set_ylabel('Signal Value')
-        axs[0, i].grid(True)  # Add grid
+    # Plotting all signals on the same plot, with threshold lines
+    fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Plot the boolean signals
+    # Plot the continuous phase signals with threshold lines
     for i in range(n_phases):
-        axs[1, i].plot(bool_signals[:, i])
-        axs[1, i].set_title(f'Phase boolean {i+1}')
-        axs[1, i].set_xlabel('Time Steps')
-        axs[1, i].set_ylabel('Over Thresh Value')
-        axs[1, i].grid(True)  # Add grid
+        axs[0].plot(time_array, signals[:, i], label=f'Phase signal {i+1}')
+        axs[0].axhline(y=phase_thresh[i], color=f'C{i}', linestyle='--', label=f'Threshold {i+1}')  # Threshold line
+    axs[0].set_title('Phase Signals with Thresholds')
+    axs[0].set_xlabel('Time (seconds)')
+    axs[0].set_ylabel('Signal Value')
+    axs[0].legend()
+    axs[0].grid(True)  # Add grid
+
+    # Plot the boolean (thresholded) phase signals
+    for i in range(n_phases):
+        axs[1].plot(time_array, bool_signals[:, i], label=f'Phase boolean {i+1}')
+    axs[1].set_title('Phase Boolean Signals (Above Threshold)')
+    axs[1].set_xlabel('Time (seconds)')
+    axs[1].set_ylabel('Boolean Value')
+    axs[1].legend()
+    axs[1].grid(True)  # Add grid
 
     plt.tight_layout()
     plt.show()
