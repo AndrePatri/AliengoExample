@@ -697,8 +697,10 @@ class HybridQuadRhc(RHController):
             q_jnts=self._jnts_q_expanded.reshape(-1,1)
 
         # overriding states with rhc data (-> all overridden state are open looop)
-        root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
-        p_root[:, :]=root_p_from_rhc # position in open loop
+        root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
+        root_p_from_rhc=root_q_full_from_rhc[0:3, :]
+        root_q_from_rhc=root_q_full_from_rhc[3:7, :]
+        p_root[:, :]=root_p_from_rhc # position is always open loop
 
         root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
         root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
@@ -707,6 +709,7 @@ class HybridQuadRhc(RHController):
         jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
                 
         # computing estimation defects
+        root_q_delta=root_q_from_rhc-q_root
         jnt_q_delta=jnt_q_from_rhc-q_jnts
         jnt_v_delta=jnt_v_from_rhc-v_jnts
         # v_root_delta=root_v_from_rhc-v_root
@@ -731,8 +734,8 @@ class HybridQuadRhc(RHController):
         
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
-        root_q_rhc.setBounds(lb=q_root, 
-            ub=q_root, nodes=0)
+        root_q_rhc.setBounds(lb=q_root+self._alpha*root_q_delta, 
+            ub=q_root+self._alpha*root_q_delta, nodes=0)
         jnts_q_rhc.setBounds(lb=q_jnts+self._alpha*jnt_q_delta, 
             ub=q_jnts+self._alpha*jnt_q_delta, nodes=0)
         root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
