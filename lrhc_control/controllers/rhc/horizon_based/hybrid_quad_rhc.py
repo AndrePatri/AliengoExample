@@ -83,10 +83,15 @@ class HybridQuadRhc(RHController):
         self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
             "fixed_flights": True,
-            "lin_a_feedback": False}
+            "lin_a_feedback": False,
+            "is_open_loop": self._open_loop,
+            "alpha_half": 1.0}
 
         self._custom_opts.update(custom_opts)
         
+        self._alpha = 0.0 # 0 closed loop, 1 open, 0.5 mean of the meas and open loop state
+        self._alpha_half=self._custom_opts["alpha_half"]
+
         super().__init__(srdf_path=srdf_path,
                         n_nodes=n_nodes,
                         dt=dt,
@@ -343,12 +348,12 @@ class HybridQuadRhc(RHController):
         
         # remove variables bounds (before they were necessary to have a good
         # quality bootstrap solution)
-        q_inf=np.zeros((self.nq(), 1))
-        q_inf[:, :]=np.inf
-        v_inf=np.zeros((self.nv(), 1))
-        v_inf[:, :]=np.inf
-        self._ti.model.q.setBounds(-q_inf, q_inf, nodes=0)
-        self._ti.model.v.setBounds(-v_inf, v_inf, nodes=0)
+        self._q_inf=np.zeros((self.nq(), 1))
+        self._q_inf[:, :]=np.inf
+        self._v_inf=np.zeros((self.nv(), 1))
+        self._v_inf[:, :]=np.inf
+        self._ti.model.q.setBounds(-self._q_inf, self._q_inf, nodes=0)
+        self._ti.model.v.setBounds(-self._v_inf, self._v_inf, nodes=0)
 
         # self.horizon_anal = analyzer.ProblemAnalyzer(self._prb)
 
@@ -505,11 +510,11 @@ class HybridQuadRhc(RHController):
 
     def _get_root_full_q_from_sol(self, node_idx=1):
 
-        return self._ti.solution['q'][0:7, node_idx].reshape(1, 7)
+        return self._ti.solution['q'][0:7, node_idx].reshape(1, 7).astype(self._dtype)
     
     def _get_full_q_from_sol(self, node_idx=1):
 
-        return self._ti.solution['q'][:, node_idx].reshape(1, -1)
+        return self._ti.solution['q'][:, node_idx].reshape(1, -1).astype(self._dtype)
     
     def _get_root_twist_from_sol(self, node_idx=1):
         # provided in world frame
@@ -535,7 +540,7 @@ class HybridQuadRhc(RHController):
             reduce: bool = True,
             clamp: bool = True):
         
-        full_jnts_q=self._ti.solution['q'][7:, node_idx:node_idx+1].reshape(1,-1)
+        full_jnts_q=self._ti.solution['q'][7:, node_idx:node_idx+1].reshape(1,-1).astype(self._dtype)
 
         if self._custom_opts["replace_continuous_joints"] or (not reduce):
             if clamp:
@@ -565,7 +570,7 @@ class HybridQuadRhc(RHController):
         efforts_on_node = self._ti.eval_efforts_on_node(node_idx=node_idx)
         
         return efforts_on_node[6:, 0].reshape(1,  
-                self._nv_jnts)
+                self._nv_jnts).astype(self._dtype)
     
     def _get_rhc_cost(self):
 
@@ -695,17 +700,18 @@ class HybridQuadRhc(RHController):
         root_p_from_rhc=self._get_root_full_q_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
         p_root[:, :]=root_p_from_rhc # position in open loop
 
-        # root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
-        # root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
-        # root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
-        # v_root[:, :]=root_v_from_rhc
-        # omega[:, :]=root_omega_from_rhc
+        root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
+        root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
+        root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
+        jnt_q_from_rhc=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False).reshape(-1, 1)
+        jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
+                
+        # computing estimation defects
+        jnt_q_delta=jnt_q_from_rhc-q_jnts
+        jnt_v_delta=jnt_v_from_rhc-v_jnts
+        # v_root_delta=root_v_from_rhc-v_root
+        omega_root_delta=root_omega_from_rhc-omega
 
-        # jnt_q_from_rhc=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False).reshape(-1, 1)
-        # q_jnts[:, :]=jnt_q_from_rhc
-        # jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
-        # v_jnts[:, :]=jnt_v_from_rhc
-        
         # rhc variables to be set
         q=self._prb.getVariables("q") # .setBounds()
         root_p_rhc=q[0:3] # root p
@@ -718,25 +724,29 @@ class HybridQuadRhc(RHController):
         acc=self._prb.getVariables("a")
         lin_a_prb=acc[0:3] # lin acc
         
-        # close state on known quantities
+        # close state on known quantities, estimate some (e.g. lin vel) and
+        # open loop if thing start to explode
+        delta=np.max(np.abs(jnt_v_delta))
+        self._alpha=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
+        
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
         root_q_rhc.setBounds(lb=q_root, 
             ub=q_root, nodes=0)
-        jnts_q_rhc.setBounds(lb=q_jnts, 
-            ub=q_jnts, nodes=0)
-        # root_v_rhc.setBounds(lb=v_root, 
-        #     ub=v_root, nodes=0)
-        root_omega_rhc.setBounds(lb=omega, 
-            ub=omega, nodes=0)
-        jnts_v_rhc.setBounds(lb=v_jnts, 
-            ub=v_jnts, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts+self._alpha*jnt_q_delta, 
+            ub=q_jnts+self._alpha*jnt_q_delta, nodes=0)
+        root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
+            ub=self._v_inf[0:3], nodes=0)
+        root_omega_rhc.setBounds(lb=omega+self._alpha*omega_root_delta, 
+            ub=omega+self._alpha*omega_root_delta, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts+self._alpha*jnt_v_delta, 
+            ub=v_jnts+self._alpha*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
-            # write base lin acceleration from meas
+            # write base lin 13793197 from meas
             lin_a_prb.setBounds(lb=a_root[0:3, :], 
                 ub=a_root[0:3, :], 
                 nodes=0)
-        
+
         # return state used for feedback
         qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
                 axis=0)
@@ -892,7 +902,7 @@ class HybridQuadRhc(RHController):
         return constr_names, constr_dims
     
     def _get_q_from_sol(self):
-        full_q=self._ti.solution['q']
+        full_q=self._ti.solution['q'].astype(self._dtype)
         if self._custom_opts["replace_continuous_joints"]:
             return full_q
         else:
@@ -909,10 +919,10 @@ class HybridQuadRhc(RHController):
             return self._full_q_reduced
 
     def _get_v_from_sol(self):
-        return self._ti.solution['v']
+        return self._ti.solution['v'].astype(self._dtype)
     
     def _get_a_from_sol(self):
-        return self._ti.solution['a']
+        return self._ti.solution['a'].astype(self._dtype)
     
     def _get_a_dot_from_sol(self):
         return None
@@ -921,7 +931,7 @@ class HybridQuadRhc(RHController):
         # to be overridden by child class
         contact_names =self._get_contacts() # we use controller-side names
         try: 
-            data = [self._ti.solution["f_" + key] for key in contact_names]
+            data = [self._ti.solution["f_" + key].astype(self._dtype) for key in contact_names]
             return np.concatenate(data, axis=0)
         except:
             return None

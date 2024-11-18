@@ -26,6 +26,10 @@ class GaitManager:
 
         self._custom_opts=custom_opts
 
+        self._is_open_loop=False
+        if "is_open_loop" in self._custom_opts:
+            self._is_open_loop=self._custom_opts["is_open_loop"]
+
         self.task_interface = task_interface
         self._phase_manager = phase_manager
         self._model=self.task_interface.model
@@ -109,37 +113,53 @@ class GaitManager:
             self._flight_phases[contact]=self._contact_timelines[contact].createPhase(flight_phase_short_duration, 
                                     f'flight_{contact}_short')
             
-            # ref pos traj
-            
+            # ref traj for contacts
             self._ref_trjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()]) # allocate traj
             # of max length eual to number of nodes
-            init_z_foot = self._fk_contacts[contact](q=self._q0)['ee_pos'].elements()[2]
-            self._ref_trjs[contact][2, :] = np.atleast_2d(init_z_foot)
-            if self.task_interface.getTask(f'z_{contact}') is not None:
-                self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'z_{contact}'), 
-                        self._ref_trjs[contact][2, 0:1], 
-                        nodes=list(range(0, flight_phase_short_duration)))
-            else:
+
+            # sanity checks
+            self._zpos_task_found=True
+            self._zvel_task_found=True
+            if self.task_interface.getTask(f'z_{contact}') is None:
+                self._zpos_task_found=False
+            if self.task_interface.getTask(f'vz_{contact}') is None:
+                self._zvel_task_found=False
+            if (not self._zpos_task_found) and (not self._zvel_task_found):
                 Journal.log(self.__class__.__name__,
                     "_init_contact_timelines",
-                    f"contact pos traj tracking task z_{contact} not found -> it won't be used",
-                    LogType.WARN,
+                    f"neither pos or vel task for contacts were found! Aborting.",
+                    LogType.EXCEP,
+                    throw_when_excep=True)
+            if (not self._zpos_task_found) and self._is_open_loop:
+                Journal.log(self.__class__.__name__,
+                    "_init_contact_timelines",
+                    f"Running in open loop, but no contact pos task found. Aborting.",
+                    LogType.EXCEP,
+                    throw_when_excep=True)
+            if (not self._zvel_task_found) and (not self._is_open_loop):
+                Journal.log(self.__class__.__name__,
+                    "_init_contact_timelines",
+                    f"Running in closed loop, but contact vel task not found. Aborting",
+                    LogType.EXCEP,
                     throw_when_excep=True)
             
-            # ref vel traj
-            self._ref_vtrjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()]) # allocate traj
-            # of max length eual to number of nodes
-            if self.task_interface.getTask(f'vz_{contact}') is not None:
+            self._ref_trjs[contact]=None
+            self._ref_vtrjs[contact]=None
+            if self._is_open_loop: # we use pos trajectory
+                self._ref_trjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()])
+                init_z_foot = self._fk_contacts[contact](q=self._q0)['ee_pos'].elements()[2]
+                self._ref_trjs[contact][2, :] = np.atleast_2d(init_z_foot)
+                self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'z_{contact}'), 
+                    self._ref_trjs[contact][2, 0:1], 
+                    nodes=list(range(0, flight_phase_short_duration)))
+            else: # foot traj in velocity
+                # ref vel traj
+                self._ref_vtrjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()]) # allocate traj
+                # of max length eual to number of nodes
                 self._ref_vtrjs[contact][2, :] = np.atleast_2d(0)
                 self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'vz_{contact}'), 
-                    self._ref_vtrjs[contact], 
+                    self._ref_vtrjs[contact][2, 0:1], 
                     nodes=list(range(0, flight_phase_short_duration)))
-            else:
-                Journal.log(self.__class__.__name__,
-                    "_init_contact_timelines",
-                    f"contact vel traj tracking task vz_{contact} not found-> it won't be used",
-                    LogType.WARN,
-                    throw_when_excep=True)
             
             # ee_vel=self._fkd_contacts[contact](q=self._model.q, 
             #             qdot=self._model.v)['ee_vel_linear']
@@ -194,22 +214,34 @@ class GaitManager:
             if not len(flights_on_horizon)==0: # some flight phases are there
                 last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
             if last_flight_idx<self._injection_node: # allow injecting
-
-                # recompute trajectory online
-                starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
-                self._ref_trjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.from_derivatives(self._flight_duration, 
-                                                                        starting_pos, 
-                                                                        starting_pos+self._dh, 
-                                                                        self._step_height,
-                    derivatives=self._traj_der,
-                    second_der=self._traj_second_der))
-                
-                for i in range(self._flight_duration):
-                    res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
-                        pos=self._injection_node+i, 
-                        absolute_position=True)
-                    phase_token.setItemReference(f'z_{contact_name}',
-                        self._ref_trjs[contact_name][:, i])
+                if self._ref_trjs[contact_name] is not None:
+                    # recompute trajectory online (just needed if using pos traj)
+                    starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
+                    self._ref_trjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.from_derivatives(self._flight_duration, 
+                                                                            starting_pos, 
+                                                                            starting_pos+self._dh, 
+                                                                            self._step_height,
+                        derivatives=self._traj_der,
+                        second_der=self._traj_second_der))
+                    for i in range(self._flight_duration):
+                        res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
+                            pos=self._injection_node+i, 
+                            absolute_position=True)
+                        phase_token.setItemReference(f'z_{contact_name}',
+                            self._ref_trjs[contact_name][:, i])
+                if self._ref_vtrjs[contact_name] is not None:
+                    self._ref_vtrjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_duration, 
+                                                                            0.0, 
+                                                                            0.0+self._dh, 
+                                                                            self._step_height,
+                        derivatives=self._traj_der,
+                        second_der=self._traj_second_der))
+                    for i in range(self._flight_duration):
+                        res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
+                            pos=self._injection_node+i, 
+                            absolute_position=True)
+                        phase_token.setItemReference(f'vz_{contact_name}',
+                            self._ref_vtrjs[contact_name][2:3, i:i+1])
                 
         else:
             Journal.log(self.__class__.__name__,
