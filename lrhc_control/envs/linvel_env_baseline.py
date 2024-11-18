@@ -287,7 +287,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             2*torch.pi,
             30.0,
             2.0,
-            5.0,
+            1.0,
             2*torch.pi,
             30.0,
             200.0,
