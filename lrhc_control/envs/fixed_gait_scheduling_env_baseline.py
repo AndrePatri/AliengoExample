@@ -38,7 +38,7 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
         self._agent_twist_ref_h = self._rhc_twist_cmd_rhc_h.clone()
         self._agent_twist_ref_w = self._rhc_twist_cmd_rhc_h.clone()
         
-        phase_period_walk=2.0
+        phase_period_walk=1.5
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -101,7 +101,7 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
         # overwriting agent gait actions with gait scheduler ones
         self._gait_scheduler_walk.step()
         self._gait_scheduler_trot.step()
-        walk_to_trot_thresh=0.8 # [m/s]
+        walk_to_trot_thresh=0.3 # [m/s]
         stopping_thresh=0.05
         have_to_go_fast=agent_twist_ref_current[0:3].norm(dim=1,keepdim=True)>walk_to_trot_thresh
         have_to_stop=agent_twist_ref_current[0:3].norm(dim=1,keepdim=True)<stopping_thresh
