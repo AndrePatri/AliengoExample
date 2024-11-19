@@ -512,7 +512,8 @@ class HybridQuadRhc(RHController):
 
         root_q_full=self._ti.solution['q'][0:7, node_idx].reshape(1, 7).astype(self._dtype)
 
-        np.nan_to_num(root_q_full, nan=1.0, posinf=1.0, neginf=-1.0, copy=False) # in place
+        np.nan_to_num(root_q_full, nan=1e3, posinf=1e3, neginf=-1e3, copy=False)
+        np.clip(a=root_q_full, a_min=-1e3, a_max=1e3, out=root_q_full)
 
         return root_q_full
     
@@ -547,7 +548,7 @@ class HybridQuadRhc(RHController):
         full_jnts_q=self._ti.solution['q'][7:, node_idx:node_idx+1].reshape(1,-1).astype(self._dtype)
         
         np.nan_to_num(full_jnts_q, nan=1e3, posinf=1e3, neginf=-1e3, copy=False) # in place
-        # np.clip(a=full_jnts_q, a_max=1e3, a_min=-1e3, out=full_jnts_q) # in place
+        np.clip(a=full_jnts_q, a_max=1e3, a_min=-1e3, out=full_jnts_q) # in place
 
         if self._custom_opts["replace_continuous_joints"] or (not reduce):
             if clamp:
@@ -948,7 +949,8 @@ class HybridQuadRhc(RHController):
             data=[]
             for key in contact_names:
                 contact_f=self._ti.solution["f_" + key].astype(self._dtype)
-                np.nan_to_num(contact_f, nan=1e6, posinf=1e6, neginf=-1e6, copy=False) # in place
+                np.nan_to_num(contact_f, nan=1e6, posinf=1e6, neginf=-1e6, copy=False)
+                np.clip(a=contact_f, a_max=1e6, a_min=-1e6, out=contact_f)
                 data.append(contact_f)
             return np.concatenate(data, axis=0)
         except:
