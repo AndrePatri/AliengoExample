@@ -30,7 +30,12 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
             debug=debug,
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
-
+    
+    def get_file_paths(self):
+        paths=super().get_file_paths()
+        paths.append(os.path.abspath(__file__))        
+        return paths
+    
     def _custom_post_init(self):
         
         super()._custom_post_init()
@@ -103,8 +108,8 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
         self._gait_scheduler_trot.step()
         walk_to_trot_thresh=0.3 # [m/s]
         stopping_thresh=0.05
-        have_to_go_fast=agent_twist_ref_current[0:3].norm(dim=1,keepdim=True)>walk_to_trot_thresh
-        have_to_stop=agent_twist_ref_current[0:3].norm(dim=1,keepdim=True)<stopping_thresh
+        have_to_go_fast=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>walk_to_trot_thresh
+        have_to_stop=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)<stopping_thresh
         # default to walk
         agent_action[:, 6:10] = self._gait_scheduler_walk.get_signal(clone=True)
         # for fast enough refs, trot

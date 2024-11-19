@@ -454,6 +454,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
     def _apply_actions_to_rhc(self):
         
+        self._set_refs()
+
+        self._write_refs()
+
+    def _set_refs(self):
+
         agent_action = self.get_actions() # see _get_action_names() to get 
         # the meaning of each component of this tensor
 
@@ -488,6 +494,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             # actually apply actions to controller
         else:
             rhc_latest_pos_ref[:, :] = agent_action[:, 6:10]
+
+    def _write_refs(self):
 
         if self._use_gpu:
             # GPU->CPU --> we cannot use asynchronous data transfer since it's unsafe
