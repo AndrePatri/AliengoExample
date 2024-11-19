@@ -1095,7 +1095,7 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
 
-        self._n_noisy_envs = 20 # n of random envs on which noisy actions will be applied
+        self._n_noisy_envs = 50 # n of random envs on which noisy actions will be applied
         self._noise_freq = 50
         self._noise_duration = 1 # should be less than _noise_freq
 
