@@ -85,6 +85,7 @@ class HybridQuadRhc(RHController):
             "fixed_flights": True,
             "lin_a_feedback": False,
             "is_open_loop": self._open_loop,
+            "alpha_from_outsize": False,
             "alpha_half": 1.0}
 
         self._custom_opts.update(custom_opts)
@@ -740,10 +741,14 @@ class HybridQuadRhc(RHController):
         
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
-        delta=np.max(np.abs(jnt_v_delta))
-        # fail_idx=self._get_failure_index()
-        # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
-        alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
+        alpha_now=1.0
+        if self._custom_opts["alpha_from_outsize"]:
+            alpha_now=self.rhc_refs.get_alpha()
+        else: # "autotuned" alpha
+            delta=np.max(np.abs(jnt_v_delta))
+            # fail_idx=self._get_failure_index()
+            # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
+            alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
         self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem
 
         root_p_rhc.setBounds(lb=p_root,
