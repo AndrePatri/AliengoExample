@@ -1150,7 +1150,7 @@ class LRhcTrainingEnvBase(ABC):
                             n_envs=self._n_envs,
                             n_steps_lb=self._episode_timeout_lb,
                             n_steps_ub=self._episode_timeout_ub,
-                            randomize_offsets_at_startup=True,
+                            randomize_offsets_at_startup=True, # this has to be randomized
                             is_server=True,
                             verbose=self._verbose,
                             vlevel=self._vlevel,
@@ -1162,7 +1162,7 @@ class LRhcTrainingEnvBase(ABC):
                             n_envs=self._n_envs,
                             n_steps_lb=self._n_steps_task_rand_lb,
                             n_steps_ub=self._n_steps_task_rand_ub,
-                            randomize_offsets_at_startup=False,
+                            randomize_offsets_at_startup=False, # not necessary since it will be synched with the timeout counter
                             is_server=True,
                             verbose=self._verbose,
                             vlevel=self._vlevel,
@@ -1176,7 +1176,7 @@ class LRhcTrainingEnvBase(ABC):
                             n_envs=self._n_envs,
                             n_steps_lb=self._random_rst_freq,
                             n_steps_ub=self._random_rst_freq,
-                            randomize_offsets_at_startup=False,
+                            randomize_offsets_at_startup=True,
                             is_server=True,
                             verbose=self._verbose,
                             vlevel=self._vlevel,

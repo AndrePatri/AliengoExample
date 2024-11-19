@@ -1066,7 +1066,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_nominal = int(2e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 16384
+        self._batch_size = 8192
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
@@ -1095,9 +1095,9 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
 
-        self._n_noisy_envs = 10 # n of random envs on which noisy actions will be applied
+        self._n_noisy_envs = 20 # n of random envs on which noisy actions will be applied
         self._noise_freq = 50
-        self._noise_duration = 10 # should be less than _noise_freq
+        self._noise_duration = 1 # should be less than _noise_freq
 
         self._is_continuous_actions=self._env.is_action_continuous()
         self._continuous_act_expl_noise_std=0.01
