@@ -273,6 +273,23 @@ class HybridQuadRhcRefs(RhcRefs):
 
         self._p_ref_default[:, :]=p_ref
         self._q_ref_default[:, :]=q_ref
+    
+    def set_alpha(self, alpha:float):
+        # set provided value
+        alpha_shared=self.alpha.get_numpy_mirror()
+        alpha_shared[self.robot_index, :] = alpha
+        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+                read=False)
+            
+    def get_alpha(self):
+        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+                    read=True)
+        alpha=self.alpha.get_numpy_mirror()[self.robot_index, :].item()
+        return alpha
+        
+    def get_alpha(alpha:float):
+        alpha=self.alpha.get_numpy_mirror()
+        alpha[self.robot_index, :] = 0.0
 
     def reset(self):
 
@@ -289,6 +306,9 @@ class HybridQuadRhcRefs(RhcRefs):
 
             flight_info_current=self.flight_info.get_numpy_mirror()
             flight_info_current[self.robot_index, :] = 0.0
+
+            alpha=self.alpha.get_numpy_mirror()
+            alpha[self.robot_index, :] = 0.0
 
             self.rob_refs.root_state.set(data_type="p", data=self._p_ref_default, robot_idxs=self.robot_index_np)
             self.rob_refs.root_state.set(data_type="q", data=self._q_ref_default, robot_idxs=self.robot_index_np)
@@ -307,6 +327,8 @@ class HybridQuadRhcRefs(RhcRefs):
             
             self.flight_info.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.flight_info.n_cols,
                                 read=False)
+            
+            
             
             # should also empty the timeline for stepping phases
             self._step_idx = 0

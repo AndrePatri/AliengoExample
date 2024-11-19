@@ -89,7 +89,6 @@ class HybridQuadRhc(RHController):
 
         self._custom_opts.update(custom_opts)
         
-        self._alpha = 0.0 # 0 closed loop, 1 open, 0.5 mean of the meas and open loop state
         self._alpha_half=self._custom_opts["alpha_half"]
 
         super().__init__(srdf_path=srdf_path,
@@ -742,20 +741,21 @@ class HybridQuadRhc(RHController):
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
         delta=np.max(np.abs(jnt_v_delta))
-        self._alpha=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
-        
+        alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
+        self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem
+
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
-        root_q_rhc.setBounds(lb=q_root+self._alpha*root_q_delta, 
-            ub=q_root+self._alpha*root_q_delta, nodes=0)
-        jnts_q_rhc.setBounds(lb=q_jnts+self._alpha*jnt_q_delta, 
-            ub=q_jnts+self._alpha*jnt_q_delta, nodes=0)
+        root_q_rhc.setBounds(lb=q_root+alpha_now*root_q_delta, 
+            ub=q_root+alpha_now*root_q_delta, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts+alpha_now*jnt_q_delta, 
+            ub=q_jnts+alpha_now*jnt_q_delta, nodes=0)
         root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
             ub=self._v_inf[0:3], nodes=0)
-        root_omega_rhc.setBounds(lb=omega+self._alpha*omega_root_delta, 
-            ub=omega+self._alpha*omega_root_delta, nodes=0)
-        jnts_v_rhc.setBounds(lb=v_jnts+self._alpha*jnt_v_delta, 
-            ub=v_jnts+self._alpha*jnt_v_delta, nodes=0)
+        root_omega_rhc.setBounds(lb=omega+alpha_now*omega_root_delta, 
+            ub=omega+alpha_now*omega_root_delta, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts+alpha_now*jnt_v_delta, 
+            ub=v_jnts+alpha_now*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
             # write base lin 13793197 from meas
             lin_a_prb.setBounds(lb=a_root[0:3, :], 
