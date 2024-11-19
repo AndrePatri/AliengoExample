@@ -741,6 +741,8 @@ class HybridQuadRhc(RHController):
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
         delta=np.max(np.abs(jnt_v_delta))
+        # fail_idx=self._get_failure_index()
+        # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
         alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
         self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem
 
