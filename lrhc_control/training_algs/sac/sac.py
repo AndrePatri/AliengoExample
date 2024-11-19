@@ -48,7 +48,7 @@ class SAC(SActorCriticAlgoBase):
         
         # add experience to replay buffer
         self._add_experience(obs=obs,
-                actions=actions,
+                actions=self._env.get_actions(clone=False), # getting applied action (in case some change was made by env)
                 rewards=self._env.get_rewards(clone=False), # no need to clone 
                 next_obs=self._env.get_next_obs(clone=False), # data is copied anyway
                 next_terminal=self._env.get_terminations(clone=False)) 
