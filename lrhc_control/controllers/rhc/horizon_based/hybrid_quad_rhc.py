@@ -510,7 +510,11 @@ class HybridQuadRhc(RHController):
 
     def _get_root_full_q_from_sol(self, node_idx=1):
 
-        return self._ti.solution['q'][0:7, node_idx].reshape(1, 7).astype(self._dtype)
+        root_q_full=self._ti.solution['q'][0:7, node_idx].reshape(1, 7).astype(self._dtype)
+
+        np.nan_to_num(root_q_full, nan=1.0, posinf=1.0, neginf=-1.0, copy=False) # in place
+
+        return root_q_full
     
     def _get_full_q_from_sol(self, node_idx=1):
 
@@ -541,6 +545,9 @@ class HybridQuadRhc(RHController):
             clamp: bool = True):
         
         full_jnts_q=self._ti.solution['q'][7:, node_idx:node_idx+1].reshape(1,-1).astype(self._dtype)
+        
+        np.nan_to_num(full_jnts_q, nan=1e3, posinf=1e3, neginf=-1e3, copy=False) # in place
+        # np.clip(a=full_jnts_q, a_max=1e3, a_min=-1e3, out=full_jnts_q) # in place
 
         if self._custom_opts["replace_continuous_joints"] or (not reduce):
             if clamp:
@@ -556,9 +563,13 @@ class HybridQuadRhc(RHController):
             return self._jnts_q_reduced
         
     def _get_jnt_v_from_sol(self, node_idx=1):
-
-        return self._get_v_from_sol()[6:, node_idx].reshape(1,  
+        
+        jnt_v_sol=self._get_v_from_sol()[6:, node_idx].reshape(1,  
                     self._nv_jnts)
+        np.nan_to_num(jnt_v_sol, nan=1e5, posinf=1e5, neginf=-1e5, copy=False) # in place
+        # np.clip(a=jnt_v_sol, a_max=1e5, a_min=-1e5, out=jnt_v_sol) # in place
+
+        return jnt_v_sol
 
     def _get_jnt_a_from_sol(self, node_idx=1):
 
