@@ -945,7 +945,11 @@ class HybridQuadRhc(RHController):
         # to be overridden by child class
         contact_names =self._get_contacts() # we use controller-side names
         try: 
-            data = [self._ti.solution["f_" + key].astype(self._dtype) for key in contact_names]
+            data=[]
+            for key in contact_names:
+                contact_f=self._ti.solution["f_" + key].astype(self._dtype)
+                np.nan_to_num(contact_f, nan=1e6, posinf=1e6, neginf=-1e6, copy=False) # in place
+                data.append(contact_f)
             return np.concatenate(data, axis=0)
         except:
             return None
