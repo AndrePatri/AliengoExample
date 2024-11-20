@@ -31,41 +31,15 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
         
-        self._n_demo_envs_perc = 0.05 # % [0, 1]
-        self._n_demo_envs=round(self._n_demo_envs_perc*self._n_envs)
+        self.switch_demo(active=True) # enable using demonstrations
 
-        self._add_demos=False
+    def get_file_paths(self):
+        paths=super().get_file_paths()
+        paths.append(os.path.abspath(__file__))        
+        return paths
 
-        if self._use_pos_control:
-            Journal.log(self.__class__.__name__,
-                "__init__",
-                "not supported with pos control!",
-                LogType.EXCEP,
-                throw_when_excep=True)
-        if self._use_prob_based_stepping:
-            Journal.log(self.__class__.__name__,
-                "__init__",
-                "not supported with probabilistic-based stepping!",
-                LogType.EXCEP,
-                throw_when_excep=True)
-            
-        if not self._n_demo_envs >0:
-            Journal.log(self.__class__.__name__,
-                "__init__",
-                "n_demo_envs not > 0",
-                LogType.WARN,
-                throw_when_excep=False)
-        else:
-            Journal.log(self.__class__.__name__,
-                "__init__",
-                f"Will run with {self._n_demo_envs} demonstration envs.",
-                LogType.INFO)
+    def _init_demo_envs(self):
         
-        self._demo_envs_idxs = torch.randperm(self._n_envs, device=self._device)[:self._n_demo_envs]
-        self._demo_envs_idxs_bool=torch.full((self._n_envs, ), dtype=torch.bool, device=self._device,
-                                    fill_value=False)
-        self._demo_envs_idxs_bool[self._demo_envs_idxs]=True
-
         self._env_to_gait_sched_mapping=torch.full((self._n_envs, ), dtype=torch.int, device=self._device,
                                     fill_value=-self._n_envs+1)
         
@@ -74,24 +48,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             if self._demo_envs_idxs_bool[i]:
                 self._env_to_gait_sched_mapping[i]=counter
                 counter+=1
-        
-        demo_idxs_str=", ".join(map(str, self._demo_envs_idxs.tolist()))
-        Journal.log(self.__class__.__name__,
-            "__init__",
-            f"Demo env. incexes are [{demo_idxs_str}]",
-            LogType.INFO)
-        
-        self.switch_demo(active=True)
-        
+
         self._init_gait_schedulers()
-
-    def switch_demo(self, active: bool = False):
-        self._add_demos=active
-
-    def get_file_paths(self):
-        paths=super().get_file_paths()
-        paths.append(os.path.abspath(__file__))        
-        return paths
     
     def _init_gait_schedulers(self):
 
@@ -146,12 +104,14 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
     def _custom_post_step(self,episode_finished):
         super()._custom_post_step(episode_finished=episode_finished)
         # executed after checking truncations and terminations
-        # if self._use_gpu:
-        #     self._gait_scheduler_walk.reset(to_be_reset=episode_finished.cuda().flatten())
-        #     self._gait_scheduler_trot.reset(to_be_reset=episode_finished.cuda().flatten())
-        # else:
-        #     self._gait_scheduler_walk.reset(to_be_reset=episode_finished.cpu().flatten())
-        #     self._gait_scheduler_trot.reset(to_be_reset=episode_finished.cuda().flatten())
+        finished_and_demo=torch.logical_and(episode_finished.flatten(), self._demo_envs_idxs_bool)
+        finished_demo_idxs=self._env_to_gait_sched_mapping[finished_and_demo]
+        if self._use_gpu:
+            self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+            self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+        else:
+            self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
+            self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
 
     def _apply_actions_to_rhc(self):
         
@@ -186,5 +146,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         rhc_latest_contact_ref[fast_and_demo, :] = agent_action[fast_and_demo, 6:10] > self._gait_scheduler_trot.threshold() 
         rhc_latest_contact_ref[stop_and_demo, :] = True # keep contact
         
+        # rhc_latest_twist_cmd = self._rhc_refs.rob_refs.root_state.get(data_type="twist", gpu=self._use_gpu)
+        # rhc_latest_twist_cmd[:, 0:6] = 0.0
+
         super()._write_refs() # finally, write refs
 

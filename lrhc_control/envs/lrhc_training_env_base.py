@@ -73,8 +73,11 @@ class LRhcTrainingEnvBase(ABC):
             vec_ep_freq_metrics_db: int = 1,
             use_action_smoothing: bool = False,
             smoothing_horizon_c: float = 0.01,
-            smoothing_horizon_d: float = 0.1):
+            smoothing_horizon_d: float = 0.1,
+            n_demo_envs_perc: float = 0.0):
         
+        self._n_demo_envs_perc=n_demo_envs_perc
+
         self._vec_ep_freq_metrics_db = vec_ep_freq_metrics_db # update single env metrics every
         # n episodes
         
@@ -203,6 +206,8 @@ class LRhcTrainingEnvBase(ABC):
         self._init_terminations()
         self._init_truncations()
         self._init_infos()
+        
+        self._demo_setup() # setup for demo envs
 
         self._custom_post_init()
 
@@ -214,6 +219,48 @@ class LRhcTrainingEnvBase(ABC):
     def __del__(self):
 
         self.close()
+
+    def _demo_setup(self):
+
+        self._demo_envs_idxs=None
+        self._demo_envs_idxs_bool=None
+        self._n_demo_envs=round(self._n_demo_envs_perc*self._n_envs)
+        self._add_demos=False
+        if not self._n_demo_envs >0:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                "will not use demo environments",
+                LogType.INFO,
+                throw_when_excep=False)
+        else:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                f"Will run with {self._n_demo_envs} demonstration envs.",
+                LogType.INFO)
+            self._demo_envs_idxs = torch.randperm(self._n_envs, device=self._device)[:self._n_demo_envs]
+            self._demo_envs_idxs_bool=torch.full((self._n_envs, ), dtype=torch.bool, device=self._device,
+                                        fill_value=False)
+            self._demo_envs_idxs_bool[self._demo_envs_idxs]=True
+
+            self._init_demo_envs() # custom logic
+
+            demo_idxs_str=", ".join(map(str, self._demo_envs_idxs.tolist()))
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                f"Demo env. incexes are [{demo_idxs_str}]",
+                LogType.INFO)
+    
+    def demo_env_idxs(self, get_bool: bool=False):
+        if get_bool:
+            return self._demo_envs_idxs_bool
+        else:
+            return self._demo_envs_idxs
+        
+    def _init_demo_envs(self):
+        pass
+
+    def switch_demo(self, active: bool = False):
+        self._add_demos=active
 
     def _get_this_file_path(self):
         return self._this_path
