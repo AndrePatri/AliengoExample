@@ -31,7 +31,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
         
-        self._n_demo_envs_perc = 0.5 # % [0, 1]
+        self._n_demo_envs_perc = 0.05 # % [0, 1]
         self._n_demo_envs=round(self._n_demo_envs_perc*self._n_envs)
 
         self._add_demos=False
@@ -53,8 +53,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             Journal.log(self.__class__.__name__,
                 "__init__",
                 "n_demo_envs not > 0",
-                LogType.EXCEP,
-                throw_when_excep=True)
+                LogType.WARN,
+                throw_when_excep=False)
         else:
             Journal.log(self.__class__.__name__,
                 "__init__",
