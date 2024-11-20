@@ -363,10 +363,9 @@ class SActorCriticAlgoBase(ABC):
         agent_state_dict=self._agent.state_dict()
         if not self._eval: # training
             # we log the joints which were observed during training
-            if "observed_jnts" in agent_state_dict:
-                observed_joints=self._env.get_observed_joints()
-                if observed_joints is not None:
-                    agent_state_dict["observed_jnts"]=self._env.get_observed_joints()
+            observed_joints=self._env.get_observed_joints()
+            if observed_joints is not None:
+                agent_state_dict["observed_jnts"]=self._env.get_observed_joints()
 
         torch.save(agent_state_dict, path) # saves whole agent state
         # torch.save(self._agent.parameters(), path) # only save agent parameters
