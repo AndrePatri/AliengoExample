@@ -945,7 +945,6 @@ class SActorCriticAlgoBase(ABC):
             dtype=torch.float32, fill_value=0.0, device="cpu")
         
         if self._n_expl_envs > 0:
-
             self._ep_tsteps_expl_env_distribution = torch.full((self._db_data_size, self._n_expl_envs, 1), 
                     dtype=torch.int32, fill_value=-1, device="cpu")
 
@@ -963,6 +962,26 @@ class SActorCriticAlgoBase(ABC):
             self._sub_rew_min_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=0.0, device="cpu")
         
+        if self._env.demo_env_idxs() is not None:
+            n_demo_envs=self._env.demo_env_idxs().shape[0]
+
+            self._ep_tsteps_demo_env_distribution = torch.full((self._db_data_size, n_demo_envs, 1), 
+                    dtype=torch.int32, fill_value=-1, device="cpu")
+
+            # also log sub rewards metrics for exploration envs
+            self._sub_rew_max_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._sub_rew_avrg_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._sub_rew_min_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._sub_rew_max_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._sub_rew_avrg_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._sub_rew_min_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=0.0, device="cpu")
+            
         # custom data from env
         self._custom_env_data = {}
         db_data_names = list(self._env.custom_db_data.keys())
@@ -1099,7 +1118,7 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
 
-        self._n_noisy_envs = 0 # n of random envs on which noisy actions will be applied
+        self._n_expl_envs = 0 # n of random envs on which noisy actions will be applied
         self._noise_freq = 50
         self._noise_duration = 1 # should be less than _noise_freq
 
@@ -1115,15 +1134,28 @@ class SActorCriticAlgoBase(ABC):
 
         self._num_db_envs = self._num_envs
         self._db_env_selector=None
-        if self._n_noisy_envs>0 and ((self._num_envs-self._n_noisy_envs)>0): # log data only from envs which are not altered (e.g. by exploration noise)
-            self._num_db_envs = self._num_envs-self._n_noisy_envs 
-            self._db_env_selector=torch.tensor(list(range(0,self._num_db_envs)),
-                dtype=torch.int,
-                device="cpu") # we assume last _n_noisy_envs will be noisy
-            self._expl_env_selector=torch.tensor(list(range(self._num_db_envs,self._num_envs)),
-                dtype=torch.int,
-                device="cpu") # we assume last _n_noisy_envs will be noisy
-        self._n_expl_envs=self._num_envs-self._num_db_envs
+
+        self._expl_env_selector=None
+        self._expl_env_selector_bool=None
+        self._db_env_selector=None
+        self._db_env_selector_bool=None
+        self._demo_env_selector=self._env.demo_env_idxs()
+        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
+        if self._n_expl_envs>0 and ((self._num_envs-self._n_expl_envs)>0): # log data only from envs which are not altered (e.g. by exploration noise)
+            self._num_db_envs = self._num_envs-self._n_expl_envs 
+            self._expl_env_selector = torch.randperm(self._num_envs, device="cpu")[:self._n_expl_envs]
+            self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
+                fill_value=False)
+            self._expl_env_selector_bool[self._expl_env_selector]=True
+            if self._demo_env_selector_bool is None:
+                self._db_env_selector_bool=~self._expl_env_selector_bool
+            else: # we log db data separately for env which are neither for demo nor for random exploration
+                self._db_env_selector_bool=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
+            self._db_env_selector=torch.nonzero(self._db_env_selector_bool)
+            self._db_env_selector_bool[self._db_env_selector]=True
+
+        else:
+            self._n_expl_envs=0
 
         self._transition_noise_freq=float(self._noise_duration)/float(self._noise_freq)
         self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
@@ -1190,7 +1222,7 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["n_expl_envs"] = self._n_expl_envs
         self._hyperparameters["noise_freq"] = self._noise_freq
         self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
-
+        
         # small debug log
         info = f"\nUsing \n" + \
             f"total (vectorized) timesteps to be simulated {self._total_timesteps_vec}\n" + \
@@ -1214,6 +1246,14 @@ class SActorCriticAlgoBase(ABC):
             f"experience to trgt q fun grad ratio: {self._exp_to_qft_grad_ratio}\n" + \
             f"amount of noisy transitions in replay buffer: {self._noise_buff_freq*100}% \n" + \
             f"db envs {self._num_db_envs}/{self._num_envs} \n" 
+        if self._env.demo_env_idxs() is not None:
+            demo_idxs_str=", ".join(map(str, self._env.demo_env_idxs().tolist()))
+            info=info + "Demo env. indexes are " + demo_idxs_str+"\n"
+        if self._expl_env_selector is not None:
+            random_expl_idxs=", ".join(map(str, self._expl_env_selector.tolist()))
+            info=info + "Random exploration env. indexes are " + random_expl_idxs+"\n"
+        db_env_idxs=", ".join(map(str, self._db_env_selector.tolist()))
+        info=info + "Debug env. indexes are " + db_env_idxs+"\n"
 
         Journal.log(self.__class__.__name__,
             "_init_params",
