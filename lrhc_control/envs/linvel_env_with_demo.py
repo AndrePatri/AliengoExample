@@ -31,6 +31,13 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
         
+        if self._demo_envs_idxs is None:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                "No demo environments present. Aborting",
+                LogType.EXCEP,
+                throw_when_excep=True)
+            
         self.switch_demo(active=True) # enable using demonstrations
 
     def get_file_paths(self):
