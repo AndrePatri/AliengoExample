@@ -34,6 +34,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         self._n_demo_envs_perc = 0.5 # % [0, 1]
         self._n_demo_envs=round(self._n_demo_envs_perc*self._n_envs)
 
+        self._add_demos=False
+
         if self._use_pos_control:
             Journal.log(self.__class__.__name__,
                 "__init__",
@@ -50,13 +52,13 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         if not self._n_demo_envs >0:
             Journal.log(self.__class__.__name__,
                 "__init__",
-                "n_imitation_envs not > 0",
+                "n_demo_envs not > 0",
                 LogType.EXCEP,
                 throw_when_excep=True)
         else:
             Journal.log(self.__class__.__name__,
                 "__init__",
-                f"Will run with {self._n_demo_envs} imitation envs.",
+                f"Will run with {self._n_demo_envs} demonstration envs.",
                 LogType.INFO)
         
         self._demo_envs_idxs = torch.randperm(self._n_envs, device=self._device)[:self._n_demo_envs]
@@ -66,13 +68,25 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
 
         self._env_to_gait_sched_mapping=torch.full((self._n_envs, ), dtype=torch.int, device=self._device,
                                     fill_value=-self._n_envs+1)
+        
         counter=0
         for i in range(self._n_envs):
             if self._demo_envs_idxs_bool[i]:
                 self._env_to_gait_sched_mapping[i]=counter
                 counter+=1
         
+        demo_idxs_str=", ".join(map(str, self._demo_envs_idxs.tolist()))
+        Journal.log(self.__class__.__name__,
+            "__init__",
+            f"Demo env. incexes are [{demo_idxs_str}]",
+            LogType.INFO)
+        
+        self.switch_demo(active=True)
+        
         self._init_gait_schedulers()
+
+    def switch_demo(self, active: bool = False):
+        self._add_demos=active
 
     def get_file_paths(self):
         paths=super().get_file_paths()
