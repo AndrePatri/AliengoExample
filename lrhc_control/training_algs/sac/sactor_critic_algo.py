@@ -512,9 +512,14 @@ class SActorCriticAlgoBase(ABC):
                     map_location=self._torch_device)
         
         observed_joints=self._env.get_observed_joints()
-        required_joints=model_dict["observed_jnts"]
-
-        self._check_observed_joints(observed_joints,required_joints)
+        if not ("observed_jnts" in model_dict):
+            Journal.log(self.__class__.__name__,
+            "_load_model",
+            "No observed joints key found in loaded model dictionary! Let's hope joints are ordered in the same way.",
+            LogType.WARN)
+        else:
+            required_joints=model_dict["observed_jnts"]
+            self._check_observed_joints(observed_joints,required_joints)
 
         self._agent.load_state_dict(model_dict)
         self._switch_training_mode(False)

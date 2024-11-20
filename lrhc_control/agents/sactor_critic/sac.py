@@ -211,6 +211,17 @@ class SACAgent(nn.Module):
                 "load_state_dict",
                 f"These parameters present in the provided state dictionary are not needed: {str(unexpected)}\n",
                 LogType.WARN)
+        
+        # sanity check on running normalizer
+        import re
+        running_norm_pattern = r"running_norm"
+        error=f"Found some keys in model state dictionary associated with a running normalizer. Are you running the agent with norm_obs=True?\n"
+        if any(re.match(running_norm_pattern, key) for key in unexpected):
+            Journal.log(self.__class__.__name__,
+                "load_state_dict",
+                error,
+                LogType.EXCEP,
+                throw_when_excep=True)
 
 class CriticQ(nn.Module):
     def __init__(self,
