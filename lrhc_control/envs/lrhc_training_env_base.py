@@ -72,7 +72,8 @@ class LRhcTrainingEnvBase(ABC):
             random_reset_freq: int = None, # [n episodes]
             vec_ep_freq_metrics_db: int = 1,
             use_action_smoothing: bool = False,
-            smoothing_horizon: float = 0.1):
+            smoothing_horizon_c: float = 0.01,
+            smoothing_horizon_d: float = 0.1):
         
         self._vec_ep_freq_metrics_db = vec_ep_freq_metrics_db # update single env metrics every
         # n episodes
@@ -113,7 +114,8 @@ class LRhcTrainingEnvBase(ABC):
         self._act_membf_size = round(act_membf_size/self._action_repeat) 
 
         self._use_action_smoothing=use_action_smoothing
-        self._smoothing_horizon=smoothing_horizon
+        self._smoothing_horizon_c=smoothing_horizon_c
+        self._smoothing_horizon_d=smoothing_horizon_d
         self._action_smoother_continuous=None
         self._action_smoother_discrete=None
 
@@ -380,7 +382,7 @@ class LRhcTrainingEnvBase(ABC):
                     actions[:, self._is_continuous_actions.flatten()])
             actions[:, self._is_continuous_actions.flatten()]=self._action_smoother_continuous.get()
         if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.update(ew_signal=
+            self._action_smoother_discrete.update(new_signal=
                     actions[:, ~self._is_continuous_actions.flatten()])
             actions[:, ~self._is_continuous_actions.flatten()]=self._action_smoother_discrete.get()
     
@@ -468,12 +470,14 @@ class LRhcTrainingEnvBase(ABC):
 
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset(to_be_reset=episode_finished.flatten(),
-                            init_data=self._defaut_act_buffer_action)
+                            init_data=self._defaut_action)
 
         if self._action_smoother_continuous is not None:
-            self._action_smoother_continuous.reset(to_be_reset=episode_finished.flatten())
+            self._action_smoother_continuous.reset(to_be_reset=episode_finished.flatten(),
+                reset_val=self._defaut_action[:, self._is_continuous_actions.flatten()])
         if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.reset(to_be_reset=episode_finished.flatten())
+            self._action_smoother_discrete.reset(to_be_reset=episode_finished.flatten(),
+                reset_val=self._defaut_action[:, ~self._is_continuous_actions.flatten()])
 
         # debug step if required (IMPORTANT: must be before remote reset so that we always db
         # actual data from the step and not after reset)
@@ -590,12 +594,12 @@ class LRhcTrainingEnvBase(ABC):
             self._rand_safety_reset_counter.reset()
 
         if self._act_mem_buffer is not None:
-            self._act_mem_buffer.reset_all(init_data=self._defaut_act_buffer_action)
+            self._act_mem_buffer.reset_all(init_data=self._defaut_action)
 
         if self._action_smoother_continuous is not None:
-            self._action_smoother_continuous.reset()
+            self._action_smoother_continuous.reset(reset_val=self._defaut_action[:, self._is_continuous_actions.flatten()])
         if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.reset()
+            self._action_smoother_discrete.reset(reset_val=self._defaut_action[:, ~self._is_continuous_actions.flatten()])
 
         self._synch_state(gpu=self._use_gpu) # read obs from shared mem
 
@@ -865,6 +869,8 @@ class LRhcTrainingEnvBase(ABC):
 
         self._actions.run()
 
+        self._defaut_action = torch.full_like(input=self.get_actions(),fill_value=0.0)
+
         if self._use_act_mem_bf:
             self._act_mem_buffer=MemBuffer(name="ActionMemBuf",
                 data_tensor=self._actions.get_torch_mirror(),
@@ -873,8 +879,7 @@ class LRhcTrainingEnvBase(ABC):
                 horizon=self._act_membf_size,
                 dtype=self._dtype,
                 use_gpu=self._use_gpu)
-            self._defaut_act_buffer_action = torch.full_like(input=self.get_actions(),fill_value=0.0)
-
+        
         # default to all continuous actions (changes the way noise is added)
         self._is_continuous_actions=torch.full((1, actions_dim), 
             dtype=torch.bool, device=device,
@@ -886,7 +891,7 @@ class LRhcTrainingEnvBase(ABC):
         discrete_actions=self.get_actions()[:, ~self._is_continuous_actions.flatten()]
         self._action_smoother_continuous=ExponentialSignalSmoother(signal=continuous_actions,
             update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
-            smoothing_horizon=self._smoothing_horizon,
+            smoothing_horizon=self._smoothing_horizon_c,
             target_smoothing=0.5, 
             debug=self._debug,
             dtype=self._dtype,
@@ -894,7 +899,7 @@ class LRhcTrainingEnvBase(ABC):
             name="ActionSmootherContinuous")
         self._action_smoother_discrete=ExponentialSignalSmoother(signal=discrete_actions,
             update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
-            smoothing_horizon=self._smoothing_horizon,
+            smoothing_horizon=self._smoothing_horizon_d,
             target_smoothing=0.5,
             debug=self._debug,
             dtype=self._dtype,

@@ -106,14 +106,19 @@ class ExponentialSignalSmoother():
                 LogType.EXCEP,
                 throw_when_excep=True)
 
-    def reset_all(self):
-        self._steps_counter.zero_()
-        self._smoothed_sig.zero_()
+    def reset_all(self, value: float = 0.0):
+        self._steps_counter[:, :]=value
+        self._smoothed_sig[:, :]=value
 
     def reset(self,
-        to_be_reset: torch.Tensor):
-        self._steps_counter[to_be_reset, :]=0
-        self._smoothed_sig[to_be_reset, :]=0.0
+        reset_val: torch.Tensor,
+        to_be_reset: torch.Tensor = None):
+        if to_be_reset is not None:
+            self._steps_counter[to_be_reset, :]=0
+            self._smoothed_sig[to_be_reset, :]=reset_val[to_be_reset, :]
+        else:
+            self._steps_counter[:, :]=0
+            self._smoothed_sig[:, :]=reset_val
 
     def update(self, 
         new_signal: torch.Tensor,
@@ -184,27 +189,189 @@ def add_white_noise(signal: torch.Tensor, noise_level: float) -> torch.Tensor:
     noise = torch.randn_like(signal) * noise_level
     return signal + noise
 
+# if __name__ == "__main__":
+
+    # import matplotlib.pyplot as plt
+    # # Set up test parameters
+    # n_envs = 1
+    # signal_dim = 1
+    # update_dt = 0.03  # [s]
+    # smoothing_horizon = 0.5  # [s]
+    # target_smoothing = 0.5  # 50%
+    # frequency = round(100 / update_dt)  # Frequency of the sinusoidal signal in Hz
+    # total_time = 10.0  # Total time for simulation [s]
+    # noise_level = 0.5  # Define the level of white noise to superpose
+    
+    # # Calculate the number of steps
+    # episode_length = int(round(total_time / update_dt)) + 1
+    # t = torch.linspace(0, total_time, episode_length)
+
+    # # Generate sinusoidal signal
+    # nominal_signal = sinusoidal_signal(t, frequency)
+    
+    # # Add white noise to the sinusoidal signal
+    # noisy_signal = add_white_noise(nominal_signal, noise_level)
+
+    # # Initialize ExponentialSignalSmoother
+    # smoother = ExponentialSignalSmoother(
+    #     signal=torch.zeros(n_envs, signal_dim, dtype=torch.float32),
+    #     update_dt=update_dt,
+    #     smoothing_horizon=smoothing_horizon,
+    #     target_smoothing=target_smoothing,
+    #     name="TestSmoother",
+    #     debug=True,
+    #     dtype=torch.float32,
+    #     use_gpu=False
+    # )
+    # print(f"alpha: {smoother.alpha()}")
+
+    # smoothed_signals = torch.zeros(episode_length, n_envs, signal_dim, dtype=torch.float32)
+    # for i in range(episode_length):
+    #     new_signal = noisy_signal[i].repeat(n_envs, signal_dim)  # Shape: (n_envs, signal_dim)
+    #     ep_finished = torch.tensor([False] * n_envs, dtype=torch.bool)
+    #     smoother.update(new_signal, ep_finished)
+        
+    #     smoothed_signals[i] = smoother.get(clone=True)
+
+    # # Flatten the tensor for plotting
+    # smoothed_signals = smoothed_signals.squeeze().numpy()
+
+    # # Plot the results
+    # plt.figure(figsize=(14, 7))
+    # plt.plot(t.numpy(), nominal_signal.numpy(), label='Nominal Signal', color='blue', linestyle='--')
+    # plt.plot(t.numpy(), noisy_signal.numpy(), label='Noisy Signal', color='green', linestyle=':')
+    # plt.plot(t.numpy(), smoothed_signals, label='Smoothed Signal', color='red')
+    # plt.xlabel('Time [s]')
+    # plt.ylabel('Signal Value')
+    # plt.title('Nominal, Noisy, and Smoothed Signals')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
+
+    # # Print last signal and smoothed signal
+    # print("Last nominal signal:")
+    # print(nominal_signal[-1].item())
+    # print("Last noisy signal:")
+    # print(noisy_signal[-1].item())
+    # print("Last smoothed signal:")
+    # print(smoothed_signals[-1, 0])
+    
+    # # Test resetting
+    # smoother.reset_all()
+    # print("\nAfter reset_all:")
+    # print("smoothed")
+    # print(smoother.get(clone=True))
+    # print("counter")
+    # print(smoother.counter(clone=True))
+
+    # # Update alpha and test
+    # smoother.update_alpha(update_dt=0.02, smoothing_horizon=1.0, target_smoothing=0.5)
+    # print("\nAfter updating alpha:")
+    # print(f"New alpha: {smoother.alpha()}")
+    # print("Smoothed signal after alpha update:")
+    # print(smoother.get(clone=True))
+
+# if __name__ == "__main__":
+#     def unit_spike_signal(c: torch.Tensor, n: float) -> torch.Tensor:
+#         """
+#         Generate a periodic unit spike signal with given frequency.
+#         """
+#         return -((c % N) == 0).float()
+    
+#     import matplotlib.pyplot as plt
+    
+#     # Original test parameters
+#     n_envs = 1
+#     signal_dim = 1
+#     update_dt = 0.03  # [s]
+#     smoothing_horizon = 0.5  # [s]
+#     target_smoothing = 0.5  # 50%
+#     total_time = 10.0  # Total time for simulation [s]
+#     noise_level = 0.5  # Level of white noise to superpose
+
+#     # New test parameters for unit spike signal
+#     spike_frequency = 1 / smoothing_horizon  # Frequency of the spike signal
+    
+#     N=round(total_time/smoothing_horizon)
+#     # Calculate the number of steps
+#     episode_length = int(round(total_time / update_dt)) + 1
+#     t = torch.linspace(0, total_time, episode_length)
+#     c = torch.tensor(list(range(0, episode_length)))
+#     # Generate unit spike signal
+#     spike_signal = unit_spike_signal(c, N)
+
+#     # Initialize ExponentialSignalSmoother
+#     smoother = ExponentialSignalSmoother(
+#         signal=torch.zeros(n_envs, signal_dim, dtype=torch.float32),
+#         update_dt=update_dt,
+#         smoothing_horizon=smoothing_horizon,
+#         target_smoothing=target_smoothing,
+#         name="SpikeSmoother",
+#         debug=True,
+#         dtype=torch.float32,
+#         use_gpu=False
+#     )
+#     smoother.reset_all(value=1.0)
+#     print(f"alpha: {smoother.alpha()}")
+
+#     # Smooth the spike signal
+#     smoothed_spike_signals = torch.zeros(episode_length, n_envs, signal_dim, dtype=torch.float32)
+#     for i in range(episode_length):
+#         new_signal = spike_signal[i].repeat(n_envs, signal_dim)  # Shape: (n_envs, signal_dim)
+#         ep_finished = torch.tensor([False] * n_envs, dtype=torch.bool)
+#         smoother.update(new_signal, ep_finished)
+        
+#         smoothed_spike_signals[i] = smoother.get(clone=True)
+
+#     # Flatten the tensor for plotting
+#     smoothed_spike_signals = smoothed_spike_signals.squeeze().numpy()
+
+#     # Plot the results for the spike signal
+#     plt.figure(figsize=(14, 7))
+#     plt.plot(t.numpy(), spike_signal.numpy(), label='Unit Spike Signal', color='blue', linestyle='--')
+#     plt.plot(t.numpy(), smoothed_spike_signals, label='Smoothed Signal', color='red')
+#     plt.xlabel('Time [s]')
+#     plt.ylabel('Signal Value')
+#     plt.title('Unit Spike Signal and Smoothed Signal')
+#     plt.legend()
+#     plt.grid(True)
+#     plt.show()
+
+#     # Print last spike and smoothed signal
+#     print("Last spike signal:")
+#     print(spike_signal[-1].item())
+#     print("Last smoothed signal:")
+#     print(smoothed_spike_signals[-1, 0])
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    # Set up test parameters
-    n_envs = 2
+    
+    def step_signal(c: torch.Tensor, N: int) -> torch.Tensor:
+        """
+        Generate a step signal that alternates between -1 and 1
+        with a frequency determined by N (steps per toggle).
+        """
+        return torch.where((c // N) % 2 == 0, 1.0, -1.0)
+
+    # Original test parameters
+    n_envs = 1
     signal_dim = 1
     update_dt = 0.03  # [s]
-    smoothing_horizon = 0.1  # [s]
-    target_smoothing = 0.01  # 20%
-    frequency = round(100 / update_dt)  # Frequency of the sinusoidal signal in Hz
+    smoothing_horizon = 0.3  # [s]
+    target_smoothing = 0.5  # 50%
     total_time = 10.0  # Total time for simulation [s]
-    noise_level = 0.5  # Define the level of white noise to superpose
-    
+
+    # Frequency of toggling based on the smoothing horizon
+    signal_switch_period=0.5
+    toggle_period = int(round(signal_switch_period / update_dt))  # Steps per toggle
+
     # Calculate the number of steps
     episode_length = int(round(total_time / update_dt)) + 1
     t = torch.linspace(0, total_time, episode_length)
+    c = torch.arange(episode_length)
 
-    # Generate sinusoidal signal
-    nominal_signal = sinusoidal_signal(t, frequency)
-    
-    # Add white noise to the sinusoidal signal
-    noisy_signal = add_white_noise(nominal_signal, noise_level)
+    # Generate step signal
+    step_signal_values = step_signal(c, toggle_period)
 
     # Initialize ExponentialSignalSmoother
     smoother = ExponentialSignalSmoother(
@@ -212,55 +379,41 @@ if __name__ == "__main__":
         update_dt=update_dt,
         smoothing_horizon=smoothing_horizon,
         target_smoothing=target_smoothing,
-        name="TestSmoother",
+        name="StepSmoother",
         debug=True,
         dtype=torch.float32,
         use_gpu=False
     )
+    smoother.reset_all(value=0.0)
     print(f"alpha: {smoother.alpha()}")
 
-    smoothed_signals = torch.zeros(episode_length, n_envs, signal_dim, dtype=torch.float32)
+    # Smooth the step signal
+    smoothed_step_signals = torch.zeros(episode_length, n_envs, signal_dim, dtype=torch.float32)
     for i in range(episode_length):
-        new_signal = noisy_signal[i].repeat(n_envs, signal_dim)  # Shape: (n_envs, signal_dim)
+        new_signal = step_signal_values[i].repeat(n_envs, signal_dim)  # Shape: (n_envs, signal_dim)
         ep_finished = torch.tensor([False] * n_envs, dtype=torch.bool)
         smoother.update(new_signal, ep_finished)
         
-        smoothed_signals[i] = smoother.get(clone=True)
+        smoothed_step_signals[i] = smoother.get(clone=True)
 
     # Flatten the tensor for plotting
-    smoothed_signals = smoothed_signals.squeeze().numpy()
+    smoothed_step_signals = smoothed_step_signals.squeeze().numpy()
 
-    # Plot the results
+    # Plot the results for the step signal
     plt.figure(figsize=(14, 7))
-    plt.plot(t.numpy(), nominal_signal.numpy(), label='Nominal Signal', color='blue', linestyle='--')
-    plt.plot(t.numpy(), noisy_signal.numpy(), label='Noisy Signal', color='green', linestyle=':')
-    plt.plot(t.numpy(), smoothed_signals[:, 0], label='Smoothed Signal', color='red')
+    plt.plot(t.numpy(), step_signal_values.numpy(), label='Step Signal (-1 and 1)', color='blue', linestyle='--')
+    plt.plot(t.numpy(), smoothed_step_signals, label='Smoothed Signal', color='red')
     plt.xlabel('Time [s]')
     plt.ylabel('Signal Value')
-    plt.title('Nominal, Noisy, and Smoothed Signals')
+    plt.title('Step Signal and Smoothed Signal')
     plt.legend()
     plt.grid(True)
     plt.show()
 
-    # Print last signal and smoothed signal
-    print("Last nominal signal:")
-    print(nominal_signal[-1].item())
-    print("Last noisy signal:")
-    print(noisy_signal[-1].item())
+    # Print last step and smoothed signal
+    print("Last step signal:")
+    print(step_signal_values[-1].item())
     print("Last smoothed signal:")
-    print(smoothed_signals[-1, 0])
-    
-    # Test resetting
-    smoother.reset_all()
-    print("\nAfter reset_all:")
-    print("smoothed")
-    print(smoother.get(clone=True))
-    print("counter")
-    print(smoother.counter(clone=True))
+    print(smoothed_step_signals[-1, 0])
 
-    # Update alpha and test
-    smoother.update_alpha(update_dt=0.02, smoothing_horizon=1.0, target_smoothing=0.5)
-    print("\nAfter updating alpha:")
-    print(f"New alpha: {smoother.alpha()}")
-    print("Smoothed signal after alpha update:")
-    print(smoother.get(clone=True))
+

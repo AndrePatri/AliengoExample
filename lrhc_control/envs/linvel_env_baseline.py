@@ -42,6 +42,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
 
+        self._enable_action_smoothing=True
+        self._action_smoothing_horizon_c=0.01
+        self._action_smoothing_horizon_d=0.3
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
@@ -201,7 +204,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     timeout_ms=timeout_ms,
                     srew_drescaling=True,
                     use_act_mem_bf=self._add_prev_actions_stats_to_obs,
-                    act_membf_size=30)
+                    act_membf_size=30,
+                    use_action_smoothing=self._enable_action_smoothing,
+                    smoothing_horizon_c=self._action_smoothing_horizon_c,
+                    smoothing_horizon_d=self._action_smoothing_horizon_d)
 
         self._is_substep_rew[0]=False
         # self._is_substep_rew[1]=True
@@ -346,8 +352,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._bernoulli_coeffs = self._pof1_b.clone()
         self._bernoulli_coeffs[:, :] = 1.0
 
-        if self._add_prev_actions_stats_to_obs:
-            self._defaut_act_buffer_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
+        self._defaut_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
+        self._defaut_action[:, ~self._is_continuous_actions.flatten()] = 1.0
 
         if self._use_vel_err_sig_smoother:
             vel_err_proxy=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()
