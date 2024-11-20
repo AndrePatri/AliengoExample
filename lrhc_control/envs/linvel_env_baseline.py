@@ -362,8 +362,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 debug=self._is_debug,
                 dtype=self._dtype,
                 use_gpu=self._use_gpu)
-            self.custom_db_info["smoothing_horizon"]=self._smoothing_horizon
-            self.custom_db_info["target_smoothing"]=self._target_smoothing
+            self.custom_db_info["vel_smoothing_horizon"]=self._smoothing_horizon
+            self.custom_db_info["vel_target_smoothing"]=self._target_smoothing
 
     def get_file_paths(self):
         paths=super().get_file_paths()

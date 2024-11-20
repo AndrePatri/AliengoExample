@@ -27,7 +27,9 @@ from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRand
 from lrhc_control.utils.episodic_rewards import EpisodicRewards
 from lrhc_control.utils.episodic_data import EpisodicData
 from lrhc_control.utils.episodic_data import MemBuffer
+from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 from lrhc_control.utils.math_utils import check_capsize
+
 from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, base2world_frame, w2hor_frame
 
 from SharsorIPCpp.PySharsorIPC import VLevel
@@ -68,7 +70,9 @@ class LRhcTrainingEnvBase(ABC):
             act_membf_size: int = 3,
             use_random_safety_reset: bool = True,
             random_reset_freq: int = None, # [n episodes]
-            vec_ep_freq_metrics_db: int = 1):
+            vec_ep_freq_metrics_db: int = 1,
+            use_action_smoothing: bool = False,
+            smoothing_horizon: float = 0.1):
         
         self._vec_ep_freq_metrics_db = vec_ep_freq_metrics_db # update single env metrics every
         # n episodes
@@ -107,6 +111,11 @@ class LRhcTrainingEnvBase(ABC):
 
         self._use_act_mem_bf = use_act_mem_bf
         self._act_membf_size = round(act_membf_size/self._action_repeat) 
+
+        self._use_action_smoothing=use_action_smoothing
+        self._smoothing_horizon=smoothing_horizon
+        self._action_smoother_continuous=None
+        self._action_smoother_discrete=None
 
         self._closed = False
         self._ready=False
@@ -194,6 +203,9 @@ class LRhcTrainingEnvBase(ABC):
         self._init_infos()
 
         self._custom_post_init()
+
+        if self._use_action_smoothing:
+            self._init_action_smoothing()
 
         self._ready=self._init_step()
 
@@ -360,9 +372,18 @@ class LRhcTrainingEnvBase(ABC):
 
         # set action from agent
         actions = self._actions.get_torch_mirror(gpu=self._use_gpu)
-        actions[:, :] = action.detach() # writes actions (detaching to avoid
-        # grads prop
-        
+
+        # handing actions smoothing if necessary
+        actions[:, :] = action.detach() # writes actions, detaching to avoid grads prop
+        if self._action_smoother_continuous is not None:
+            self._action_smoother_continuous.update(new_signal=
+                    actions[:, self._is_continuous_actions.flatten()])
+            actions[:, self._is_continuous_actions.flatten()]=self._action_smoother_continuous.get()
+        if self._action_smoother_discrete is not None:
+            self._action_smoother_discrete.update(ew_signal=
+                    actions[:, ~self._is_continuous_actions.flatten()])
+            actions[:, ~self._is_continuous_actions.flatten()]=self._action_smoother_discrete.get()
+    
         self._pre_step()
 
         if self._act_mem_buffer is not None:
@@ -448,6 +469,11 @@ class LRhcTrainingEnvBase(ABC):
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset(to_be_reset=episode_finished.flatten(),
                             init_data=self._defaut_act_buffer_action)
+
+        if self._action_smoother_continuous is not None:
+            self._action_smoother_continuous.reset(to_be_reset=episode_finished.flatten())
+        if self._action_smoother_discrete is not None:
+            self._action_smoother_discrete.reset(to_be_reset=episode_finished.flatten())
 
         # debug step if required (IMPORTANT: must be before remote reset so that we always db
         # actual data from the step and not after reset)
@@ -565,6 +591,11 @@ class LRhcTrainingEnvBase(ABC):
 
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset_all(init_data=self._defaut_act_buffer_action)
+
+        if self._action_smoother_continuous is not None:
+            self._action_smoother_continuous.reset()
+        if self._action_smoother_discrete is not None:
+            self._action_smoother_discrete.reset()
 
         self._synch_state(gpu=self._use_gpu) # read obs from shared mem
 
@@ -844,16 +875,32 @@ class LRhcTrainingEnvBase(ABC):
                 use_gpu=self._use_gpu)
             self._defaut_act_buffer_action = torch.full_like(input=self.get_actions(),fill_value=0.0)
 
-        self._random_uniform = torch.full_like(self._actions.get_torch_mirror(gpu=self._use_gpu), fill_value=0.0) # used for sampling random actions (preallocated
-        # for efficiency)
-        self._random_normal = torch.full_like(self._actions.get_torch_mirror(gpu=self._use_gpu), fill_value=0.0) # used for sampling random actions from a gaussian distr (preallocated
-        # for efficiency)
-
         # default to all continuous actions (changes the way noise is added)
         self._is_continuous_actions=torch.full((1, actions_dim), 
             dtype=torch.bool, device=device,
             fill_value=True) 
-
+    
+    def _init_action_smoothing(self):
+            
+        continuous_actions=self.get_actions()[:, self._is_continuous_actions.flatten()]
+        discrete_actions=self.get_actions()[:, ~self._is_continuous_actions.flatten()]
+        self._action_smoother_continuous=ExponentialSignalSmoother(signal=continuous_actions,
+            update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
+            smoothing_horizon=self._smoothing_horizon,
+            target_smoothing=0.5, 
+            debug=self._debug,
+            dtype=self._dtype,
+            use_gpu=self._use_gpu,
+            name="ActionSmootherContinuous")
+        self._action_smoother_discrete=ExponentialSignalSmoother(signal=discrete_actions,
+            update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
+            smoothing_horizon=self._smoothing_horizon,
+            target_smoothing=0.5,
+            debug=self._debug,
+            dtype=self._dtype,
+            use_gpu=self._use_gpu,
+            name="ActionSmootherDiscrete")
+            
     def _init_rewards(self):
         
         reward_thresh_default = 1.0
