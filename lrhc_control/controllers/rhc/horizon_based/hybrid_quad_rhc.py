@@ -85,6 +85,7 @@ class HybridQuadRhc(RHController):
             "fixed_flights": True,
             "lin_a_feedback": False,
             "is_open_loop": self._open_loop,
+            "is_adaptive_open_loop": True, 
             "alpha_from_outsize": False,
             "alpha_half": 1.0}
 
