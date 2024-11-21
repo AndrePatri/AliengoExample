@@ -1222,7 +1222,7 @@ class SActorCriticAlgoBase(ABC):
         self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
         # (can be overridden thorugh the provided options)
         self._demo_env_selector=self._env.demo_env_idxs()
-        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
+        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True).cpu()
         if self._demo_env_selector_bool is None:
             self._db_env_selector_bool[:]=~self._expl_env_selector_bool
         else: # we log db data separately for env which are neither for demo nor for random exploration
@@ -1457,13 +1457,13 @@ class SActorCriticAlgoBase(ABC):
         if self._is_continuous_actions.any(): # if there are any continuous actions
             self._perturb_actions(actions,
                 action_idxs=self._is_continuous_actions, 
-                env_idxs=self._expl_env_selector,
+                env_idxs=self._expl_env_selector.to(actions.device),
                 normal=True, # use normal for continuous
                 scaling=self._continuous_act_expl_noise_std)
         if (~self._is_continuous_actions).any(): # actions to be treated as discrete
             self._perturb_actions(actions,
                 action_idxs=~self._is_continuous_actions, 
-                env_idxs=self._expl_env_selector,
+                env_idxs=self._expl_env_selector.to(actions.device),
                 normal=False, # use uniform distr for discrete
                 scaling=self._discrete_act_expl_noise_std)
         
