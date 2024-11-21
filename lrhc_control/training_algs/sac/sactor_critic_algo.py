@@ -1485,9 +1485,12 @@ class SActorCriticAlgoBase(ABC):
         else: # uniform
             self._random_uniform.uniform_(-1,1)
             noise=self._random_uniform
-                
-        actions[env_idxs, action_idxs]=\
-            actions[env_idxs, action_idxs]+noise[env_idxs, action_idxs]*self._action_scale[:,action_idxs]*scaling
+        
+        env_indices = env_idxs.reshape(-1,1)  # Get indices of True environments
+        action_indices = action_idxs.reshape(1,-1) # Get indices of True actions
+
+        actions[env_indices, action_indices]=\
+            actions[env_indices, action_indices]+noise[env_indices, action_indices]*self._action_scale[:,action_indices]*scaling
     
     def _switch_training_mode(self, 
                     train: bool = True):
