@@ -432,9 +432,8 @@ class EpisodicData():
         
         self._current_ep_sum[ep_finished.flatten(), :] = 0 # if finished, reset current sum
 
-        # update min/max info
-        self._max_over_eps[:, :]=torch.max(self._max_over_eps, new_data)
-        self._min_over_eps[:, :]=torch.min(self._min_over_eps, new_data)
+        self._max_over_eps[:, :]=torch.maximum(input=self._max_over_eps, other=new_data)
+        self._min_over_eps[:, :]=torch.minimum(input=self._min_over_eps, other=new_data)
         # increment counters
         self._steps_counter[~ep_finished.flatten(), :] +=1 # step performed
         self._steps_counter[ep_finished.flatten(), :] =0 # reset step counters
@@ -451,7 +450,7 @@ class EpisodicData():
         self._min_over_eps_last[selector, :]=\
             self._min_over_eps[selector, :]
 
-        self.reset(to_be_reset=selector)        
+        EpisodicData.reset(self,to_be_reset=selector)        
 
     def data_names(self):
         return self._data_names
