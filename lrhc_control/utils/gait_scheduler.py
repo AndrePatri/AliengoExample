@@ -201,7 +201,7 @@ if __name__ == "__main__":
 
     # Parameters for the test
     pattern_gen = QuadrupedGaitPatternGenerator(phase_period=2.0)
-    gait_params = pattern_gen.get_params("trot")
+    gait_params = pattern_gen.get_params("walk")
     n_phases = gait_params["n_phases"]
     n_envs = 1
     update_dt = 0.03

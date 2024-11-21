@@ -33,6 +33,8 @@ if __name__ == "__main__":
     
     # Replacing argparse.BooleanOptionalAction with 'store_true' and 'store_false' for Python 3.8 compatibility
     parser.add_argument('--dump_checkpoints',action='store_true', help='Whether to dump model checkpoints during training')
+    parser.add_argument('--demo_stop_thresh', type=float, default=None, 
+        help='Performance hreshold above which demonstration envs should be deactivated.')
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
     parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
     parser.add_argument('--use_cer',action='store_true', help='Whether to use combined experience replay (not tested)')

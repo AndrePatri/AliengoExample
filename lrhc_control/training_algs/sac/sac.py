@@ -196,3 +196,9 @@ class SAC(SActorCriticAlgoBase):
                     self._alphas[self._log_it_counter, 0] = self._alpha
                     if self._autotune:
                         self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
+
+    def _get_performance_metric(self):
+        # to be overridden
+        performance_now=self._episodic_reward_metrics.get_tot_rew_avrg_over_envs(env_selector=
+                                                        self._db_env_selector).item()
+        return performance_now

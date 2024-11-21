@@ -42,7 +42,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
 
-        n_demo_envs_perc=0.05
+        n_demo_envs_perc=0.01
         self._enable_action_smoothing=True
         self._action_smoothing_horizon_c=0.01
         self._action_smoothing_horizon_d=0.3
@@ -243,9 +243,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._n_noisy_envs=math.ceil(self._n_envs*1/100)
         if not self._use_pos_control:
             if not self._use_prob_based_stepping:
-                self._is_continuous_actions[:,6:10]=False
+                self._is_continuous_actions[6:10]=False
         else:
-            self._is_continuous_actions[:,6:10]=True
+            self._is_continuous_actions[6:10]=True
 
         # overriding parent's defaults 
         self._reward_thresh_lb[:, :]=0 # (neg rewards can be nasty, especially if they all become negative)
@@ -355,7 +355,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._bernoulli_coeffs[:, :] = 1.0
 
         self._defaut_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
-        self._defaut_action[:, ~self._is_continuous_actions.flatten()] = 1.0
+        self._defaut_action[:, ~self._is_continuous_actions] = 1.0
 
         if self._use_vel_err_sig_smoother:
             vel_err_proxy=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()

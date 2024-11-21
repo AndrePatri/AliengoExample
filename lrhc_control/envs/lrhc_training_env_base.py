@@ -247,7 +247,7 @@ class LRhcTrainingEnvBase(ABC):
             demo_idxs_str=", ".join(map(str, self._demo_envs_idxs.tolist()))
             Journal.log(self.__class__.__name__,
                 "__init__",
-                f"Demo env. incexes are [{demo_idxs_str}]",
+                f"Demo env. indexes are [{demo_idxs_str}]",
                 LogType.INFO)
     
     def demo_env_idxs(self, get_bool: bool=False):
@@ -258,9 +258,22 @@ class LRhcTrainingEnvBase(ABC):
         
     def _init_demo_envs(self):
         pass
+    
+    def n_demo_envs(self):
+        return self._n_demo_envs
 
+    def demo_active(self):
+        return self._add_demos
+    
     def switch_demo(self, active: bool = False):
-        self._add_demos=active
+        if self._demo_envs_idxs is not None:
+            self._add_demos=active
+        else:
+            Journal.log(self.__class__.__name__,
+                "switch_demo",
+                f"Cannot switch demostrations on. No demo envs available!",
+                LogType.EXCEP,
+                throw_when_excep=True)
 
     def _get_this_file_path(self):
         return self._this_path
@@ -426,12 +439,12 @@ class LRhcTrainingEnvBase(ABC):
         actions[:, :] = action.detach() # writes actions, detaching to avoid grads prop
         if self._action_smoother_continuous is not None:
             self._action_smoother_continuous.update(new_signal=
-                    actions[:, self._is_continuous_actions.flatten()])
-            actions[:, self._is_continuous_actions.flatten()]=self._action_smoother_continuous.get()
+                    actions[:, self._is_continuous_actions])
+            actions[:, self._is_continuous_actions]=self._action_smoother_continuous.get()
         if self._action_smoother_discrete is not None:
             self._action_smoother_discrete.update(new_signal=
-                    actions[:, ~self._is_continuous_actions.flatten()])
-            actions[:, ~self._is_continuous_actions.flatten()]=self._action_smoother_discrete.get()
+                    actions[:, ~self._is_continuous_actions])
+            actions[:, ~self._is_continuous_actions]=self._action_smoother_discrete.get()
     
         self._pre_step()
 
@@ -521,10 +534,10 @@ class LRhcTrainingEnvBase(ABC):
 
         if self._action_smoother_continuous is not None:
             self._action_smoother_continuous.reset(to_be_reset=episode_finished.flatten(),
-                reset_val=self._defaut_action[:, self._is_continuous_actions.flatten()])
+                reset_val=self._defaut_action[:, self._is_continuous_actions])
         if self._action_smoother_discrete is not None:
             self._action_smoother_discrete.reset(to_be_reset=episode_finished.flatten(),
-                reset_val=self._defaut_action[:, ~self._is_continuous_actions.flatten()])
+                reset_val=self._defaut_action[:, ~self._is_continuous_actions])
 
         # debug step if required (IMPORTANT: must be before remote reset so that we always db
         # actual data from the step and not after reset)
@@ -644,9 +657,9 @@ class LRhcTrainingEnvBase(ABC):
             self._act_mem_buffer.reset_all(init_data=self._defaut_action)
 
         if self._action_smoother_continuous is not None:
-            self._action_smoother_continuous.reset(reset_val=self._defaut_action[:, self._is_continuous_actions.flatten()])
+            self._action_smoother_continuous.reset(reset_val=self._defaut_action[:, self._is_continuous_actions])
         if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.reset(reset_val=self._defaut_action[:, ~self._is_continuous_actions.flatten()])
+            self._action_smoother_discrete.reset(reset_val=self._defaut_action[:, ~self._is_continuous_actions])
 
         self._synch_state(gpu=self._use_gpu) # read obs from shared mem
 
@@ -928,14 +941,14 @@ class LRhcTrainingEnvBase(ABC):
                 use_gpu=self._use_gpu)
         
         # default to all continuous actions (changes the way noise is added)
-        self._is_continuous_actions=torch.full((1, actions_dim), 
+        self._is_continuous_actions=torch.full((actions_dim, ), 
             dtype=torch.bool, device=device,
             fill_value=True) 
     
     def _init_action_smoothing(self):
             
-        continuous_actions=self.get_actions()[:, self._is_continuous_actions.flatten()]
-        discrete_actions=self.get_actions()[:, ~self._is_continuous_actions.flatten()]
+        continuous_actions=self.get_actions()[:, self._is_continuous_actions]
+        discrete_actions=self.get_actions()[:, ~self._is_continuous_actions]
         self._action_smoother_continuous=ExponentialSignalSmoother(signal=continuous_actions,
             update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
             smoothing_horizon=self._smoothing_horizon_c,

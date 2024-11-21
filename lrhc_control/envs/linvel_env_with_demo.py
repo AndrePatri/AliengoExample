@@ -38,13 +38,16 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 LogType.EXCEP,
                 throw_when_excep=True)
             
-        self.switch_demo(active=True) # enable using demonstrations
+        self.switch_demo(active=True) # enable using demonstrations by default
+        # (can be deactived externally)
+
+        self._full_demo=True # whether to override the full action
 
     def get_file_paths(self):
         paths=super().get_file_paths()
         paths.append(os.path.abspath(__file__))        
         return paths
-
+    
     def _init_demo_envs(self):
         
         self._env_to_gait_sched_mapping=torch.full((self._n_envs, ), dtype=torch.int, device=self._device,
@@ -60,10 +63,10 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
     
     def _init_gait_schedulers(self):
 
-        self._walk_to_trot_thresh=0.3 # [m/s]
+        self._walk_to_trot_thresh=0.5 # [m/s]
         self._stopping_thresh=0.05
 
-        phase_period_walk=1.5
+        phase_period_walk=1.0
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -111,50 +114,55 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
     def _custom_post_step(self,episode_finished):
         super()._custom_post_step(episode_finished=episode_finished)
         # executed after checking truncations and terminations
-        finished_and_demo=torch.logical_and(episode_finished.flatten(), self._demo_envs_idxs_bool)
-        finished_demo_idxs=self._env_to_gait_sched_mapping[finished_and_demo]
-        if self._use_gpu:
-            self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
-            self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
-        else:
-            self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
-            self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+        if self.demo_active():
+            finished_and_demo=torch.logical_and(episode_finished.flatten(), self._demo_envs_idxs_bool)
+            finished_demo_idxs=self._env_to_gait_sched_mapping[finished_and_demo]
+            if self._use_gpu:
+                self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+            else:
+                self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
+                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
 
     def _apply_actions_to_rhc(self):
         
-        super()._set_refs()
+        if self.demo_active():
+            
+            # get some data
+            agent_action = self.get_actions()
+            agent_twist_ref_current = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
-        # get some data
-        agent_action = self.get_actions()
-        agent_twist_ref_current = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
-        rhc_latest_contact_ref = self._rhc_refs.contact_flags.get_torch_mirror(gpu=self._use_gpu)
+            if self._full_demo:
+                # overwriting agent's twist action with the identity wrt the reference (both 
+                # are base frame)
+                
+                # agent_twist_ref_current and agent action twist are base local
+                agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
 
-        # overwriting agent gait actions with ones taken from gait scheduler for 
-        # demonstration environments
+            # overwriting agent gait actions with the ones taken from the gait schedulers for 
+            # (just for demonstration environments)
 
-        self._gait_scheduler_walk.step()
-        self._gait_scheduler_trot.step()
-        
-        have_to_go_fast=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
+            self._gait_scheduler_walk.step()
+            self._gait_scheduler_trot.step()
+            
+            have_to_go_fast=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
 
-        fast_and_demo=torch.logical_and(have_to_go_fast.flatten(),self._demo_envs_idxs_bool)
+            fast_and_demo=torch.logical_and(have_to_go_fast.flatten(),self._demo_envs_idxs_bool)
 
-        have_to_stop=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)<self._stopping_thresh
-        stop_and_demo=torch.logical_and(have_to_stop.flatten(),self._demo_envs_idxs_bool)
+            have_to_stop=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)<self._stopping_thresh
+            stop_and_demo=torch.logical_and(have_to_stop.flatten(),self._demo_envs_idxs_bool)
 
-        # default to walk
-        agent_action[self._demo_envs_idxs, 6:10] = self._gait_scheduler_walk.get_signal(clone=True)
-        # for fast enough refs, trot
-        
-        agent_action[fast_and_demo, 6:10] = self._gait_scheduler_trot.get_signal(clone=True)[self._env_to_gait_sched_mapping[fast_and_demo], :]
-        
-        # agent sets contact flags
-        rhc_latest_contact_ref[self._demo_envs_idxs, :] = agent_action[self._demo_envs_idxs, 6:10] > self._gait_scheduler_walk.threshold() # keep contact if agent action > 0
-        rhc_latest_contact_ref[fast_and_demo, :] = agent_action[fast_and_demo, 6:10] > self._gait_scheduler_trot.threshold() 
-        rhc_latest_contact_ref[stop_and_demo, :] = True # keep contact
-        
-        # rhc_latest_twist_cmd = self._rhc_refs.rob_refs.root_state.get(data_type="twist", gpu=self._use_gpu)
-        # rhc_latest_twist_cmd[:, 0:6] = 0.0
+            # default to walk
+            walk_signal=self._gait_scheduler_walk.get_signal(clone=True)
+            is_contact_walk=walk_signal>self._gait_scheduler_walk.threshold()[self._env_to_gait_sched_mapping[self._demo_envs_idxs_bool], :]
+            agent_action[self._demo_envs_idxs, 6:10] = 2.0*is_contact_walk-1.0
+            if fast_and_demo.any():
+                # for fast enough refs, trot
+                trot_signal=self._gait_scheduler_trot.get_signal(clone=True)[self._env_to_gait_sched_mapping[fast_and_demo], :]
+                is_contact_trot=trot_signal>self._gait_scheduler_trot.threshold()
+                agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
+            # if required, keep contact
+            agent_action[stop_and_demo, 6:10] = 1.0
 
-        super()._write_refs() # finally, write refs
+        super()._apply_actions_to_rhc()
 
