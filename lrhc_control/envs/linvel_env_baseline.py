@@ -43,7 +43,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # env substeps)
 
         n_demo_envs_perc=0.01
-        self._enable_action_smoothing=True
+        self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
         self._action_smoothing_horizon_d=0.3
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
