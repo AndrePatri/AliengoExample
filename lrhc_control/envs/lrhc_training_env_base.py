@@ -446,12 +446,13 @@ class LRhcTrainingEnvBase(ABC):
                     actions[:, ~self._is_continuous_actions])
             actions[:, ~self._is_continuous_actions]=self._action_smoother_discrete.get()
     
-        self._pre_step()
+        self._apply_actions_to_rhc() # apply agent actions to rhc controller
 
         if self._act_mem_buffer is not None:
+            # after apply actions, in case some modification to the action were made in the call
             self._act_mem_buffer.update(new_data=actions)
 
-        self._apply_actions_to_rhc() # apply agent actions to rhc controller
+        self._pre_step()
 
         stepping_ok = True
         tot_rewards = self._tot_rewards.get_torch_mirror(gpu=self._use_gpu)
