@@ -1010,12 +1010,12 @@ class SActorCriticAlgoBase(ABC):
             
             self._custom_env_data[dbdatan] = {}
 
-            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector)
+            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector)
+            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector)
+            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector)
+            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector)
+            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector)
 
             self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
                 max.shape[0], 
