@@ -153,8 +153,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             stop_and_demo=torch.logical_and(have_to_stop.flatten(),self._demo_envs_idxs_bool)
 
             # default to walk
-            walk_signal=self._gait_scheduler_walk.get_signal(clone=True)
-            is_contact_walk=walk_signal>self._gait_scheduler_walk.threshold()[self._env_to_gait_sched_mapping[self._demo_envs_idxs_bool], :]
+            walk_signal=self._gait_scheduler_walk.get_signal(clone=True)[self._env_to_gait_sched_mapping[self._demo_envs_idxs_bool], :]
+            is_contact_walk=walk_signal>self._gait_scheduler_walk.threshold()
             agent_action[self._demo_envs_idxs, 6:10] = 2.0*is_contact_walk-1.0
             if fast_and_demo.any():
                 # for fast enough refs, trot
