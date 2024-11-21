@@ -1010,12 +1010,12 @@ class SActorCriticAlgoBase(ABC):
             
             self._custom_env_data[dbdatan] = {}
 
-            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector)
-            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector)
-            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector)
-            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector)
-            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector)
-            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector)
+            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
 
             self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
                 max.shape[0], 
@@ -1222,10 +1222,11 @@ class SActorCriticAlgoBase(ABC):
         self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
         # (can be overridden thorugh the provided options)
         self._demo_env_selector=self._env.demo_env_idxs()
-        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True).cpu()
+        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
         if self._demo_env_selector_bool is None:
             self._db_env_selector_bool[:]=~self._expl_env_selector_bool
         else: # we log db data separately for env which are neither for demo nor for random exploration
+            self._demo_env_selector_bool=self._demo_env_selector_bool.cpu()
             self._db_env_selector_bool[:]=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
 
         self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
