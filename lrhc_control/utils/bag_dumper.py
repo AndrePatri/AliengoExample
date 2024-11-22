@@ -243,6 +243,7 @@ class RosBagDumper():
         additional_secs=5.0
         from control_cluster_bridge.utilities.remote_triggering import RemoteTriggererClnt
         
+        time.sleep(3.0) # wait a bit in case server side crashed and needs to be recrated
         term_trigger=RemoteTriggererClnt(namespace=namespace+f"SharedTerminator",
                                 verbose=True,
                                 vlevel=VLevel.V2)
