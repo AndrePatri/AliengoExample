@@ -441,14 +441,14 @@ class LRhcTrainingEnvBase(ABC):
         self._override_actions_with_demo() # if necessary override some actions with expert demonstrations
         # (getting actions with get_actions will return the modified actions tensor)
 
-        self._apply_actions_smoothing() # smooth actions if enabled (the tensor returned by 
-        # get_actions does not contain smoothing and can be safely employed for experience collection)
+        if self._act_mem_buffer is not None:
+            self._act_mem_buffer.update(new_data=actions)
+
+        if self._use_action_smoothing:
+            self._apply_actions_smoothing() # smooth actions if enabled (the tensor returned by 
+            # get_actions does not contain smoothing and can be safely employed for experience collection)
 
         self._apply_actions_to_rhc() # apply agent actions to rhc controller
-
-        if self._act_mem_buffer is not None:
-            # after apply actions, in case some modification to the action were made in the call
-            self._act_mem_buffer.update(new_data=actions)
 
         self._pre_step()
 
@@ -747,7 +747,6 @@ class LRhcTrainingEnvBase(ABC):
             return self._next_obs.get_torch_mirror(gpu=self._use_gpu).detach()
         
     def get_actions(self, clone:bool=False):
- 
         if clone:
             return self._actions.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
@@ -756,9 +755,9 @@ class LRhcTrainingEnvBase(ABC):
     def get_actual_actions(self, clone:bool=False):
         if self._use_action_smoothing:
             if clone:
-                self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach().clone()
+                return self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach().clone()
             else:
-                self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach()
+                return self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach()
         else: # actual action coincides with the one from the agent + possible modif.
             # made if using demonstration envs
             return self.get_actions(clone=clone)
