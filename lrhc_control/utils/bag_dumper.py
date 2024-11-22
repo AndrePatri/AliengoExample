@@ -185,13 +185,14 @@ class RosBagDumper():
     def _spawn_rosbag_process(self):
         import multiprocess as mp
         ctx = mp.get_context('forkserver')
+        bag_id=str(self._env_idx)
         self._bag_proc=ctx.Process(target=self._launch_rosbag, 
             name="rosbag_recorder_"+f"{self._ns}",
-            args=(self._remap_ns,self._dump_path,self._timeout_ms,self._use_shared_drop_dir))
+            args=(self._remap_ns,self._dump_path, bag_id, self._timeout_ms,self._use_shared_drop_dir))
         self._bag_proc.start()
     
     def _launch_rosbag(self, 
-            namespace: str, dump_path: str, timeout_sec:float, use_shared_drop_dir: bool = True):
+            namespace: str, dump_path: str, timeout_sec:float, bag_id: str, use_shared_drop_dir: bool = True):
         
         def ignore_keyboard_interrupt():
             signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -264,10 +265,17 @@ class RosBagDumper():
         this_dir_path=os.path.dirname(__file__)
 
         shell=False
+        command=None
         if not shell:
-            command = [f"{this_dir_path}/launch_rosbag.sh", "--ns", namespace, "--output_path", dump_path]
+            if self._ros2:
+                command = [f"{this_dir_path}/launch_ros2bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
+            else:
+                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
         else:
-            command = f"{this_dir_path}/launch_rosbag.sh --ns {namespace} --output_path {dump_path}"
+            if self._ros2:
+                command = f"{this_dir_path}/launch_ros2bag.sh --ns {namespace} --output_path {dump_path} --id {bag_id}"
+            else:
+                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
 
         import subprocess
 
