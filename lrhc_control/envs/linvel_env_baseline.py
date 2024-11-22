@@ -45,7 +45,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         n_demo_envs_perc=0.01
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
-        self._action_smoothing_horizon_d=0.3
+        self._action_smoothing_horizon_d=0.1
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
@@ -198,7 +198,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     timeout_ms=timeout_ms,
                     srew_drescaling=True,
                     use_act_mem_bf=self._add_prev_actions_stats_to_obs,
-                    act_membf_size=30,
+                    act_membf_size=15,
                     use_action_smoothing=self._enable_action_smoothing,
                     smoothing_horizon_c=self._action_smoothing_horizon_c,
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
