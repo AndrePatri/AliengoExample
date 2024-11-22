@@ -33,8 +33,13 @@ class AgentRefsFromKeyboard:
         self.enable_navigation = False
 
         self.dxy = 0.05 # [m]
+        self.dheading=0.05
         self._dtwist = 1.0 * math.pi / 180.0 # [rad]
 
+        self._v_magnitude=0.0
+        self._heading_lat=0.0
+        self._heading_frontal=0.0
+        self._heading=0.0
         self.agent_refs = None
 
         self.cluster_idx = -1
@@ -59,19 +64,17 @@ class AgentRefsFromKeyboard:
         self._init_rhc_ref_subscriber()
         
         self._robot_state=None
+        self._current_twist_ref_world = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="twist", robot_idxs=self.cluster_idx_np), 
+                fill_value=0.0).reshape(-1)
+        self._current_twist_ref_base=np.full_like(self._current_twist_ref_world, fill_value=0.0).reshape(1, -1)
+ 
         if self._agent_refs_world:
             self._robot_state = RobotState(namespace=self.namespace,
                                 is_server=False, 
                                 safe=False,
                                 verbose=True,
                                 vlevel=VLevel.V2)
-            self._robot_state.run()
-            # used to hold agent refs in world frame
-            self._current_lin_v_ref_world = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="v", robot_idxs=self.cluster_idx_np), 
-                fill_value=0.0).reshape(-1)
-            self._current_omega_ref_world = np.full_like(self._current_lin_v_ref_world, fill_value=0.0)
-            self._current_twist_ref_base_frame = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="twist", robot_idxs=self.cluster_idx_np), 
-                fill_value=0.0).reshape(1, -1)
+            self._robot_state.run()            
 
     def _init_rhc_ref_subscriber(self):
 
@@ -107,23 +110,12 @@ class AgentRefsFromKeyboard:
 
         self._closed = True
     
-    def _synch(self, 
-            read = True):
+    def _synch(self):
         
-        if read:
-
-            self.env_index.synch_all(read=True, retry=True)
-            env_index = self.env_index.get_numpy_mirror()
-            self.cluster_idx = env_index[0, 0].item()
-            self.cluster_idx_np = self.cluster_idx
-        
-            self.agent_refs.rob_refs.synch_from_shared_mem()
-        
-        else:
-            
-            self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
-                                                n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
-                                                read=False)
+        self.env_index.synch_all(read=True, retry=True)
+        env_index = self.env_index.get_numpy_mirror()
+        self.cluster_idx = env_index[0, 0].item()
+        self.cluster_idx_np = self.cluster_idx            
     
     def _update_navigation(self, 
                     type: str = "",
@@ -131,74 +123,88 @@ class AgentRefsFromKeyboard:
                     reset: bool = False,
                     refs_in_wframe: bool = False):
         
-        current_lin_v_ref=None
-        current_omega_ref=None
+        current_twist_ref=None
         if refs_in_wframe:
-            current_lin_v_ref=self._current_lin_v_ref_world
-            current_omega_ref=self._current_omega_ref_world
+            current_twist_ref=self._current_twist_ref_world
         else:
-            current_lin_v_ref = self.agent_refs.rob_refs.root_state.get(data_type="v", robot_idxs=self.cluster_idx_np)
-            current_omega_ref = self.agent_refs.rob_refs.root_state.get(data_type="omega", robot_idxs=self.cluster_idx_np)
+            current_twist_ref = self._current_twist_ref_base.reshape(-1)
 
         # randomizng in base frame if not refs_in_wframe, otherwise world
         if not reset:
-            if type=="lateral_lin" and increment:
-                # lateral motion
-                current_lin_v_ref[1] = current_lin_v_ref[1] - self.dxy
-            if type=="lateral_lin" and not increment:
-                # lateral motion
-                current_lin_v_ref[1] = current_lin_v_ref[1] + self.dxy
-            if type=="frontal_lin" and not increment:
-                # frontal motion
-                current_lin_v_ref[0] = current_lin_v_ref[0] - self.dxy
-            if type=="frontal_lin" and increment:
-                # frontal motion
-                current_lin_v_ref[0] = current_lin_v_ref[0] + self.dxy
-            if type=="twist_roll" and increment:
-                # rotate counter-clockwise
-                current_omega_ref[0] = current_omega_ref[0] + self._dtwist 
-            if type=="twist_roll" and not increment:
-                current_omega_ref[0] = current_omega_ref[0] - self._dtwist 
-            if type=="twist_pitch" and increment:
-                # rotate counter-clockwise
-                current_omega_ref[1] = current_omega_ref[1] + self._dtwist 
-            if type=="twist_pitch" and not increment:
-                current_omega_ref[1] = current_omega_ref[1] - self._dtwist 
-            if type=="twist_yaw" and increment:
-                # rotate counter-clockwise
-                current_omega_ref[2] = current_omega_ref[2] + self._dtwist 
-            if type=="twist_yaw" and not increment:
-                current_omega_ref[2] = current_omega_ref[2] - self._dtwist 
+            if type=="lateral" and not increment:
+                if self._heading_lat>0:
+                    self._heading_lat=self._heading_lat + self.dheading
+                else:
+                    self._heading_lat=self._heading_lat - self.dheading
+                self._heading_frontal=self._heading_lat-np.pi/2
+            if type=="lateral" and increment:
+                if self._heading_lat>0:
+                    self._heading_lat=self._heading_lat - self.dheading
+                else:
+                    self._heading_lat=self._heading_lat + self.dheading
+                self._heading_frontal=self._heading_lat-np.pi/2
+            if type=="frontal" and not increment:
+                if self._heading_frontal>0:
+                    self._heading_frontal=self._heading_frontal + self.dheading
+                else:
+                    self._heading_frontal=self._heading_frontal - self.dheading
+                self._heading_lat=self._heading_frontal+np.pi/2
+            if type=="frontal" and increment:
+                if self._heading_frontal>0:
+                    self._heading_frontal=self._heading_frontal - self.dheading
+                else:
+                    self._heading_frontal=self._heading_frontal + self.dheading
+                self._heading_lat=self._heading_frontal+np.pi/2
+            
+            if type=="magnitude" and increment:
+                self._v_magnitude=self._v_magnitude+self.dxy
+            if type=="magnitude" and not increment:
+                self._v_magnitude=self._v_magnitude-self.dxy
         else:
-            current_omega_ref[:] = 0
-            current_lin_v_ref[:] = 0
+            self._v_magnitude=0.0
+            self._heading=0.0
+            self._heading_frontal=0.0
+            self._heading_lat=self._heading_frontal+np.pi/2
+            
+            current_twist_ref[:] = 0
             if self._agent_refs_world:
-                self._current_lin_v_ref_world[:]=0
-                self._current_omega_ref_world[:]=0
+                self._current_twist_ref_world[:]=0
+        
+        if self._heading_frontal>math.pi:
+            self._heading_frontal=math.pi
+        if self._heading_frontal<-math.pi:
+            self._heading_frontal=-math.pi
+        if self._heading_lat>math.pi:
+            self._heading_lat=math.pi
+        if self._heading_lat<-math.pi:
+            self._heading_lat=-math.pi
+        
+        if self._v_magnitude<0:
+            self._v_magnitude=0.0
+            
+        self._heading=self._heading_frontal
 
-        if not self._agent_refs_world:
-            self.agent_refs.rob_refs.root_state.set(data_type="v",data=current_lin_v_ref,
-                                        robot_idxs=self.cluster_idx_np)
-            self.agent_refs.rob_refs.root_state.set(data_type="omega",data=current_omega_ref,
-                                        robot_idxs=self.cluster_idx_np)
+        current_twist_ref[0] = self._v_magnitude*np.cos(self._heading)
+        current_twist_ref[1] = self._v_magnitude*np.sin(self._heading)
 
     def _update_loc_twist_refs(self):
+
+        self.agent_refs.rob_refs.root_state.synch_all(read=True)
 
         if self._agent_refs_world:
             # ref was set in world frame -> we need to move it in base frame before setting it to the agent
             self._robot_state.root_state.synch_all(read = True, retry = True) # read robot orientation
             robot_q = self._robot_state.root_state.get(data_type="q")[self.cluster_idx_np, :].reshape(1, -1)
-            world2base_frame_twist(t_w=np.concatenate((self._current_lin_v_ref_world, self._current_omega_ref_world), axis=0).reshape(1, -1), 
+            world2base_frame_twist(t_w=self._current_twist_ref_world.reshape(1, -1), 
                 q_b=robot_q, 
-                t_out=self._current_twist_ref_base_frame)
-    
-            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base_frame,
+                t_out=self._current_twist_ref_base)
+        
+        self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                         robot_idxs=self.cluster_idx_np)
-            
-            success=self.agent_refs.rob_refs.root_state.synch(row_index=self.cluster_idx, col_index=0, 
-                                                n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
-                                                read=False)
-    
+        self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
+                                        n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
+                                        read=False)   
+        
     def _set_navigation(self,
                 key):
         if key.char == "n":
@@ -214,36 +220,40 @@ class AgentRefsFromKeyboard:
             self._update_navigation(reset = True)
             
         if key.char == "6" and self.enable_navigation:
-            self._update_navigation(type="lateral_lin", 
+            self._update_navigation(type="lateral", 
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "4" and self.enable_navigation:
-            self._update_navigation(type="lateral_lin",
+            self._update_navigation(type="lateral",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "8" and self.enable_navigation:
-            self._update_navigation(type="frontal_lin",
+            self._update_navigation(type="frontal",
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "2" and self.enable_navigation:
-            self._update_navigation(type="frontal_lin",
+            self._update_navigation(type="frontal",
+                            increment = False,
+                            refs_in_wframe=self._agent_refs_world)
+        if key.char == "+" and self.enable_navigation:
+            self._update_navigation(type="magnitude",
+                            increment = True,
+                            refs_in_wframe=self._agent_refs_world)
+        if key.char == "-" and self.enable_navigation:
+            self._update_navigation(type="magnitude",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
                 
     def _on_press(self, key):
-            
-        self._synch(read=True) # updates  data like
-        # current cluster index
 
         if hasattr(key, 'char'):
             self._set_navigation(key)
-
-        self._synch(read=False)
 
     def _on_release(self, key):
             
         if hasattr(key, 'char'):
             
+            self._current_twist_ref_base[:, :]=0.0
             # nullify vel ref
             # self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._twist_null,
             #                     robot_idxs=self.cluster_idx_np)
@@ -251,8 +261,6 @@ class AgentRefsFromKeyboard:
             if key == keyboard.Key.esc:
 
                 self._close()
-
-        self._synch(read=False)
 
     def run(self):
 
@@ -265,29 +273,22 @@ class AgentRefsFromKeyboard:
             throw_when_excep = True)
         
         self._update_navigation(reset=True)
-
-        if self._agent_refs_world:
             
-            listener=keyboard.Listener(on_press=self._on_press, 
-                                on_release=self._on_release)
-            listener.start()
+        listener=keyboard.Listener(on_press=self._on_press, 
+                            on_release=self._on_release)
+        listener.start()
 
-            import time
-            while True:
-                try:
-                    self._update_loc_twist_refs()
-                    time.sleep(0.01)
-                except KeyboardInterrupt:
-                    break
-
-            listener.join()
-
-        else:
-
-            with keyboard.Listener(on_press=self._on_press, 
-                                on_release=self._on_release) as listener:
-
-                listener.join()
+        import time
+        self.agent_refs.run()
+        while True:
+            try:
+                self._synch() 
+                self._update_loc_twist_refs()
+                time.sleep(0.01)
+            except KeyboardInterrupt:
+                break
+        listener.stop()
+        listener.join()
 
 class AgentActionsFromKeyboard:
 
