@@ -116,10 +116,26 @@ class DummyTestAlgoBase(ABC):
         self._verbose = verbose
 
         self._ns=ns # only used for shared mem stuff
-        
-        self._override_agent_action=False
-        if self._eval:
-            self._override_agent_action=custom_args["override_agent_refs"]
+    
+        self._override_agent_action=custom_args["override_agent_actions"]
+
+        self._actions_override=None
+        if self._override_agent_action:
+            from lrhc_control.utils.shared_data.training_env import Actions
+            actions = self._env.get_actions()
+            self._actions_override = Actions(namespace=ns+"_override",
+            n_envs=self._num_envs,
+            action_dim=actions.shape[1],
+            action_names=self._env.action_names(),
+            env_names=None,
+            is_server=True,
+            verbose=self._verbose,
+            vlevel=VLevel.V2,
+            safe=True,
+            force_reconnection=True,
+            with_gpu_mirror=self._use_gpu,
+            fill_value=0.0)
+            self._actions_override.run()
 
         self._load_qf=load_qf
 

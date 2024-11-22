@@ -95,13 +95,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=3
         if self._use_rhc_avrg_vel_pred:
             obs_dim+=6
-        if self._add_prev_actions_stats_to_obs:
-            obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
         if self._add_flight_info:
             obs_dim+=self._n_contacts 
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
-
+        if self._add_prev_actions_stats_to_obs:
+            obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
+        if self._enable_action_smoothing:
+            obs_dim+=actions_dim
+    
         # health reward 
         self._health_value = 10.0
 
@@ -580,7 +582,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=self.actions_dim()
             obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
             next_idx+=self.actions_dim()
-        
+        if self._enable_action_smoothing: # adding smoothed actions
+            obs[:, next_idx:(next_idx+self.actions_dim())]=self.get_actual_actions()
+            next_idx+=self.actions_dim()
+
     def _get_custom_db_data(self, 
             episode_finished):
         episode_finished = episode_finished.cpu()
@@ -808,8 +813,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             for prev_act_mean in range(self.actions_dim()):
                 obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_avrg"
             next_idx+=self.actions_dim()
-            for prev_act_mean in range(self.actions_dim()):
-                obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_std"
+            for prev_act_std in range(self.actions_dim()):
+                obs_names[next_idx+prev_act_std] = action_names[prev_act_std]+f"_std"
+            next_idx+=self.actions_dim()
+        if self._enable_action_smoothing:
+            for smoothed_action in range(self.actions_dim()):
+                obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
             next_idx+=self.actions_dim()
         return obs_names
 
