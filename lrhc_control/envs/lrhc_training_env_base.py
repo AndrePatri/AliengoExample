@@ -1298,7 +1298,8 @@ class LRhcTrainingEnvBase(ABC):
         q_init_agent_refs[:, 0]=1.0
         self._agent_refs.rob_refs.root_state.set(data_type="q", data=q_init_agent_refs,
                 gpu=self._use_gpu)
-        self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=True) 
+        if self._use_gpu:
+            self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=True) 
         self._agent_refs.rob_refs.root_state.synch_all(read=False, retry=True)
         # episode steps counters (for detecting episode truncations for 
         # time limits) 
