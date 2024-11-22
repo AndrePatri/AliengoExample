@@ -1227,6 +1227,7 @@ class SActorCriticAlgoBase(ABC):
             self._db_env_selector_bool[:]=~self._expl_env_selector_bool
         else: # we log db data separately for env which are neither for demo nor for random exploration
             self._demo_env_selector_bool=self._demo_env_selector_bool.cpu()
+            self._demo_env_selector=self._demo_env_selector.cpu()
             self._db_env_selector_bool[:]=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
 
         self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
