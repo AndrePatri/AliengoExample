@@ -113,9 +113,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._task_err_weights[0, 0] = 1.0
         self._task_err_weights[0, 1] = 1.0
         self._task_err_weights[0, 2] = 1.0
-        self._task_err_weights[0, 3] = 1e-1
-        self._task_err_weights[0, 4] = 1e-1
-        self._task_err_weights[0, 5] = 1e-1
+        self._task_err_weights[0, 3] = 1e-3
+        self._task_err_weights[0, 4] = 1e-3
+        self._task_err_weights[0, 5] = 1e-3
 
         # task pred tracking
         self._task_pred_offset = 0.0 # 10.0
