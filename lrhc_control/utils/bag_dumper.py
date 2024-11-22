@@ -188,7 +188,7 @@ class RosBagDumper():
         bag_id=str(self._env_idx)
         self._bag_proc=ctx.Process(target=self._launch_rosbag, 
             name="rosbag_recorder_"+f"{self._ns}",
-            args=(self._remap_ns,self._dump_path, bag_id, self._timeout_ms,self._use_shared_drop_dir))
+            args=(self._remap_ns,self._dump_path, self._timeout_ms, bag_id,self._use_shared_drop_dir))
         self._bag_proc.start()
     
     def _launch_rosbag(self, 
