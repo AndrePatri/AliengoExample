@@ -135,14 +135,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._rhc_fail_idx_scale=1
 
         # power penalty
-        self._power_offset = 0.0 # 1.0
-        self._power_scale = 0.0 # 10.0
+        self._power_offset = 1.0 # 1.0
+        self._power_scale = 3e-3 # 10.0
         self._power_penalty_weights = torch.full((1, n_jnts), dtype=dtype, device=device,
                             fill_value=1.0)
-        n_jnts_per_limb = round(n_jnts/self._n_contacts) # assuming same topology along limbs
-        pow_weights_along_limb = [1.0]*n_jnts_per_limb
-        for i in range(n_jnts_per_limb):
-            self._power_penalty_weights[0, i*self._n_contacts:(self._n_contacts*(i+1))] = pow_weights_along_limb[i]
         self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
 
         # jnt vel penalty 
@@ -150,14 +146,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._jnt_vel_scale = 0.0 # 0.3
         self._jnt_vel_penalty_weights = torch.full((1, n_jnts), dtype=dtype, device=device,
                             fill_value=1.0)
-        jnt_vel_weights_along_limb = [1.0]*n_jnts_per_limb
-        for i in range(round(n_jnts/self._n_contacts)):
-            self._jnt_vel_penalty_weights[0, i*self._n_contacts:(self._n_contacts*(i+1))] = jnt_vel_weights_along_limb[i]
         self._jnt_vel_penalty_weights_sum = torch.sum(self._jnt_vel_penalty_weights).item()
         
         # task rand
-        self._use_pof0 = False
-        self._pof0 = 0.1
+        self._use_pof0 = True
+        self._pof0 = 0.01
         self._twist_ref_lb = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=-0.8) 
         self._twist_ref_ub = torch.full((1, 6), dtype=dtype, device=device,
@@ -212,7 +205,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     n_demo_envs_perc=n_demo_envs_perc)
 
         self._is_substep_rew[0]=False
-        # self._is_substep_rew[1]=True
+        self._is_substep_rew[1]=True
 
         # custom db info 
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=False)
@@ -597,17 +590,23 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self.custom_db_data["RhcFailIdx"].update(new_data=self._rhc_fail_idx(gpu=False), 
                                     ep_finished=episode_finished)
     
-    def _drained_mech_pow(self, jnts_vel, jnts_effort):
+    def _drained_mech_pow(self, jnts_vel, jnts_effort, autoscaled: bool = False):
         mech_pow_jnts=(jnts_effort*jnts_vel)*self._power_penalty_weights
         mech_pow_jnts.clamp_(0.0,torch.inf) # do not account for regenerative power
-        drained_mech_pow_tot = torch.sum(mech_pow_jnts, dim=1, keepdim=True)/self._power_penalty_weights_sum
+        drained_mech_pow_tot = torch.sum(mech_pow_jnts, dim=1, keepdim=True)
+        if autoscaled:
+            drained_mech_pow_tot=drained_mech_pow_tot/self._power_penalty_weights_sum
+
         return drained_mech_pow_tot
 
-    def _cost_of_transport(self, jnts_vel, jnts_effort, v_ref_norm):
+    def _cost_of_transport(self, jnts_vel, jnts_effort, v_ref_norm, mass_weight: bool = False):
         drained_mech_pow=self._drained_mech_pow(jnts_vel=jnts_vel,
             jnts_effort=jnts_effort)
-        robot_weight=self._rhc_robot_weight
-        return drained_mech_pow/(robot_weight*(v_ref_norm+1e-3))
+        CoT=drained_mech_pow/(v_ref_norm+1e-3)
+        if mass_weight:
+            robot_weight=self._rhc_robot_weight
+            CoT=CoT/robot_weight
+        return CoT
 
     def _jnt_vel_penalty(self, jnts_vel):
         task_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
@@ -680,12 +679,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
 
     def _compute_substep_rewards(self):
-        task_error_fun = self._task_perc_err_lin
+        # task_error_fun = self._task_perc_err_lin
 
-        # jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
-        # jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
-        # ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
-        # CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm)
+        jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
+        jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
+        agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
+        ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
+        # weighted_mech_power=self._drained_mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort)
+        CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=False)
         # fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
         # if self._use_rhc_avrg_vel_pred:
         #     agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
@@ -697,7 +698,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         #     self._substep_rewards[:, 1:2] = self._task_pred_offset*torch.exp(-self._task_pred_scale*task_pred_error)
 
         # self._substep_rewards[:, 1:2] =self._power_offset-self._power_scale*CoT
-        # self._substep_rewards[:, 2:3] = self._power_offset - self._power_scale * weighted_mech_power
+        self._substep_rewards[:, 1:2] = self._power_offset*torch.exp(-self._power_scale*CoT)
         # self._substep_rewards[:, 3:4] = self._jnt_vel_offset - self._jnt_vel_scale * weighted_jnt_vel
         # self._substep_rewards[:, 4:5] = self._rhc_fail_idx_offset - self._rhc_fail_idx_rew_scale* self._rhc_fail_idx(gpu=self._use_gpu)
         # self._substep_rewards[:, 1:2] = -fail_idx # health reward
@@ -836,15 +837,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def _get_rewards_names(self):
 
-        n_rewards = 1
+        n_rewards = 2
         reward_names = [""] * n_rewards
 
         reward_names[0] = "task_error"
         # reward_names[1] = "health"
         # reward_names[1] = "task_pred_error"
 
-        # reward_names[1] = "CoT"
-        # reward_names[2] = "mech_power"
+        reward_names[1] = "CoT"
+        # reward_names[1] = "mech_power"
         # reward_names[3] = "jnt_vel"
         # reward_names[4] = "rhc_fail_idx"
         
