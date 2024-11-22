@@ -42,7 +42,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
 
-        n_demo_envs_perc=0.01
+        n_demo_envs_perc=0.0
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
         self._action_smoothing_horizon_d=0.1
