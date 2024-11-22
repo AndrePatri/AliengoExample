@@ -295,6 +295,8 @@ class RhcToViz2Bridge:
                                 safe=False,
                                 verbose=self.verbose,
                                 vlevel=self.vlevel)
+            self.agent_refs.rob_refs.set_q_remapping(q_remapping=[1, 2, 3, 0]) # remapping from w, i, j, k
+            # to rviz conventions (i, k, k, w)
             self.agent_refs.run()
 
         self.cluster_size = self.robot_state.n_robots()
@@ -571,6 +573,7 @@ class RhcToViz2Bridge:
         if self._with_agent_refs:
             if self._agent_refs_in_h_frame:
                 hl_ref_pose = self.agent_refs.rob_refs.root_state.get(data_type="q_full",robot_idxs=self._current_index).numpy()
+            
                 hl_ref_twist= self.agent_refs.rob_refs.root_state.get(data_type="twist",robot_idxs=self._current_index).numpy()
                 agent_ref_twist_h = hl_ref_twist.copy().reshape(-1, 1)
                 hor2w_frame(t_h=hl_ref_twist.reshape(-1, 1), 

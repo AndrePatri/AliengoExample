@@ -278,6 +278,8 @@ class RhcToVizBridge:
                                 safe=False,
                                 verbose=self.verbose,
                                 vlevel=self.vlevel)
+            self.agent_refs.rob_refs.set_q_remapping(q_remapping=[1, 2, 3, 0]) # remapping from w, i, j, k
+            # to rviz conventions (i, k, k, w)
             self.agent_refs.run()
 
         self.cluster_size = self.robot_state.n_robots()

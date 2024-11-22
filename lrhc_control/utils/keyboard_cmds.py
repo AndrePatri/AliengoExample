@@ -3,6 +3,9 @@ from pynput import keyboard
 from lrhc_control.utils.shared_data.agent_refs import AgentRefs
 from lrhc_control.utils.shared_data.training_env import Actions
 
+from control_cluster_bridge.utilities.shared_data.rhc_data import RobotState
+from control_cluster_bridge.utilities.math_utils import world2base_frame_twist
+
 from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
 from SharsorIPCpp.PySharsorIPC import VLevel
 from SharsorIPCpp.PySharsorIPC import Journal, LogType
@@ -16,9 +19,12 @@ class AgentRefsFromKeyboard:
 
     def __init__(self, 
                 namespace: str, 
-                verbose = False):
+                verbose = False,
+                agent_refs_world: bool = False):
 
         self._verbose = verbose
+
+        self._agent_refs_world=agent_refs_world
 
         self.namespace = namespace
 
@@ -51,32 +57,53 @@ class AgentRefsFromKeyboard:
         self.env_index.run()
         
         self._init_rhc_ref_subscriber()
+        
+        self._robot_state=None
+        if self._agent_refs_world:
+            self._robot_state = RobotState(namespace=self.namespace,
+                                is_server=False, 
+                                safe=False,
+                                verbose=True,
+                                vlevel=VLevel.V2)
+            self._robot_state.run()
+            # used to hold agent refs in world frame
+            self._current_lin_v_ref_world = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="v", robot_idxs=self.cluster_idx_np), 
+                fill_value=0.0).reshape(-1)
+            self._current_omega_ref_world = np.full_like(self._current_lin_v_ref_world, fill_value=0.0)
+            self._current_twist_ref_base_frame = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="twist", robot_idxs=self.cluster_idx_np), 
+                fill_value=0.0).reshape(1, -1)
 
     def _init_rhc_ref_subscriber(self):
 
         self.agent_refs = AgentRefs(namespace=self.namespace,
                                 is_server=False, 
-                                safe=False, 
+                                safe=True, 
                                 verbose=self._verbose,
                                 vlevel=VLevel.V2,
-                                with_gpu_mirror=False)
+                                with_gpu_mirror=False,
+                                with_torch_view=False)
 
         self.agent_refs.run()
 
         self._twist_null = self.agent_refs.rob_refs.root_state.get(data_type="twist", robot_idxs=self.cluster_idx_np)
-        self._twist_null.zero_()
+        self._twist_null[:]=0.0
 
+        q0=np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="q", robot_idxs=self.cluster_idx_np),fill_value=0.0)
+        q0[0]=1.0
+        self.agent_refs.rob_refs.root_state.set(data_type="q",data=q0,
+                                        robot_idxs=self.cluster_idx_np)
+        
     def __del__(self):
 
         if not self._closed:
-
             self._close()
     
     def _close(self):
         
         if self.agent_refs is not None:
-
             self.agent_refs.close()
+        if self._robot_state is not None:
+            self._robot_state.close()
 
         self._closed = True
     
@@ -101,11 +128,19 @@ class AgentRefsFromKeyboard:
     def _update_navigation(self, 
                     type: str = "",
                     increment = True,
-                    reset: bool = False):
+                    reset: bool = False,
+                    refs_in_wframe: bool = False):
+        
+        current_lin_v_ref=None
+        current_omega_ref=None
+        if refs_in_wframe:
+            current_lin_v_ref=self._current_lin_v_ref_world
+            current_omega_ref=self._current_omega_ref_world
+        else:
+            current_lin_v_ref = self.agent_refs.rob_refs.root_state.get(data_type="v", robot_idxs=self.cluster_idx_np)
+            current_omega_ref = self.agent_refs.rob_refs.root_state.get(data_type="omega", robot_idxs=self.cluster_idx_np)
 
-        current_lin_v_ref = self.agent_refs.rob_refs.root_state.get(data_type="v", robot_idxs=self.cluster_idx_np)
-        current_omega_ref = self.agent_refs.rob_refs.root_state.get(data_type="omega", robot_idxs=self.cluster_idx_np)
-
+        # randomizng in base frame if not refs_in_wframe, otherwise world
         if not reset:
             if type=="lateral_lin" and increment:
                 # lateral motion
@@ -137,12 +172,33 @@ class AgentRefsFromKeyboard:
         else:
             current_omega_ref[:] = 0
             current_lin_v_ref[:] = 0
+            if self._agent_refs_world:
+                self._current_lin_v_ref_world[:]=0
+                self._current_omega_ref_world[:]=0
 
-        self.agent_refs.rob_refs.root_state.set(data_type="v",data=current_lin_v_ref,
-                                    robot_idxs=self.cluster_idx_np)
-        self.agent_refs.rob_refs.root_state.set(data_type="omega",data=current_omega_ref,
-                                    robot_idxs=self.cluster_idx_np)
+        if not self._agent_refs_world:
+            self.agent_refs.rob_refs.root_state.set(data_type="v",data=current_lin_v_ref,
+                                        robot_idxs=self.cluster_idx_np)
+            self.agent_refs.rob_refs.root_state.set(data_type="omega",data=current_omega_ref,
+                                        robot_idxs=self.cluster_idx_np)
 
+    def _update_loc_twist_refs(self):
+
+        if self._agent_refs_world:
+            # ref was set in world frame -> we need to move it in base frame before setting it to the agent
+            self._robot_state.root_state.synch_all(read = True, retry = True) # read robot orientation
+            robot_q = self._robot_state.root_state.get(data_type="q")[self.cluster_idx_np, :].reshape(1, -1)
+            world2base_frame_twist(t_w=np.concatenate((self._current_lin_v_ref_world, self._current_omega_ref_world), axis=0).reshape(1, -1), 
+                q_b=robot_q, 
+                t_out=self._current_twist_ref_base_frame)
+    
+            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base_frame,
+                                        robot_idxs=self.cluster_idx_np)
+            
+            success=self.agent_refs.rob_refs.root_state.synch(row_index=self.cluster_idx, col_index=0, 
+                                                n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
+                                                read=False)
+    
     def _set_navigation(self,
                 key):
         if key.char == "n":
@@ -159,16 +215,20 @@ class AgentRefsFromKeyboard:
             
         if key.char == "6" and self.enable_navigation:
             self._update_navigation(type="lateral_lin", 
-                            increment = True)
+                            increment = True,
+                            refs_in_wframe=self._agent_refs_world)
         if key.char == "4" and self.enable_navigation:
             self._update_navigation(type="lateral_lin",
-                            increment = False)
+                            increment = False,
+                            refs_in_wframe=self._agent_refs_world)
         if key.char == "8" and self.enable_navigation:
             self._update_navigation(type="frontal_lin",
-                            increment = True)
+                            increment = True,
+                            refs_in_wframe=self._agent_refs_world)
         if key.char == "2" and self.enable_navigation:
             self._update_navigation(type="frontal_lin",
-                            increment = False)
+                            increment = False,
+                            refs_in_wframe=self._agent_refs_world)
                 
     def _on_press(self, key):
             
@@ -185,8 +245,8 @@ class AgentRefsFromKeyboard:
         if hasattr(key, 'char'):
             
             # nullify vel ref
-            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._twist_null,
-                                robot_idxs=self.cluster_idx_np)
+            # self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._twist_null,
+            #                     robot_idxs=self.cluster_idx_np)
 
             if key == keyboard.Key.esc:
 
@@ -205,11 +265,29 @@ class AgentRefsFromKeyboard:
             throw_when_excep = True)
         
         self._update_navigation(reset=True)
-    
-        with keyboard.Listener(on_press=self._on_press, 
-                               on_release=self._on_release) as listener:
+
+        if self._agent_refs_world:
+            
+            listener=keyboard.Listener(on_press=self._on_press, 
+                                on_release=self._on_release)
+            listener.start()
+
+            import time
+            while True:
+                try:
+                    self._update_loc_twist_refs()
+                    time.sleep(0.01)
+                except KeyboardInterrupt:
+                    break
 
             listener.join()
+
+        else:
+
+            with keyboard.Listener(on_press=self._on_press, 
+                                on_release=self._on_release) as listener:
+
+                listener.join()
 
 class AgentActionsFromKeyboard:
 
