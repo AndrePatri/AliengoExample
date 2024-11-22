@@ -124,7 +124,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
                 self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
 
-    def _apply_actions_to_rhc(self):
+    def _override_actions_with_demo(self):
         
         if self.demo_active():
             
@@ -163,6 +163,3 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
             # if required, keep contact
             agent_action[stop_and_demo, 6:10] = 1.0
-
-        super()._apply_actions_to_rhc()
-

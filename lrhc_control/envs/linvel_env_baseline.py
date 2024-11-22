@@ -461,7 +461,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def _set_refs(self):
 
-        agent_action = self.get_actions() # see _get_action_names() to get 
+        action_to_be_applied = self.get_actual_actions() # see _get_action_names() to get 
         # the meaning of each component of this tensor
 
         rhc_latest_twist_cmd = self._rhc_refs.rob_refs.root_state.get(data_type="twist", gpu=self._use_gpu)
@@ -473,7 +473,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # reference twist for MPC is assumed to always be specified in MPC's 
         # horizontal frame, while agent actions are interpreted as in MPC's
         # base frame -> we need to rotate the actions into the horizontal frame
-        base2world_frame(t_b=agent_action[:, 0:6],q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_world)
+        base2world_frame(t_b=action_to_be_applied[:, 0:6],q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_world)
         w2hor_frame(t_w=self._rhc_twist_cmd_rhc_world,q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_h)
 
         rhc_latest_twist_cmd[:, 0:6] = self._rhc_twist_cmd_rhc_h
@@ -488,13 +488,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             if self._use_prob_based_stepping:
                 # encode actions as probs
                 self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
-                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
-                # probability agent_action[:, 6:10]
+                rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
+                # probability action_to_be_applied[:, 6:10]
             else: # just use a threshold
-                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] > 0
+                rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] > 0
             # actually apply actions to controller
         else:
-            rhc_latest_pos_ref[:, :] = agent_action[:, 6:10]
+            rhc_latest_pos_ref[:, :] = action_to_be_applied[:, 6:10]
 
     def _write_refs(self):
 

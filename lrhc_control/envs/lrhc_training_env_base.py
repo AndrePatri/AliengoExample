@@ -184,6 +184,7 @@ class LRhcTrainingEnvBase(ABC):
         self._obs_lb = None
         self._next_obs = None
         self._actions = None
+        self._actual_actions = None
         self._actions_ub = None
         self._actions_lb = None
         self._tot_rewards = None
@@ -432,20 +433,17 @@ class LRhcTrainingEnvBase(ABC):
     def step(self, 
             action):
 
-        # set action from agent
-        actions = self._actions.get_torch_mirror(gpu=self._use_gpu)
+        actions = self._actions.get_torch_mirror(gpu=self._use_gpu) # will hold agent actions
 
-        # handing actions smoothing if necessary
-        actions[:, :] = action.detach() # writes actions, detaching to avoid grads prop
-        if self._action_smoother_continuous is not None:
-            self._action_smoother_continuous.update(new_signal=
-                    actions[:, self._is_continuous_actions])
-            actions[:, self._is_continuous_actions]=self._action_smoother_continuous.get()
-        if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.update(new_signal=
-                    actions[:, ~self._is_continuous_actions])
-            actions[:, ~self._is_continuous_actions]=self._action_smoother_discrete.get()
-    
+        # writes actions from agent, detaching to avoid grads prop
+        actions[:, :] = action.detach() 
+
+        self._override_actions_with_demo() # if necessary override some actions with expert demonstrations
+        # (getting actions with get_actions will return the modified actions tensor)
+
+        self._apply_actions_smoothing() # smooth actions if enabled (the tensor returned by 
+        # get_actions does not contain smoothing and can be safely employed for experience collection)
+
         self._apply_actions_to_rhc() # apply agent actions to rhc controller
 
         if self._act_mem_buffer is not None:
@@ -596,6 +594,19 @@ class LRhcTrainingEnvBase(ABC):
         # can be overridden by child
         return None
     
+    def _apply_actions_smoothing(self):
+
+        actions = self._actions.get_torch_mirror(gpu=self._use_gpu)
+        actual_actions=self.get_actual_actions() # will write smoothed actions here
+        if self._action_smoother_continuous is not None:
+            self._action_smoother_continuous.update(new_signal=
+                    actions[:, self._is_continuous_actions])
+            actual_actions[:, self._is_continuous_actions]=self._action_smoother_continuous.get()
+        if self._action_smoother_discrete is not None:
+            self._action_smoother_discrete.update(new_signal=
+                    actions[:, ~self._is_continuous_actions])
+            actual_actions[:, ~self._is_continuous_actions]=self._action_smoother_discrete.get()
+
     def _update_custom_db_data(self,
                     episode_finished):
 
@@ -711,6 +722,8 @@ class LRhcTrainingEnvBase(ABC):
             self._obs.close()
             self._next_obs.close()
             self._actions.close()
+            if self._actual_actions is not None:
+                self._actual_actions.close()
             self._sub_rewards.close()
             self._tot_rewards.close()
 
@@ -723,37 +736,48 @@ class LRhcTrainingEnvBase(ABC):
 
     def get_obs(self, clone:bool=False):
         if clone:
-            return self._obs.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._obs.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._obs.get_torch_mirror(gpu=self._use_gpu).detach()
 
     def get_next_obs(self, clone:bool=False):
         if clone:
-            return self._next_obs.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._next_obs.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._next_obs.get_torch_mirror(gpu=self._use_gpu).detach()
         
     def get_actions(self, clone:bool=False):
+ 
         if clone:
-            return self._actions.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._actions.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._actions.get_torch_mirror(gpu=self._use_gpu).detach()
+    
+    def get_actual_actions(self, clone:bool=False):
+        if self._use_action_smoothing:
+            if clone:
+                self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach().clone()
+            else:
+                self._actual_actions.get_torch_mirror(gpu=self._use_gpu).detach()
+        else: # actual action coincides with the one from the agent + possible modif.
+            # made if using demonstration envs
+            return self.get_actions(clone=clone)
         
     def get_rewards(self, clone:bool=False):
         if clone:
-            return self._tot_rewards.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._tot_rewards.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._tot_rewards.get_torch_mirror(gpu=self._use_gpu).detach()
         
     def get_terminations(self, clone:bool=False):
         if clone:
-            return self._terminations.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._terminations.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._terminations.get_torch_mirror(gpu=self._use_gpu).detach()
     
     def get_truncations(self, clone:bool=False):
         if clone:
-            return self._truncations.get_torch_mirror(gpu=self._use_gpu).clone().detach()
+            return self._truncations.get_torch_mirror(gpu=self._use_gpu).detach().clone()
         else:
             return self._truncations.get_torch_mirror(gpu=self._use_gpu).detach()
         
@@ -966,6 +990,21 @@ class LRhcTrainingEnvBase(ABC):
             dtype=self._dtype,
             use_gpu=self._use_gpu,
             name="ActionSmootherDiscrete")
+        
+        # we also need somewhere to keep the actual actions after smoothing
+        self._actual_actions = Actions(namespace=self._namespace+"_actual",
+            n_envs=self._n_envs,
+            action_dim=self._actions_dim,
+            action_names=self._get_action_names(),
+            env_names=None,
+            is_server=True,
+            verbose=self._verbose,
+            vlevel=self._vlevel,
+            safe=True,
+            force_reconnection=True,
+            with_gpu_mirror=self._use_gpu,
+            fill_value=0.0)
+        self._actual_actions.run()
             
     def _init_rewards(self):
         
@@ -1594,6 +1633,9 @@ class LRhcTrainingEnvBase(ABC):
 
     @abstractmethod
     def _apply_actions_to_rhc(self):
+        pass
+    
+    def _override_actions_with_demo(self):
         pass
 
     @abstractmethod
