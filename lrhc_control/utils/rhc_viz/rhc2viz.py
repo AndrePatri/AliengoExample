@@ -275,7 +275,7 @@ class RhcToVizBridge:
             self.agent_refs = AgentRefs(namespace=self.namespace,
                                 is_server=False,
                                 with_gpu_mirror=False,
-                                safe=False,
+                                safe=True,
                                 verbose=self.verbose,
                                 vlevel=self.vlevel)
             self.agent_refs.rob_refs.set_q_remapping(q_remapping=[1, 2, 3, 0]) # remapping from w, i, j, k
