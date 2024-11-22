@@ -268,14 +268,14 @@ class RosBagDumper():
         command=None
         if not shell:
             if self._ros2:
-                command = [f"{this_dir_path}/launch_ros2bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
+                command = [f"{this_dir_path}/launch_ros2bag.sh", "--ns", namespace, "--id", bag_id, "--output_path", dump_path]
             else:
-                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
+                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--id", bag_id, "--output_path", dump_path]
         else:
             if self._ros2:
-                command = f"{this_dir_path}/launch_ros2bag.sh --ns {namespace} --output_path {dump_path} --id {bag_id}"
+                command = f"{this_dir_path}/launch_ros2bag.sh --ns {namespace} --id {bag_id} --output_path {dump_path}"
             else:
-                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--output_path", dump_path, "--id", bag_id]
+                command = f"{this_dir_path}/launch_ros1bag.sh --ns {namespace} --id {bag_id} --output_path {dump_path}"
 
         import subprocess
 
