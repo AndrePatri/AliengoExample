@@ -66,7 +66,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         self._walk_to_trot_thresh=0.5 # [m/s]
         self._stopping_thresh=0.05
 
-        phase_period_walk=1.0
+        phase_period_walk=3.0
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -85,7 +85,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             dtype=self._dtype
         )
 
-        phase_period_trot=1.0
+        phase_period_trot=1.5
         update_dt_trot = self._substep_dt*self._action_repeat
         self._pattern_gen_trot = QuadrupedGaitPatternGenerator(phase_period=phase_period_trot)
         gait_params_trot = self._pattern_gen_trot.get_params("trot")
@@ -138,6 +138,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 
                 # agent_twist_ref_current and agent action twist are base local
                 agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
+                # agent_action[self._demo_envs_idxs, 0:6]=0.0
 
             # overwriting agent gait actions with the ones taken from the gait schedulers for 
             # (just for demonstration environments)
