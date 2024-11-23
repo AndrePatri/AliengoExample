@@ -31,8 +31,16 @@ class Dummy(DummyTestAlgoBase):
         obs = self._env.get_obs(clone=True) # we beed cloned obs (they are modified upon env stepping by the
         # env itself
 
-        actions = self._agent.get_action(x=obs)
-        actions = actions.detach()
+        if not self._override_agent_action:
+            actions = self._agent.get_action(x=obs)
+            actions = actions.detach()
+        else:
+            self._actions_override.synch_all(read=True,retry=True) # read from CPU
+            # write on GPU
+            if self._use_gpu:
+                self._actions_override.synch_mirror(from_gpu=False,non_blocking=True)
+            actions=self._actions_override.get_torch_mirror(gpu=self._use_gpu)
+            
         env_step_ok = self._env.step(actions)
 
         return env_step_ok

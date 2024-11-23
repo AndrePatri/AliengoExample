@@ -42,10 +42,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
 
-        n_demo_envs_perc=0.01
+        n_demo_envs_perc=0.0
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
-        self._action_smoothing_horizon_d=0.3
+        self._action_smoothing_horizon_d=0.1
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
@@ -95,13 +95,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=3
         if self._use_rhc_avrg_vel_pred:
             obs_dim+=6
-        if self._add_prev_actions_stats_to_obs:
-            obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
         if self._add_flight_info:
             obs_dim+=self._n_contacts 
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
-
+        if self._add_prev_actions_stats_to_obs:
+            obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
+        if self._enable_action_smoothing:
+            obs_dim+=actions_dim
+    
         # health reward 
         self._health_value = 10.0
 
@@ -198,7 +200,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     timeout_ms=timeout_ms,
                     srew_drescaling=True,
                     use_act_mem_bf=self._add_prev_actions_stats_to_obs,
-                    act_membf_size=30,
+                    act_membf_size=15,
                     use_action_smoothing=self._enable_action_smoothing,
                     smoothing_horizon_c=self._action_smoothing_horizon_c,
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
@@ -461,7 +463,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def _set_refs(self):
 
-        agent_action = self.get_actions() # see _get_action_names() to get 
+        action_to_be_applied = self.get_actual_actions() # see _get_action_names() to get 
         # the meaning of each component of this tensor
 
         rhc_latest_twist_cmd = self._rhc_refs.rob_refs.root_state.get(data_type="twist", gpu=self._use_gpu)
@@ -473,7 +475,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # reference twist for MPC is assumed to always be specified in MPC's 
         # horizontal frame, while agent actions are interpreted as in MPC's
         # base frame -> we need to rotate the actions into the horizontal frame
-        base2world_frame(t_b=agent_action[:, 0:6],q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_world)
+        base2world_frame(t_b=action_to_be_applied[:, 0:6],q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_world)
         w2hor_frame(t_w=self._rhc_twist_cmd_rhc_world,q_b=rhc_q,t_out=self._rhc_twist_cmd_rhc_h)
 
         rhc_latest_twist_cmd[:, 0:6] = self._rhc_twist_cmd_rhc_h
@@ -488,13 +490,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             if self._use_prob_based_stepping:
                 # encode actions as probs
                 self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
-                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
-                # probability agent_action[:, 6:10]
+                rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
+                # probability action_to_be_applied[:, 6:10]
             else: # just use a threshold
-                rhc_latest_contact_ref[:, :] = agent_action[:, 6:10] > 0
+                rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] > 0
             # actually apply actions to controller
         else:
-            rhc_latest_pos_ref[:, :] = agent_action[:, 6:10]
+            rhc_latest_pos_ref[:, :] = action_to_be_applied[:, 6:10]
 
     def _write_refs(self):
 
@@ -580,7 +582,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=self.actions_dim()
             obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
             next_idx+=self.actions_dim()
-        
+        if self._enable_action_smoothing: # adding smoothed actions
+            obs[:, next_idx:(next_idx+self.actions_dim())]=self.get_actual_actions()
+            next_idx+=self.actions_dim()
+
     def _get_custom_db_data(self, 
             episode_finished):
         episode_finished = episode_finished.cpu()
@@ -808,8 +813,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             for prev_act_mean in range(self.actions_dim()):
                 obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_avrg"
             next_idx+=self.actions_dim()
-            for prev_act_mean in range(self.actions_dim()):
-                obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_std"
+            for prev_act_std in range(self.actions_dim()):
+                obs_names[next_idx+prev_act_std] = action_names[prev_act_std]+f"_std"
+            next_idx+=self.actions_dim()
+        if self._enable_action_smoothing:
+            for smoothed_action in range(self.actions_dim()):
+                obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
             next_idx+=self.actions_dim()
         return obs_names
 
