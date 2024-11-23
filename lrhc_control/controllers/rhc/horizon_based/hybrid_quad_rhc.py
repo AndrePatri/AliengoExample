@@ -86,9 +86,10 @@ class HybridQuadRhc(RHController):
             "lin_a_feedback": False,
             "is_open_loop": self._open_loop,
             "is_adaptive_open_loop": True, 
-            "alpha_from_outsize": False,
-            "alpha_half": 1.0}
-
+            "alpha_from_outside": False,
+            "alpha_half": 1.0,
+            "adaptive_is": True}
+        
         self._custom_opts.update(custom_opts)
         
         self._alpha_half=self._custom_opts["alpha_half"]
@@ -653,7 +654,12 @@ class HybridQuadRhc(RHController):
         # set initial guess for controller
         xig, _ = self._set_ig()
         # set initial state
-        qv_state, a_state=self._set_is()
+        qv_state=None
+        a_state=None
+        if self._custom_opts["adaptive_is"]:
+            qv_state, a_state=self._set_is_adaptive()
+        else:
+            qv_state, a_state=self._set_is()
 
         return qv_state, a_state
     
@@ -712,6 +718,77 @@ class HybridQuadRhc(RHController):
         # overriding states with rhc data (-> all overridden state are open looop)
         root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
         root_p_from_rhc=root_q_full_from_rhc[0:3, :]
+        # root_q_from_rhc=root_q_full_from_rhc[3:7, :]
+        p_root[:, :]=root_p_from_rhc # position is always open loop
+
+        # root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
+        # root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
+        # root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
+        # jnt_q_from_rhc=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False).reshape(-1, 1)
+        # jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
+            
+        # rhc variables to be set
+        q=self._prb.getVariables("q") # .setBounds()
+        root_p_rhc=q[0:3] # root p
+        root_q_rhc=q[3:7] # root orientation
+        jnts_q_rhc=q[7:] # jnts q
+        vel=self._prb.getVariables("v")
+        root_v_rhc=vel[0:3] # lin v.
+        root_omega_rhc=vel[3:6] # omega
+        jnts_v_rhc=vel[6:] # jnts v
+        acc=self._prb.getVariables("a")
+        lin_a_prb=acc[0:3] # lin acc
+        
+        self.rhc_refs.set_alpha(alpha=0.0) # non-adaptive
+
+        root_p_rhc.setBounds(lb=p_root,
+            ub=p_root, nodes=0)
+        root_q_rhc.setBounds(lb=q_root, 
+            ub=q_root, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts, 
+            ub=q_jnts, nodes=0)
+        root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
+            ub=self._v_inf[0:3], nodes=0) # leaving lin v of the base free (estimated from constraints)
+        root_omega_rhc.setBounds(lb=omega, 
+            ub=omega, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts, 
+            ub=v_jnts, nodes=0)
+        if self._custom_opts["lin_a_feedback"]:
+            # write base lin 13793197 from meas
+            lin_a_prb.setBounds(lb=a_root[0:3, :], 
+                ub=a_root[0:3, :], 
+                nodes=0)
+
+        # return state used for feedback
+        qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
+                axis=0)
+        a_state=np.concatenate((a_root, a_jnts),
+                axis=0)
+        
+        return (qv_state, a_state)
+
+    def _set_is_adaptive(self):
+        
+        # measurements
+        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
+        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
+        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
+        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
+        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
+        
+        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
+        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
+        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
+
+        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
+            self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
+            self._jnts_q_expanded[self._continuous_joints_idxs_cos, :]=np.cos(q_jnts[self._continuous_joints_idxs_red, :]) # cos
+            self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
+            q_jnts=self._jnts_q_expanded.reshape(-1,1)
+
+        # overriding states with rhc data (-> all overridden state are open looop)
+        root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
+        root_p_from_rhc=root_q_full_from_rhc[0:3, :]
         root_q_from_rhc=root_q_full_from_rhc[3:7, :]
         p_root[:, :]=root_p_from_rhc # position is always open loop
 
@@ -743,7 +820,7 @@ class HybridQuadRhc(RHController):
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
         alpha_now=1.0
-        if self._custom_opts["alpha_from_outsize"]:
+        if self._custom_opts["alpha_from_outside"]:
             alpha_now=self.rhc_refs.get_alpha()
         else: # "autotuned" alpha
             delta=np.max(np.abs(jnt_v_delta))
@@ -777,7 +854,7 @@ class HybridQuadRhc(RHController):
                 axis=0)
         
         return (qv_state, a_state)
-
+    
     def _solve(self):
         
         if self._debug:
