@@ -66,7 +66,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         self._walk_to_trot_thresh=0.5 # [m/s]
         self._stopping_thresh=0.05
 
-        phase_period_walk=3.0
+        phase_period_walk=2.5
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
