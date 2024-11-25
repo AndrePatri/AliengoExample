@@ -46,6 +46,7 @@ if __name__ == "__main__":
     parser.add_argument('--override_agent_refs',action='store_true', help='Whether to override automatically generated agent refs (useful for debug)')
     parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
     parser.add_argument('--n_eval_timesteps', type=int, help='Total number of timesteps to be evaluated', default=int(1e6))
+    parser.add_argument('--allow_expl_during_eval',action='store_true', help='Whether to allow expl envs during evaluation (useful to tune exploration)')
     parser.add_argument('--mpath', type=str, help='Model path to be used for policy evaluation', default=None)
     parser.add_argument('--mname', type=str, help='Model name', default=None)
     parser.add_argument('--det_eval',action='store_true', help='Whether to perform a deterministic eval (only action mean is used). Only valid if --eval.')
