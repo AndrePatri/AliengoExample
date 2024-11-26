@@ -286,10 +286,13 @@ class HybridQuadRhcRefs(RhcRefs):
                     read=True)
         alpha=self.alpha.get_numpy_mirror()[self.robot_index, :].item()
         return alpha
-        
-    def get_alpha(alpha:float):
-        alpha=self.alpha.get_numpy_mirror()
-        alpha[self.robot_index, :] = 0.0
+
+    def set_bound_relax(self, bound_relax:float):
+        # set provided value
+        bound_rel_shared=self.bound_rel.get_numpy_mirror()
+        bound_rel_shared[self.robot_index, :] = bound_relax
+        self.bound_rel.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+            read=False)
 
     def reset(self):
 

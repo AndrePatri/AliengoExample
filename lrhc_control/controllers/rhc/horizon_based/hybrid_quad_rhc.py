@@ -83,7 +83,7 @@ class HybridQuadRhc(RHController):
         self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
             "fixed_flights": True,
-            "lin_a_feedback": False,
+            "lin_a_feedback": True,
             "is_open_loop": self._open_loop, # fully open (just for db)
             "fully_closed": False, # closed loop with full feedback (just for db)
             "closed_partial": False, # closed loop with partial feedback
@@ -103,9 +103,11 @@ class HybridQuadRhc(RHController):
             if self._custom_opts["fully_closed"]:
                 self._custom_opts["adaptive_is"]=False
                 self._custom_opts["closed_partial"]=False
+                self._custom_opts["lin_a_feedback"]=False
             if self._custom_opts["closed_partial"]:
                 self._custom_opts["adaptive_is"]=False
                 self._custom_opts["fully_closed"]=False
+                self._custom_opts["lin_a_feedback"]=False
             if self._custom_opts["adaptive_is"]:
                 self._custom_opts["closed_partial"]=False
                 self._custom_opts["fully_closed"]=False
@@ -968,10 +970,12 @@ class HybridQuadRhc(RHController):
         jnt_q_delta=self.rhc_pred_delta.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
         jnt_v_delta=self.rhc_pred_delta.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
         omega_root_delta = self.rhc_pred_delta.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
+        a_root_delta = self.rhc_pred_delta.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
 
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
         alpha_now=1.0
+        delta=0.0 
         if self._custom_opts["alpha_from_outside"]:
             alpha_now=self.rhc_refs.get_alpha()
         else: # "autotuned" alpha
@@ -980,7 +984,9 @@ class HybridQuadRhc(RHController):
             # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
             alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
 
+        bound_relaxation=-np.log(1-alpha_now+1e-16) # [~0, ~inf] if alpha_now [0, 1]
         self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem for db
+        self.rhc_refs.set_bound_relax(bound_relax=bound_relaxation) # also writes on shared mem for db
 
         # position is always open loop
         root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
@@ -1000,9 +1006,8 @@ class HybridQuadRhc(RHController):
         jnts_v_rhc.setBounds(lb=v_jnts+alpha_now*jnt_v_delta, 
             ub=v_jnts+alpha_now*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
-            # write base lin 13793197 from meas
-            lin_a_prb.setBounds(lb=a_root[0:3, :], 
-                ub=a_root[0:3, :], 
+            lin_a_prb.setBounds(lb=a_root[0:3, :]+alpha_now*a_root_delta[0:3, :]-bound_relaxation, 
+                ub=a_root[0:3, :]+alpha_now*a_root_delta[0:3, :]+bound_relaxation, 
                 nodes=0)
             
         # return state used for feedback
