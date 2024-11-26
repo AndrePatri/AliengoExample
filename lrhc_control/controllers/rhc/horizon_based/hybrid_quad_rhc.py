@@ -94,6 +94,7 @@ class HybridQuadRhc(RHController):
         self._custom_opts.update(custom_opts)
         
         self._alpha_half=self._custom_opts["alpha_half"]
+
         if self._open_loop:
             self._custom_opts["fully_closed"]=False
             self._custom_opts["adaptive_is"]=False
@@ -143,6 +144,17 @@ class HybridQuadRhc(RHController):
         self._nq_jnts=self._nq-7# assuming floating base
         self._nv=self.nv()
         self._nv_jnts=self._nv-6
+
+        self._alphas_q_root=np.zeros((7, 1), dtype=self._dtype)
+        self._alphas_q_jnts=np.zeros((self._nq_jnts, 1), dtype=self._dtype)
+        self._alphas_v_root=np.zeros((6, 1), dtype=self._dtype)
+        self._alphas_v_jnts=np.zeros((self._nv_jnts, 1), dtype=self._dtype)
+        self._alphas_a=np.zeros((self._nv, 1), dtype=self._dtype)
+        self._alphas_q_root[:, :]=1.0 # default to all open
+        self._alphas_q_jnts[:, :]=1.0 
+        self._alphas_v_root[:, :]=1.0 
+        self._alphas_v_jnts[:, :]=1.0 
+        self._alphas_a[:, :]=1.0
 
     def _init_problem(self,
             fixed_jnt_patterns: List[str] = None,
@@ -271,6 +283,7 @@ class HybridQuadRhc(RHController):
             self._jnts_q_reduced=np.zeros((1,self.nv()-6),dtype=self._dtype)
             self._jnts_q_expanded=np.zeros((self.nq()-7,1),dtype=self._dtype)
             self._full_q_reduced=np.zeros((7+len(jnt_names), self._n_nodes),dtype=self._dtype)
+            self._jnts_q_delta_expanded=np.zeros((self.nq()-7,1),dtype=self._dtype)
         else:
             self._custom_opts["replace_continuous_joints"]=True
             Journal.log(self.__class__.__name__,
@@ -845,94 +858,6 @@ class HybridQuadRhc(RHController):
                 axis=0)
         
         return (qv_state, a_state)
-
-    # def _set_is_adaptive(self):
-        
-    #     # measurements
-    #     p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
-        
-    #     q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-    #     a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
-
-    #     if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
-    #         self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
-    #         self._jnts_q_expanded[self._continuous_joints_idxs_cos, :]=np.cos(q_jnts[self._continuous_joints_idxs_red, :]) # cos
-    #         self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
-    #         q_jnts=self._jnts_q_expanded.reshape(-1,1)
-
-    #     # overriding states with rhc data (-> all overridden state are open looop)
-    #     root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
-    #     root_p_from_rhc=root_q_full_from_rhc[0:3, :]
-    #     root_q_from_rhc=root_q_full_from_rhc[3:7, :]
-    #     p_root[:, :]=root_p_from_rhc # position is always open loop
-
-    #     root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
-    #     root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
-    #     root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
-    #     jnt_q_from_rhc=self._get_jnt_q_from_sol(node_idx=1,reduce=False,clamp=False).reshape(-1, 1)
-    #     jnt_v_from_rhc=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
-                
-    #     # computing estimation defects
-    #     root_q_delta=root_q_from_rhc-q_root
-    #     jnt_q_delta=jnt_q_from_rhc-q_jnts
-    #     jnt_v_delta=jnt_v_from_rhc-v_jnts
-    #     # v_root_delta=root_v_from_rhc-v_root
-    #     omega_root_delta=root_omega_from_rhc-omega
-
-    #     # rhc variables to be set
-    #     q=self._prb.getVariables("q") # .setBounds()
-    #     root_p_rhc=q[0:3] # root p
-    #     root_q_rhc=q[3:7] # root orientation
-    #     jnts_q_rhc=q[7:] # jnts q
-    #     vel=self._prb.getVariables("v")
-    #     root_v_rhc=vel[0:3] # lin v.
-    #     root_omega_rhc=vel[3:6] # omega
-    #     jnts_v_rhc=vel[6:] # jnts v
-    #     acc=self._prb.getVariables("a")
-    #     lin_a_prb=acc[0:3] # lin acc
-        
-    #     # close state on known quantities, estimate some (e.g. lin vel) and
-    #     # open loop if thing start to explode
-    #     alpha_now=1.0
-    #     if self._custom_opts["alpha_from_outside"]:
-    #         alpha_now=self.rhc_refs.get_alpha()
-    #     else: # "autotuned" alpha
-    #         delta=np.max(np.abs(jnt_v_delta))
-    #         # fail_idx=self._get_failure_index()
-    #         # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
-    #         alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
-    #     self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem
-
-    #     root_p_rhc.setBounds(lb=p_root,
-    #         ub=p_root, nodes=0)
-    #     root_q_rhc.setBounds(lb=q_root+alpha_now*root_q_delta, 
-    #         ub=q_root+alpha_now*root_q_delta, nodes=0)
-    #     jnts_q_rhc.setBounds(lb=q_jnts+alpha_now*jnt_q_delta, 
-    #         ub=q_jnts+alpha_now*jnt_q_delta, nodes=0)
-    #     root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
-    #         ub=self._v_inf[0:3], nodes=0)
-    #     root_omega_rhc.setBounds(lb=omega+alpha_now*omega_root_delta, 
-    #         ub=omega+alpha_now*omega_root_delta, nodes=0)
-    #     jnts_v_rhc.setBounds(lb=v_jnts+alpha_now*jnt_v_delta, 
-    #         ub=v_jnts+alpha_now*jnt_v_delta, nodes=0)
-    #     if self._custom_opts["lin_a_feedback"]:
-    #         # write base lin 13793197 from meas
-    #         lin_a_prb.setBounds(lb=a_root[0:3, :], 
-    #             ub=a_root[0:3, :], 
-    #             nodes=0)
-
-    #     # return state used for feedback
-    #     qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
-    #             axis=0)
-    #     a_state=np.concatenate((a_root, a_jnts),
-    #             axis=0)
-        
-    #     return (qv_state, a_state)
     
     def _set_is_adaptive(self):
         
@@ -946,12 +871,6 @@ class HybridQuadRhc(RHController):
         q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
         v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
         a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
-
-        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
-            self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
-            self._jnts_q_expanded[self._continuous_joints_idxs_cos, :]=np.cos(q_jnts[self._continuous_joints_idxs_red, :]) # cos
-            self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
-            q_jnts=self._jnts_q_expanded.reshape(-1,1)
             
         # rhc variables to be set
         q=self._prb.getVariables("q") # .setBounds()
@@ -988,26 +907,56 @@ class HybridQuadRhc(RHController):
         self.rhc_refs.set_alpha(alpha=alpha_now) # also writes on shared mem for db
         self.rhc_refs.set_bound_relax(bound_relax=bound_relaxation) # also writes on shared mem for db
 
+        self._alphas_q_root[:]=alpha_now # for now single alpha for everything
+        self._alphas_q_jnts[:]=alpha_now
+        self._alphas_v_root[:]=alpha_now
+        self._alphas_v_jnts[:]=alpha_now
+        self._alphas_a[:]=alpha_now
+
         # position is always open loop
         root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
         root_p_from_rhc=root_q_full_from_rhc[0:3, :]
         p_root[:, :]=root_p_from_rhc 
 
+        # expaning meas q if continuous joints
+        if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
+            self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
+            self._jnts_q_expanded[self._continuous_joints_idxs_cos, :]=np.cos(q_jnts[self._continuous_joints_idxs_red, :]) # cos
+            self._jnts_q_expanded[self._continuous_joints_idxs_sin, :]=np.sin(q_jnts[self._continuous_joints_idxs_red, :]) # sin
+            
+            # continous joints position is always open loop, but we need a delta vector of matching dimension
+            q_jnts_from_rhc=self._get_jnt_q_from_sol(node_idx=1).reshape(-1, 1)
+
+            self._jnts_q_delta_expanded[self._rev_joints_idxs, :]=jnt_q_delta[self._rev_joints_idxs_red ,:]
+
+            self._jnts_q_delta_expanded[self._continuous_joints_idxs_cos, :]=\
+                np.cos(q_jnts_from_rhc[self._continuous_joints_idxs_red, :]) - \
+                    np.cos(q_jnts[self._continuous_joints_idxs_red, :])
+            self._jnts_q_delta_expanded[self._continuous_joints_idxs_sin, :]=\
+                np.sin(q_jnts_from_rhc[self._continuous_joints_idxs_red, :]) - \
+                    np.sin(q_jnts[self._continuous_joints_idxs_red, :])
+
+            q_jnts=self._jnts_q_expanded.reshape(-1,1) # overriting with expanded jnts
+            jnt_q_delta=self._jnts_q_delta_expanded.reshape(-1, 1) # overriting with expanded jnts
+
+            self._alphas_q_jnts[self._continuous_joints_idxs_cos, :]=1.0 # open loop
+            self._alphas_q_jnts[self._continuous_joints_idxs_sin, :]=1.0 # open loop
+
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
-        root_q_rhc.setBounds(lb=q_root+alpha_now*root_q_delta, 
-            ub=q_root+alpha_now*root_q_delta, nodes=0)
-        jnts_q_rhc.setBounds(lb=q_jnts+alpha_now*jnt_q_delta, 
-            ub=q_jnts+alpha_now*jnt_q_delta, nodes=0)
+        root_q_rhc.setBounds(lb=q_root+self._alphas_q_root[3:7]*root_q_delta, 
+            ub=q_root+self._alphas_q_root[3:7]*root_q_delta, nodes=0)
+        jnts_q_rhc.setBounds(lb=q_jnts+self._alphas_q_jnts*jnt_q_delta, 
+            ub=q_jnts+self._alphas_q_jnts*jnt_q_delta, nodes=0)
         root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
             ub=self._v_inf[0:3], nodes=0)
-        root_omega_rhc.setBounds(lb=omega+alpha_now*omega_root_delta, 
-            ub=omega+alpha_now*omega_root_delta, nodes=0)
-        jnts_v_rhc.setBounds(lb=v_jnts+alpha_now*jnt_v_delta, 
-            ub=v_jnts+alpha_now*jnt_v_delta, nodes=0)
+        root_omega_rhc.setBounds(lb=omega+self._alphas_v_root[3:6, :]*omega_root_delta, 
+            ub=omega+self._alphas_v_root[3:6, :]*omega_root_delta, nodes=0)
+        jnts_v_rhc.setBounds(lb=v_jnts+self._alphas_v_jnts*jnt_v_delta, 
+            ub=v_jnts+self._alphas_v_jnts*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
-            lin_a_prb.setBounds(lb=a_root[0:3, :]+alpha_now*a_root_delta[0:3, :]-bound_relaxation, 
-                ub=a_root[0:3, :]+alpha_now*a_root_delta[0:3, :]+bound_relaxation, 
+            lin_a_prb.setBounds(lb=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :]-bound_relaxation, 
+                ub=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :]+bound_relaxation, 
                 nodes=0)
             
         # return state used for feedback
