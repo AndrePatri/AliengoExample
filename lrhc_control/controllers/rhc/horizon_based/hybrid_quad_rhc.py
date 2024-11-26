@@ -695,6 +695,11 @@ class HybridQuadRhc(RHController):
         elif self._custom_opts["closed_partial"]:
             qv_state, a_state=self._set_is_partial()
         else:
+            Journal.log(self.__class__.__name__,
+                    "_update_closed_loop",
+                    "Neither adaptive_is, fully_closed, or closed_partial.",
+                    LogType.EXCEP,
+                    throw_when_excep = False)
             qv_state, a_state=self._set_is()
 
         return qv_state, a_state
@@ -941,6 +946,8 @@ class HybridQuadRhc(RHController):
 
             self._alphas_q_jnts[self._continuous_joints_idxs_cos, :]=1.0 # open loop
             self._alphas_q_jnts[self._continuous_joints_idxs_sin, :]=1.0 # open loop
+
+            # self._alphas_v_jnts[self._continuous_joints_idxs_red, :]=0.0 # open loop
 
         root_p_rhc.setBounds(lb=p_root,
             ub=p_root, nodes=0)
