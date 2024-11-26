@@ -829,7 +829,7 @@ class SActorCriticAlgoBase(ABC):
                 # exploration envs
                 if self._n_expl_envs > 0:
                     self._wandb_d.update({'correlation_db/ep_timesteps_expl_env_distr': 
-                        wandb.Histogram(self._ep_tsteps_expl_env_distribution[self._log_it_counter, :, :].numpy())})
+                        wandb.Histogram(self._ep_tsteps_demo_env_distribution[self._log_it_counter, :, :].numpy())})
 
                     # sub reward from expl envs
                     self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_max_expl":
