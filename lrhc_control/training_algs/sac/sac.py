@@ -72,6 +72,11 @@ class SAC(SActorCriticAlgoBase):
             if self._det_eval: # use mean instead of stochastic policy
                 actions[:, :] = mean.detach()
 
+            if self._allow_expl_during_eval and self._n_expl_envs>0 and \
+                (self._vec_transition_counter%self._noise_freq==0 or \
+                self._pert_counter>0):
+                self._perturb_some_actions(actions=actions)
+
         else:
 
             self._actions_override.synch_all(read=True,retry=True) # read from CPU

@@ -253,6 +253,7 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
         self._hyperparameters["sub_reward_names"]=self._env.sub_rew_names()
+        self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
 
         # reset environment
         self._env.reset()
@@ -1152,7 +1153,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._replay_bf_full = False
 
-        self._replay_buffer_size_nominal = int(5e3) # 32768
+        self._replay_buffer_size_nominal = int(2e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
@@ -1163,7 +1164,7 @@ class SActorCriticAlgoBase(ABC):
         self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
         self._total_timesteps = self._total_timesteps_vec*self._num_envs # actual n transitions
 
-        self._warmstart_timesteps = int(1e2)
+        self._warmstart_timesteps = int(5e3)
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         self._warmstart_steps=self._warmstart_vectimesteps//self._collection_freq
         self._warmstart_vectimesteps=self._collection_freq*self._warmstart_steps
@@ -1185,6 +1186,7 @@ class SActorCriticAlgoBase(ABC):
         self._alpha = 0.2
         
         self._n_expl_envs = 50 # n of random envs on which noisy actions will be applied
+        self._allow_expl_during_eval=False
         self._noise_freq = 50
         self._noise_duration = 5 # should be less than _noise_freq
 
@@ -1194,7 +1196,7 @@ class SActorCriticAlgoBase(ABC):
         self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
         
         self._continuous_act_expl_noise_std=0.01
-        self._discrete_act_expl_noise_std=0.1
+        self._discrete_act_expl_noise_std=0.5
 
         self._a_optimizer = None
         
