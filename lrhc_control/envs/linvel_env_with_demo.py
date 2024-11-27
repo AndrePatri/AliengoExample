@@ -142,6 +142,18 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
                 # self._twist_smoother.reset_all(to_be_reset=finished_demo_idxs.cpu().flatten(),
                 #     value=0.0)
+            
+            if self._twist_smoother is not None: # smoother only reset at terminations
+                terminated_and_demo=torch.logical_and(self._terminations.get_torch_mirror(gpu=self._use_gpu).flatten(), 
+                                    self._demo_envs_idxs_bool)
+                terminated_demo_idxs=self._env_to_gait_sched_mapping[terminated_and_demo]
+                if self._use_gpu:
+                    self._twist_smoother.reset_all(to_be_reset=terminated_demo_idxs.cuda().flatten(),
+                        value=0.0)
+                else:
+                    self._twist_smoother.reset_all(to_be_reset=terminated_demo_idxs.cpu().flatten(),
+                        value=0.0)
+
 
     def _override_actions_with_demo(self):
         
