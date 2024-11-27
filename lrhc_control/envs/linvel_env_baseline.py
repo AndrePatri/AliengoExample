@@ -875,3 +875,5 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         sub_term_names.append("robot_capsize")
         sub_term_names.append("rhc_capsize")
 
+        return sub_term_names
+

@@ -1077,14 +1077,15 @@ class LRhcTrainingEnvBase(ABC):
                     fill_value=t_scaling,
                     dtype=torch.int32,device="cpu")
         sub_term = self._sub_terminations.get_torch_mirror()
-        sub_term_names = self.sub_term_names()
-        sub_term_data = EpisodicData("SubTerminations", sub_term, sub_term_names,
+        sub_termination_names = self.sub_term_names()
+    
+        sub_term_data = EpisodicData("SubTerminations", sub_term, sub_termination_names,
             ep_vec_freq=self._vec_ep_freq_metrics_db)
         sub_term_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_term_data)
         sub_trunc = self._sub_truncations.get_torch_mirror()
-        sub_trunc_names = self.sub_trunc_names()
-        sub_trunc_data = EpisodicData("SubTruncations", sub_trunc, sub_trunc_names,
+        sub_truncations_names = self.sub_trunc_names()
+        sub_trunc_data = EpisodicData("SubTruncations", sub_trunc, sub_truncations_names,
             ep_vec_freq=self._vec_ep_freq_metrics_db)
         sub_trunc_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_trunc_data)
@@ -1110,10 +1111,9 @@ class LRhcTrainingEnvBase(ABC):
         self._terminations.run()
 
         sub_t_names = self.sub_term_names()
-        n_sub_term = 1 if sub_t_names is None else len(sub_t_names)
         self._sub_terminations = SubTerminations(namespace=self._namespace,
                 n_envs=self._n_envs,
-                n_term=n_sub_term,
+                n_term=len(sub_t_names),
                 term_names=sub_t_names,
                 is_server=True,
                 verbose=self._verbose,
@@ -1146,11 +1146,9 @@ class LRhcTrainingEnvBase(ABC):
         self._truncations.run()
 
         sub_trc_names = self.sub_trunc_names()
-        n_sub_trunc = 1 if sub_trc_names is None else len(sub_trc_names)
-
         self._sub_truncations = SubTruncations(namespace=self._namespace,
                 n_envs=self._n_envs,
-                n_trunc=n_sub_trunc,
+                n_trunc=len(sub_trc_names),
                 truc_names=sub_trc_names,
                 is_server=True,
                 verbose=self._verbose,
