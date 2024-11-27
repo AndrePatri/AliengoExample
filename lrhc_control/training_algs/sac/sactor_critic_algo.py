@@ -852,7 +852,7 @@ class SActorCriticAlgoBase(ABC):
                     if self._env.demo_active():
                         # log hystograms only if there are no nan in the data
                         self._wandb_d.update({'correlation_db/ep_timesteps_demo_env_distr':
-                            wandb.Histogram(self._ep_tsteps_expl_env_distribution[self._log_it_counter, :, :].numpy())})
+                            wandb.Histogram(self._ep_tsteps_demo_env_distribution[self._log_it_counter, :, :].numpy())})
 
                         # sub reward from expl envs
                         self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_max_demo":
