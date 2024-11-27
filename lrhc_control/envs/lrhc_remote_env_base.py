@@ -397,7 +397,7 @@ class LRhcEnvBase(ABC):
             # write some inits for all robots
             self._update_root_offsets(robot_name)
             self._synch_default_root_states(robot_name=robot_name)
-            epsi=0.08 # adding a bit of height to avoid initial penetration
+            epsi=0.03 # adding a bit of height to avoid initial penetration
             self._root_p_default[robot_name][:, 2]=self._root_p_default[robot_name][:, 2]+epsi
             
             self._reset(env_indxs=None,
