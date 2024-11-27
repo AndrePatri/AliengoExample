@@ -67,7 +67,7 @@ class PeriodicRosbagRecorder(Node):
         #     compression_queue_size=0,
         #     compression_threads=1)
 
-        self.writer = SequentialCompressionWriter()
+        self.writer = SequentialWriter()
         self.writer.open(storage_options, converter_options)
 
     def retrieve_topic_metadata(self):
