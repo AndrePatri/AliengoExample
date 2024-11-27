@@ -1185,7 +1185,7 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
         
-        self._n_expl_envs = 50 # n of random envs on which noisy actions will be applied
+        self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 50
         self._noise_duration = 5 # should be less than _noise_freq
@@ -1231,8 +1231,6 @@ class SActorCriticAlgoBase(ABC):
             self._demo_env_selector_bool=self._demo_env_selector_bool.cpu()
             self._demo_env_selector=self._demo_env_selector.cpu()
             self._db_env_selector_bool[:]=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
-
-        self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
                 
         self._n_expl_envs = self._expl_env_selector_bool.count_nonzero()
         self._num_db_envs = self._db_env_selector_bool.count_nonzero()
@@ -1240,10 +1238,13 @@ class SActorCriticAlgoBase(ABC):
         if not self._num_db_envs>0:
             Journal.log(self.__class__.__name__,
                 "_init_params",
-                "No db envs! Aborting.",
+                "No indipendent db env can be computed (check your demo and expl settings)! Will use all envs.",
                 LogType.EXCEP,
-                throw_when_excep = True)
-
+                throw_when_excep = False)
+            self._num_db_envs=self._num_envs
+            self._db_env_selector_bool[:]=True
+        self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
+        
         self._transition_noise_freq=float(self._noise_duration)/float(self._noise_freq)
         self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
         self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
