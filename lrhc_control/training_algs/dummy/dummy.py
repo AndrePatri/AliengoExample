@@ -44,3 +44,7 @@ class Dummy(DummyTestAlgoBase):
         env_step_ok = self._env.step(actions)
 
         return env_step_ok
+    
+    def _collect_eval_transition(self):
+
+        self._collect_transition()
