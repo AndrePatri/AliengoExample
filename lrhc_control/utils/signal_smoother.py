@@ -106,10 +106,14 @@ class ExponentialSignalSmoother():
                 LogType.EXCEP,
                 throw_when_excep=True)
 
-    def reset_all(self, value: float = 0.0):
-        self._steps_counter[:, :]=value
-        self._smoothed_sig[:, :]=value
-
+    def reset_all(self, to_be_reset: torch.Tensor = None, value: float = 0.0):
+        if to_be_reset is None:
+            self._steps_counter[:, :]=0
+            self._smoothed_sig[:, :]=value
+        else:
+            self._steps_counter[to_be_reset, :]=0
+            self._smoothed_sig[to_be_reset, :]=value
+        
     def reset(self,
         reset_val: torch.Tensor,
         to_be_reset: torch.Tensor = None):

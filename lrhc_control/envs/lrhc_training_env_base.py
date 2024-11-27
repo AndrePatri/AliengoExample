@@ -529,14 +529,14 @@ class LRhcTrainingEnvBase(ABC):
 
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset(to_be_reset=episode_finished.flatten(),
-                            init_data=self._defaut_action)
+                            init_data=self._default_action)
 
         if self._action_smoother_continuous is not None:
             self._action_smoother_continuous.reset(to_be_reset=episode_finished.flatten(),
-                reset_val=self._defaut_action[:, self._is_continuous_actions])
+                reset_val=self._default_action[:, self._is_continuous_actions])
         if self._action_smoother_discrete is not None:
             self._action_smoother_discrete.reset(to_be_reset=episode_finished.flatten(),
-                reset_val=self._defaut_action[:, ~self._is_continuous_actions])
+                reset_val=self._default_action[:, ~self._is_continuous_actions])
 
         # debug step if required (IMPORTANT: must be before remote reset so that we always db
         # actual data from the step and not after reset)
@@ -666,12 +666,12 @@ class LRhcTrainingEnvBase(ABC):
             self._rand_safety_reset_counter.reset()
 
         if self._act_mem_buffer is not None:
-            self._act_mem_buffer.reset_all(init_data=self._defaut_action)
+            self._act_mem_buffer.reset_all(init_data=self._default_action)
 
         if self._action_smoother_continuous is not None:
-            self._action_smoother_continuous.reset(reset_val=self._defaut_action[:, self._is_continuous_actions])
+            self._action_smoother_continuous.reset(reset_val=self._default_action[:, self._is_continuous_actions])
         if self._action_smoother_discrete is not None:
-            self._action_smoother_discrete.reset(reset_val=self._defaut_action[:, ~self._is_continuous_actions])
+            self._action_smoother_discrete.reset(reset_val=self._default_action[:, ~self._is_continuous_actions])
 
         self._synch_state(gpu=self._use_gpu) # read obs from shared mem
 
@@ -953,7 +953,7 @@ class LRhcTrainingEnvBase(ABC):
 
         self._actions.run()
 
-        self._defaut_action = torch.full_like(input=self.get_actions(),fill_value=0.0)
+        self._default_action = torch.full_like(input=self.get_actions(),fill_value=0.0)
 
         if self._use_act_mem_bf:
             self._act_mem_buffer=MemBuffer(name="ActionMemBuf",

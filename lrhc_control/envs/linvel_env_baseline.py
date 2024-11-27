@@ -349,8 +349,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._bernoulli_coeffs = self._pof1_b.clone()
         self._bernoulli_coeffs[:, :] = 1.0
 
-        self._defaut_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
-        self._defaut_action[:, ~self._is_continuous_actions] = 1.0
+        self._default_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
+        self._default_action[:, ~self._is_continuous_actions] = 1.0
 
         if self._use_vel_err_sig_smoother:
             vel_err_proxy=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()

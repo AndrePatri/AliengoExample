@@ -6,6 +6,7 @@ from SharsorIPCpp.PySharsorIPC import VLevel, LogType, Journal
 from control_cluster_bridge.utilities.math_utils_torch import base2world_frame, w2hor_frame
 
 from lrhc_control.utils.gait_scheduler import QuadrupedGaitPatternGenerator, GaitScheduler
+from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 
 from lrhc_control.envs.linvel_env_baseline import LinVelTrackBaseline
 
@@ -21,6 +22,10 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000):
         
+        self._full_demo=True # whether to override the full action
+        self._smooth_twist_cmd=True
+        self._smoothing_horizon_twist=0.08
+
         super().__init__(namespace=namespace,
             actions_dim=10, # only contacts
             verbose=verbose,
@@ -41,8 +46,6 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         self.switch_demo(active=True) # enable using demonstrations by default
         # (can be deactived externally)
 
-        self._full_demo=True # whether to override the full action
-
     def get_file_paths(self):
         paths=super().get_file_paths()
         paths.append(os.path.abspath(__file__))        
@@ -60,7 +63,19 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 counter+=1
 
         self._init_gait_schedulers()
-    
+
+        self._twist_smoother=None
+        if self._smooth_twist_cmd:
+            twist_example = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
+            self._twist_smoother=ExponentialSignalSmoother(signal=twist_example[self._demo_envs_idxs, :],
+                update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
+                smoothing_horizon=self._smoothing_horizon_twist,
+                target_smoothing=0.5, 
+                debug=self._debug,
+                dtype=self._dtype,
+                use_gpu=self._use_gpu,
+                name=self.__class__.__name__+"TwistCmdSmoother")
+        
     def _init_gait_schedulers(self):
 
         self._walk_to_trot_thresh=0.5 # [m/s]
@@ -120,9 +135,13 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             if self._use_gpu:
                 self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
                 self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+                # self._twist_smoother.reset_all(to_be_reset=finished_demo_idxs.cuda().flatten(),
+                #     value=0.0)
             else:
                 self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
-                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
+                # self._twist_smoother.reset_all(to_be_reset=finished_demo_idxs.cpu().flatten(),
+                #     value=0.0)
 
     def _override_actions_with_demo(self):
         
@@ -135,9 +154,14 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             if self._full_demo:
                 # overwriting agent's twist action with the identity wrt the reference (both 
                 # are base frame)
-                
+                if self._twist_smoother is not None:
+                    # smooth action
+                    self._twist_smoother.update(new_signal=
+                        agent_twist_ref_current[self._demo_envs_idxs, :])
+                    agent_action[self._demo_envs_idxs, 0:6]=self._twist_smoother.get()
+                else:
                 # agent_twist_ref_current and agent action twist are base local
-                agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
+                    agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
                 # agent_action[self._demo_envs_idxs, 0:6]=0.0
 
             # overwriting agent gait actions with the ones taken from the gait schedulers for 
