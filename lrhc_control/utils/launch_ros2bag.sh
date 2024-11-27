@@ -51,4 +51,4 @@ TOPICS=(
 )
 
 # Record the topics
-ros2 bag record --use-sim-time "${TOPICS[@]}" -o "$OUTPUT_PATH"
+ros2 bag record --compression-mode file --compression-format zstd --use-sim-time "${TOPICS[@]}" -o "$OUTPUT_PATH"
