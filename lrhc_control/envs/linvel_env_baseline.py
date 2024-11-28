@@ -43,9 +43,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # env substeps)
 
         n_demo_envs_perc=0.0
+        
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
         self._action_smoothing_horizon_d=0.1
+
+        self._use_track_reward_smoother=False # whether to smooth vel error signal
+        self._smoothing_horizon_vel_err=0.08
+        self._track_rew_smoother=None
+
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
@@ -54,8 +60,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_gn_rhc_loc=True
         self._use_linvel_from_rhc=False
         self._use_rhc_avrg_vel_pred=False
-        self._use_vel_err_sig_smoother=False # whether to smooth vel error signal
-        self._vel_err_smoother=None
+        
         self._use_prob_based_stepping=False
         self._add_flight_info=True
         self._use_pos_control=False
@@ -353,20 +358,19 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._default_action[:, ~self._is_continuous_actions] = 1.0
 
         if self._use_vel_err_sig_smoother:
-            vel_err_proxy=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()
-            self._smoothing_horizon=0.1
-            self._target_smoothing=0.01
-            self._vel_err_smoother=ExponentialSignalSmoother(
-                name="VelErrorSmoother",
-                signal=vel_err_proxy, # same dimension of vel error
-                update_dt=self._substep_dt,
-                smoothing_horizon=self._smoothing_horizon,
-                target_smoothing=self._target_smoothing,
+            sub_reward_proxy=self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)[:, 0:1]
+            smoothing_dt=self._substep_dt
+            if not self._is_substep_rew[0]: # assuming first reward is tracking
+                smoothing_dt=self._substep_dt*self._action_repeat
+            self._track_rew_smoother=ExponentialSignalSmoother(
+                name=self.__class__.__name__+"VelErrorSmoother",
+                signal=sub_reward_proxy, # same dimension of vel error
+                update_dt=smoothing_dt,
+                smoothing_horizon=self._smoothing_horizon_vel_err,
+                target_smoothing=0.5,
                 debug=self._is_debug,
                 dtype=self._dtype,
                 use_gpu=self._use_gpu)
-            self.custom_db_info["vel_smoothing_horizon"]=self._smoothing_horizon
-            self.custom_db_info["vel_target_smoothing"]=self._target_smoothing
 
     def get_file_paths(self):
         paths=super().get_file_paths()
@@ -435,8 +439,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # (not super efficient, we should do it just for the finished envs)
         self._update_loc_twist_refs()
 
-        if self._vel_err_smoother is not None: # reset smoother
-            self._vel_err_smoother.reset(to_be_reset=episode_finished.flatten())
+        if self._track_rew_smoother is not None: # reset smoother
+            self._track_rew_smoother.reset_all(to_be_reset=episode_finished.flatten(), 
+                    value=0.0)
 
     def _custom_post_substp_pre_rew(self):
         self._update_loc_twist_refs()
@@ -635,11 +640,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def _task_err_wms(self, task_ref, task_meas, scaling, weights):
         task_error = (task_meas-task_ref)
         scaled_error=task_error/scaling
-        if self._vel_err_smoother is not None:
-            self._vel_err_smoother.update(new_signal=scaled_error,
-                ep_finished=None # reset done externally
-                )
-            scaled_error=self._vel_err_smoother.get()
         task_wmse = torch.sum(scaled_error*scaled_error*weights, dim=1, keepdim=True)/torch.sum(weights).item()
         return task_wmse # weighted mean square error (along task dimension)
     
@@ -672,6 +672,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
         sub_rewards[:, 0:1] =  self._task_offset*(1-fail_idx)*torch.exp(-self._task_scale*task_error)
+        if self._track_rew_smoother is not None:
+            self._track_rew_smoother.update(new_signal=sub_rewards[:, 0:1])
+            sub_rewards[:, 0:1]=self._track_rew_smoother.get()
 
         if self._use_rhc_avrg_vel_pred:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 

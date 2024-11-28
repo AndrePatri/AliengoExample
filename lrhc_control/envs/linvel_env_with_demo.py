@@ -66,8 +66,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
 
         self._twist_smoother=None
         if self._smooth_twist_cmd:
-            twist_example = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
-            self._twist_smoother=ExponentialSignalSmoother(signal=twist_example[self._demo_envs_idxs, :],
+            twist_proxy = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
+            self._twist_smoother=ExponentialSignalSmoother(signal=twist_proxy[self._demo_envs_idxs, :],
                 update_dt=self._substep_dt*self._action_repeat, # rate at which actions are decided by agent
                 smoothing_horizon=self._smoothing_horizon_twist,
                 target_smoothing=0.5, 
