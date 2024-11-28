@@ -357,7 +357,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._default_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
         self._default_action[:, ~self._is_continuous_actions] = 1.0
 
-        if self._use_vel_err_sig_smoother:
+        if self._use_track_reward_smoother:
             sub_reward_proxy=self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)[:, 0:1]
             smoothing_dt=self._substep_dt
             if not self._is_substep_rew[0]: # assuming first reward is tracking
