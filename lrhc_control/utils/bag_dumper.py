@@ -136,7 +136,7 @@ class RosBagDumper():
                                             verbose=self._verbose,
                                             vlevel=VLevel.V2,
                                             force_reconnection=True)
-        from EigenIPC.PyEigenIPC.wrappers.shared_data_view import SharedTWrapper
+        from EigenIPC.PyEigenIPCExt.wrappers.shared_data_view import SharedTWrapper
         from EigenIPC.PyEigenIPC import dtype
         self._bag_req=SharedTWrapper(namespace=self._remap_ns,
             basename="RosBagRequests",
@@ -249,7 +249,7 @@ class RosBagDumper():
                                 vlevel=VLevel.V2)
         term_trigger.run()
 
-        from EigenIPC.PyEigenIPC.wrappers.shared_data_view import SharedTWrapper
+        from EigenIPC.PyEigenIPCExt.wrappers.shared_data_view import SharedTWrapper
         from EigenIPC.PyEigenIPC import dtype
 
         bag_req=SharedTWrapper(namespace=namespace,
