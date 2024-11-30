@@ -1,7 +1,7 @@
 from EigenIPC.PyEigenIPCExt.wrappers.shared_data_view import SharedTWrapper
 from EigenIPC.PyEigenIPC import StringTensorServer, StringTensorClient
 from EigenIPC.PyEigenIPC import VLevel
-from EigenIPC.PyEigenIPC import dtype as sharsor_dtype, toNumpyDType
+from EigenIPC.PyEigenIPC import dtype as eigenipc_dtype, toNumpyDType
 from EigenIPC.PyEigenIPC import Journal
 from EigenIPC.PyEigenIPC import LogType
 
@@ -35,7 +35,7 @@ class QfVal(SharedTWrapper):
             n_cols = 1, 
             verbose = verbose, 
             vlevel = vlevel,
-            dtype=sharsor_dtype.Float,
+            dtype=eigenipc_dtype.Float,
             fill_value=np.nan,
             safe = safe,
             force_reconnection=force_reconnection,
@@ -62,7 +62,7 @@ class QfTrgt(SharedTWrapper):
             n_cols = 1, 
             verbose = verbose, 
             vlevel = vlevel,
-            dtype=sharsor_dtype.Float,
+            dtype=eigenipc_dtype.Float,
             fill_value=np.nan,
             safe = safe,
             force_reconnection=force_reconnection,
@@ -89,7 +89,7 @@ class RLAlgorithmDebData(SharedTWrapper):
             n_cols = 1, 
             verbose = verbose, 
             vlevel = vlevel,
-            dtype=sharsor_dtype.Float,
+            dtype=eigenipc_dtype.Float,
             fill_value=np.nan,
             safe = safe,
             force_reconnection=force_reconnection)
@@ -242,7 +242,7 @@ class SharedRLAlgorithmInfo(SharedDataBase):
         
         self.param_values = np.full((len(self.param_keys), 1), 
                                 fill_value=np.nan, 
-                                dtype=toNumpyDType(sharsor_dtype.Float))
+                                dtype=toNumpyDType(eigenipc_dtype.Float))
 
         if self.is_server:
             

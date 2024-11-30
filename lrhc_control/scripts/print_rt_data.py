@@ -13,7 +13,7 @@ from perf_sleep.pyperfsleep import PerfSleep
 from EigenIPC.PyEigenIPC import VLevel
 from EigenIPC.PyEigenIPC import LogType
 from EigenIPC.PyEigenIPC import Journal
-from EigenIPC.PyEigenIPC import dtype as sharsor_dtype
+from EigenIPC.PyEigenIPC import dtype as eigenipc_dtype
 import torch
 
 if __name__ == "__main__":  
@@ -48,9 +48,9 @@ if __name__ == "__main__":
     with_counters = args.with_counters
     with_sf_counter=args.with_safety_counter
     n_digits=args.resolution
-    dtype=sharsor_dtype.Float
+    dtype=eigenipc_dtype.Float
     if args.dtype == "double":
-        dtype=sharsor_dtype.Double
+        dtype=eigenipc_dtype.Double
     
     obs = Observations(namespace=namespace,is_server=False,verbose=True, 
                 vlevel=VLevel.V2,safe=False,

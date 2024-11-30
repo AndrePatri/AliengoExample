@@ -1,7 +1,7 @@
 from EigenIPC.PyEigenIPCExt.wrappers.shared_data_view import SharedTWrapper
 from EigenIPC.PyEigenIPC import StringTensorServer, StringTensorClient
 from EigenIPC.PyEigenIPC import VLevel
-from EigenIPC.PyEigenIPC import dtype as sharsor_dtype, toNumpyDType
+from EigenIPC.PyEigenIPC import dtype as eigenipc_dtype, toNumpyDType
 from EigenIPC.PyEigenIPC import Journal
 from EigenIPC.PyEigenIPC import LogType
 
@@ -26,7 +26,7 @@ class TrainingEnvDebData(SharedTWrapper):
         vlevel: VLevel = VLevel.V0,
         force_reconnection: bool = False,
         safe: bool = True,
-        dtype: sharsor_dtype=sharsor_dtype.Float):
+        dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "TrainingEnvDebData" 
 
@@ -193,7 +193,7 @@ class SharedTrainingEnvInfo(SharedDataBase):
         
         self.param_values = np.full((len(self.param_keys), 1), 
                                 fill_value=np.nan, 
-                                dtype=toNumpyDType(sharsor_dtype.Float))
+                                dtype=toNumpyDType(eigenipc_dtype.Float))
 
         if self.is_server:
             
@@ -300,7 +300,7 @@ class SubRewards(NamedSharedTWrapper):
             force_reconnection: bool = False,
             with_gpu_mirror: bool = False,
             fill_value = 0.0,
-            dtype: sharsor_dtype=sharsor_dtype.Float):
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "Rewards"
 
@@ -333,7 +333,7 @@ class TotRewards(NamedSharedTWrapper):
             force_reconnection: bool = False,
             with_gpu_mirror: bool = False,
             fill_value = 0.0,
-            dtype: sharsor_dtype=sharsor_dtype.Float):
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "TotRewards"
 
@@ -367,7 +367,7 @@ class Observations(NamedSharedTWrapper):
             force_reconnection: bool = False,
             with_gpu_mirror: bool = False,
             fill_value = 0.0,
-            dtype: sharsor_dtype=sharsor_dtype.Float):
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "Observations"
 
@@ -404,7 +404,7 @@ class NextObservations(NamedSharedTWrapper):
             force_reconnection: bool = False,
             with_gpu_mirror: bool = False,
             fill_value = 0.0,
-            dtype: sharsor_dtype=sharsor_dtype.Float):
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "NextObservations"
 
@@ -441,7 +441,7 @@ class Actions(NamedSharedTWrapper):
             force_reconnection: bool = False,
             with_gpu_mirror: bool = False,
             fill_value = 0.0,
-            dtype: sharsor_dtype=sharsor_dtype.Float):
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
 
         basename = "Actions"
 
@@ -483,7 +483,7 @@ class Terminations(SharedTWrapper):
                 verbose = verbose, 
                 vlevel = vlevel,
                 safe = safe, # boolean operations are atomic on 64 bit systems
-                dtype=sharsor_dtype.Bool,
+                dtype=eigenipc_dtype.Bool,
                 force_reconnection=force_reconnection,
                 with_gpu_mirror=with_gpu_mirror,
                 with_torch_view=True,
@@ -516,7 +516,7 @@ class Truncations(SharedTWrapper):
                 verbose = verbose, 
                 vlevel = vlevel,
                 safe = safe, # boolean operations are atomic on 64 bit systems
-                dtype=sharsor_dtype.Bool,
+                dtype=eigenipc_dtype.Bool,
                 force_reconnection=force_reconnection,
                 with_gpu_mirror=with_gpu_mirror,
                 with_torch_view=True,
@@ -548,7 +548,7 @@ class SubTerminations(NamedSharedTWrapper):
                     basename=basename,
                     n_rows=n_envs,
                     n_cols=n_term,
-                    dtype=sharsor_dtype.Bool,
+                    dtype=eigenipc_dtype.Bool,
                     col_names=term_names,
                     row_names=env_names,
                     is_server=is_server,
@@ -581,7 +581,7 @@ class SubTruncations(NamedSharedTWrapper):
                     basename=basename,
                     n_rows=n_envs,
                     n_cols=n_trunc,
-                    dtype=sharsor_dtype.Bool,
+                    dtype=eigenipc_dtype.Bool,
                     col_names=truc_names,
                     row_names=env_names,
                     is_server=is_server,
@@ -616,7 +616,7 @@ class SimpleCounters(SharedDataBase):
                     verbose = verbose, 
                     vlevel = vlevel,
                     safe = safe, # boolean operations are atomic on 64 bit systems
-                    dtype=sharsor_dtype.Int,
+                    dtype=eigenipc_dtype.Int,
                     force_reconnection=force_reconnection,
                     with_gpu_mirror=with_gpu_mirror,
                     with_torch_view=True,

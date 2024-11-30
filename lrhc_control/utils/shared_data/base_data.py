@@ -1,7 +1,7 @@
 from EigenIPC.PyEigenIPCExt.wrappers.shared_data_view import SharedTWrapper
 from EigenIPC.PyEigenIPC import StringTensorServer, StringTensorClient
 from EigenIPC.PyEigenIPC import VLevel
-from EigenIPC.PyEigenIPC import dtype as sharsor_dtype, toNumpyDType
+from EigenIPC.PyEigenIPC import dtype as eigenipc_dtype, toNumpyDType
 from EigenIPC.PyEigenIPC import Journal
 from EigenIPC.PyEigenIPC import LogType
 
@@ -17,7 +17,7 @@ class NamedSharedTWrapper(SharedTWrapper):
                 basename: str,
                 n_rows: int, 
                 n_cols: int, 
-                dtype: sharsor_dtype,
+                dtype: eigenipc_dtype,
                 col_names: List[str] = None,
                 row_names: List[str] = None,
                 is_server = False, 

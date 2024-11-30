@@ -9,7 +9,7 @@ from lrhc_control.utils.episodic_rewards import EpisodicRewards
 from EigenIPC.PyEigenIPC import VLevel
 from EigenIPC.PyEigenIPC import LogType
 from EigenIPC.PyEigenIPC import Journal
-from EigenIPC.PyEigenIPC import dtype as sharsor_dtype
+from EigenIPC.PyEigenIPC import dtype as eigenipc_dtype
 
 import torch
 import numpy  as np
@@ -41,9 +41,9 @@ class Gymnasium2LRHCEnv():
             'float64': torch.float64
         }
 
-        self._sharsor_dtype_mapping = {
-            torch.float32: sharsor_dtype.Float,
-            torch.float64: sharsor_dtype.Double
+        self._eigenipc_dtype_mapping = {
+            torch.float32: eigenipc_dtype.Float,
+            torch.float64: eigenipc_dtype.Double
         }
 
         self._render = render
@@ -195,7 +195,7 @@ class Gymnasium2LRHCEnv():
                             force_reconnection=True,
                             with_gpu_mirror=self._use_gpu,
                             fill_value=0.0,
-                            dtype=self._sharsor_dtype_mapping[self._torch_dtype])
+                            dtype=self._eigenipc_dtype_mapping[self._torch_dtype])
         
         self._next_obs = NextObservations(namespace=self._namespace,
                             n_envs=self._n_envs,
@@ -209,7 +209,7 @@ class Gymnasium2LRHCEnv():
                             force_reconnection=True,
                             with_gpu_mirror=self._use_gpu,
                             fill_value=0.0,
-                            dtype=self._sharsor_dtype_mapping[self._torch_dtype])
+                            dtype=self._eigenipc_dtype_mapping[self._torch_dtype])
         
         self._actions = Actions(namespace=self._namespace,
                             n_envs=self._n_envs,
@@ -223,7 +223,7 @@ class Gymnasium2LRHCEnv():
                             force_reconnection=True,
                             with_gpu_mirror=self._use_gpu,
                             fill_value=0.0,
-                            dtype=self._sharsor_dtype_mapping[self._torch_dtype])
+                            dtype=self._eigenipc_dtype_mapping[self._torch_dtype])
         
         self._tot_rewards = TotRewards(namespace=self._namespace,
                             n_envs=self._n_envs,
@@ -236,7 +236,7 @@ class Gymnasium2LRHCEnv():
                             force_reconnection=True,
                             with_gpu_mirror=self._use_gpu,
                             fill_value=0.0,
-                            dtype=self._sharsor_dtype_mapping[self._torch_dtype])
+                            dtype=self._eigenipc_dtype_mapping[self._torch_dtype])
         
         self._terminations = Terminations(namespace=self._namespace,
                             n_envs=self._n_envs,
