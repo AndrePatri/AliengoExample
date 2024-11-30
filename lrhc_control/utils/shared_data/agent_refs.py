@@ -1,7 +1,7 @@
 from control_cluster_bridge.utilities.shared_data.abstractions import SharedDataBase
 from control_cluster_bridge.utilities.shared_data.rhc_data import FullRobState
 
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import VLevel
 
 import numpy as np
 

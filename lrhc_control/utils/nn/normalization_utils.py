@@ -2,9 +2,9 @@ from typing import Tuple, Union
 
 import torch
 
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
 
 class RunningMeanStd(object):
     def __init__(self, tensor_size, torch_device, dtype, epsilon: float = 1e-8,

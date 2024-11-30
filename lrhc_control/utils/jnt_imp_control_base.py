@@ -8,8 +8,8 @@ from lrhc_control.utils.jnt_imp_cfg_parser import JntImpConfigParser
 
 import time
 
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
 
 from abc import ABC, abstractmethod
 

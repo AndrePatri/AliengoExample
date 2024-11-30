@@ -2,9 +2,9 @@ from lrhc_control.utils.episodic_data import EpisodicData
 import torch
 from typing import List
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import LogType
 
 class EpisodicRewards(EpisodicData):
 

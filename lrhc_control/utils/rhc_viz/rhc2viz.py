@@ -15,12 +15,12 @@ from control_cluster_bridge.utilities.homing import RobotHomer
 
 import numpy as np
 
-from SharsorIPCpp.PySharsorIPC import dtype
+from EigenIPC.PyEigenIPC import dtype
 
 from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
 
 import rospy
 from std_msgs.msg import Float64MultiArray

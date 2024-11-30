@@ -8,8 +8,8 @@ from lrhc_control.utils.custom_arg_parsing import generate_custom_arg_dict
 
 from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal, LogType
 
 script_name = os.path.splitext(os.path.basename(os.path.abspath(__file__)))[0]
 

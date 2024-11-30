@@ -1,5 +1,5 @@
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import LogType
 
 import torch
 import math

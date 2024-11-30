@@ -5,8 +5,8 @@ from lrhc_control.training_algs.dummy.dummy import Dummy
 from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
 from control_cluster_bridge.utilities.shared_data.cluster_data import SharedClusterInfo
 
-from SharsorIPCpp.PySharsorIPC import VLevel, Journal, LogType
-from SharsorIPCpp.PySharsorIPC import StringTensorServer
+from EigenIPC.PyEigenIPC import VLevel, Journal, LogType
+from EigenIPC.PyEigenIPC import StringTensorServer
 
 import os, argparse
 

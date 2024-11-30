@@ -6,10 +6,10 @@ from lrhc_control.utils.shared_data.training_env import Truncations
 
 from lrhc_control.utils.episodic_rewards import EpisodicRewards
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import dtype as sharsor_dtype
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import dtype as sharsor_dtype
 
 import torch
 import numpy  as np

@@ -10,10 +10,10 @@ from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
 import time 
 from perf_sleep.pyperfsleep import PerfSleep
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import dtype as sharsor_dtype
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import dtype as sharsor_dtype
 import torch
 
 if __name__ == "__main__":  

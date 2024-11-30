@@ -1,15 +1,15 @@
 import argparse
 import os
 import signal
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import dtype
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import dtype
 from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
 
 from control_cluster_bridge.utilities.remote_triggering import RemoteTriggererClnt,RemoteTriggererSrvr
 
-from SharsorIPCpp.PySharsorIPC import StringTensorClient
+from EigenIPC.PyEigenIPC import StringTensorClient
 
 from perf_sleep.pyperfsleep import PerfSleep
 

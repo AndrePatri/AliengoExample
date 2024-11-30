@@ -4,7 +4,7 @@ from control_cluster_bridge.utilities.debugger_gui.gui_exts import SharedDataWin
 from control_cluster_bridge.utilities.debugger_gui.plot_utils import RtPlotWindow
 from control_cluster_bridge.utilities.debugger_gui.plot_utils import WidgetUtils
 
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import VLevel
 
 from lrhc_control.utils.shared_data.training_env import SharedTrainingEnvInfo
 from lrhc_control.utils.shared_data.agent_refs import AgentRefs

@@ -9,7 +9,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     from control_cluster_bridge.utilities.shared_data.rhc_data import RhcRefs
-    from SharsorIPCpp.PySharsorIPC import VLevel
+    from EigenIPC.PyEigenIPC import VLevel
 
     shared_refs= RhcRefs(namespace=args.ns,
         is_server=False, 

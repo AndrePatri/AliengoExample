@@ -7,9 +7,9 @@ from control_cluster_bridge.utilities.shared_data.rhc_data import RobotState
 from control_cluster_bridge.utilities.math_utils import world2base_frame_twist
 
 from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
-from SharsorIPCpp.PySharsorIPC import dtype
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import dtype
 
 import math
 

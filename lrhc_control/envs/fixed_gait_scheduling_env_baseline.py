@@ -1,6 +1,6 @@
 import torch
 
-from SharsorIPCpp.PySharsorIPC import VLevel, LogType
+from EigenIPC.PyEigenIPC import VLevel, LogType
 from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, base2world_frame, w2hor_frame
 
 import os

@@ -1,7 +1,7 @@
 from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import dtype
-from SharsorIPCpp.PySharsorIPC import Producer, Consumer
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import dtype
+from EigenIPC.PyEigenIPC import Producer, Consumer
 
 import torch
 

@@ -1,6 +1,6 @@
 # Ensure custom_args_names, custom_args_vals, and custom_args_dtype have the same length
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal, LogType
 import argparse
 
 

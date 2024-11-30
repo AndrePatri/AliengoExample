@@ -1,4 +1,4 @@
-from SharsorIPCpp.PySharsorIPC import VLevel, Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel, Journal, LogType
 from typing import List
 
 def generate_srdf(robot_name: str, 

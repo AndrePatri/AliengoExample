@@ -6,8 +6,8 @@ from lrhc_control.controllers.rhc.horizon_based.horizon_imports import *
 from lrhc_control.controllers.rhc.horizon_based.hybrid_quad_rhc_refs import HybridQuadRhcRefs
 from lrhc_control.controllers.rhc.horizon_based.gait_manager import GaitManager
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal, LogType
 
 import numpy as np
 

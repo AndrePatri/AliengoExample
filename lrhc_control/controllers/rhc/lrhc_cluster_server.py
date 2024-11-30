@@ -1,6 +1,6 @@
 from control_cluster_bridge.cluster_server.control_cluster_server import ControlClusterServer
 from typing import List
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import VLevel
 
 class LRhcClusterServer(ControlClusterServer):
 

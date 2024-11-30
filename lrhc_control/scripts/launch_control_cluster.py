@@ -6,7 +6,7 @@ import inspect
 
 from lrhc_control.utils.custom_arg_parsing import generate_custom_arg_dict
 
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import Journal, LogType
 
 this_script_name = os.path.splitext(os.path.basename(os.path.abspath(__file__)))[0]
 

@@ -8,9 +8,9 @@ from lrhc_control.utils.nn.normalization_utils import RunningNormalizer
 
 from typing import List
 
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
 
 class DummyAgent(nn.Module):
     def __init__(self,

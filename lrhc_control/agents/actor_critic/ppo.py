@@ -5,9 +5,9 @@ from torch.distributions.normal import Normal
 
 from lrhc_control.utils.nn.normalization_utils import RunningNormalizer 
 
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
 
 class ACAgent(nn.Module):
 

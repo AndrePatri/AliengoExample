@@ -1,6 +1,6 @@
 import torch
 
-from SharsorIPCpp.PySharsorIPC import LogType, VLevel
+from EigenIPC.PyEigenIPC import LogType, VLevel
 
 import os
 

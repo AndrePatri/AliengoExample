@@ -2,10 +2,10 @@
 import signal
 import time
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import dtype
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import dtype
 
 class RosBagDumper():
 
@@ -137,7 +137,7 @@ class RosBagDumper():
                                             vlevel=VLevel.V2,
                                             force_reconnection=True)
         from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
-        from SharsorIPCpp.PySharsorIPC import dtype
+        from EigenIPC.PyEigenIPC import dtype
         self._bag_req=SharedTWrapper(namespace=self._remap_ns,
             basename="RosBagRequests",
             is_server=True, 
@@ -222,7 +222,7 @@ class RosBagDumper():
             LogType.INFO)
 
         # using a shared drop dir if enabled
-        from SharsorIPCpp.PySharsorIPC import StringTensorClient
+        from EigenIPC.PyEigenIPC import StringTensorClient
         from perf_sleep.pyperfsleep import PerfSleep
 
         if use_shared_drop_dir:
@@ -250,7 +250,7 @@ class RosBagDumper():
         term_trigger.run()
 
         from SharsorIPCpp.PySharsor.wrappers.shared_data_view import SharedTWrapper
-        from SharsorIPCpp.PySharsorIPC import dtype
+        from EigenIPC.PyEigenIPC import dtype
 
         bag_req=SharedTWrapper(namespace=namespace,
             basename="RosBagRequests",

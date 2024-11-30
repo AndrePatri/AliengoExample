@@ -1,7 +1,7 @@
 import yaml
 import re
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
 
 class JntImpConfigParser:
     def __init__(self, 

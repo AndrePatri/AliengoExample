@@ -6,8 +6,8 @@ from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, 
 
 import torch
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
 
 import os
 from lrhc_control.utils.episodic_data import EpisodicData

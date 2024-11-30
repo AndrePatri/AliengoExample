@@ -32,9 +32,9 @@ from lrhc_control.utils.math_utils import check_capsize
 
 from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, base2world_frame, w2hor_frame
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
 
 from perf_sleep.pyperfsleep import PerfSleep
 
@@ -297,7 +297,7 @@ class LRhcTrainingEnvBase(ABC):
         for script_path in path_getter.SCRIPTSPATHS:
             base_paths.append(script_path)
 
-        from SharsorIPCpp.PySharsorIPC import StringTensorClient
+        from EigenIPC.PyEigenIPC import StringTensorClient
         from perf_sleep.pyperfsleep import PerfSleep
         shared_rhc_sahred_files = StringTensorClient(
             basename="SharedRhcFilesDropDir", 

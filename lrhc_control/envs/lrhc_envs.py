@@ -1,5 +1,5 @@
 
-from SharsorIPCpp.PySharsorIPC import VLevel, Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel, Journal, LogType
 
 from lrhc_control.envs.lrhc_sim_env_base import LRhcEnvBase
 

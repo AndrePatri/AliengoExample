@@ -9,9 +9,9 @@ from lrhc_control.utils.nn.layer_utils import llayer_init
 
 from typing import List
 
-from SharsorIPCpp.PySharsorIPC import LogType
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import VLevel
+from EigenIPC.PyEigenIPC import LogType
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import VLevel
 
 class SACAgent(nn.Module):
     def __init__(self,

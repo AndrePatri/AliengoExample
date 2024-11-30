@@ -11,7 +11,7 @@ from lrhc_control.utils.custom_arg_parsing import extract_custom_xacro_args, mer
 from control_cluster_bridge.utilities.homing import RobotHomer
 from control_cluster_bridge.utilities.shared_data.jnt_imp_control import JntImpCntrlData
 
-from SharsorIPCpp.PySharsorIPC import VLevel, Journal, LogType
+from EigenIPC.PyEigenIPC import VLevel, Journal, LogType
 
 from typing import List, Union, Dict, TypeVar
 

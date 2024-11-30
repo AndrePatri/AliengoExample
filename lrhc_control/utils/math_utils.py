@@ -1,9 +1,9 @@
 import torch
 import math
 
-from SharsorIPCpp.PySharsorIPC import VLevel
-from SharsorIPCpp.PySharsorIPC import Journal
-from SharsorIPCpp.PySharsorIPC import LogType
+from EigenIPC.PyEigenIPC import VLevel
+from EigenIPC.PyEigenIPC import Journal
+from EigenIPC.PyEigenIPC import LogType
 
 def get_pitch(quat: torch.Tensor) -> torch.Tensor:
     cos_theta = torch.clamp(1-2*(quat[:, 1]**2+quat[:, 2]**2), -1.0, 1.0)

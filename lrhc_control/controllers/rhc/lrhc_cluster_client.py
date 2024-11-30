@@ -3,7 +3,7 @@ from lrhc_control.utils.xrdf_gen import generate_srdf, generate_urdf
 from lrhc_control.utils.hybrid_quad_xrdf_gen import get_xrdf_cmds
 from lrhc_control.utils.custom_arg_parsing import extract_custom_xacro_args, merge_xacro_cmds
 
-from SharsorIPCpp.PySharsorIPC import Journal, LogType
+from EigenIPC.PyEigenIPC import Journal, LogType
 
 from typing import List, Dict
 
