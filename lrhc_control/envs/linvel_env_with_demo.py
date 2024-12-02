@@ -78,13 +78,13 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         
     def _init_gait_schedulers(self):
 
-        # self._walk_to_trot_thresh=0.7 # [m/s] # centauro
-        self._walk_to_trot_thresh=0.3 # [m/s] # kyon no wheels
+        self._walk_to_trot_thresh=0.7 # [m/s] # centauro
+        # self._walk_to_trot_thresh=0.3 # [m/s] # kyon no wheels
         # self._walk_to_trot_thresh=0.9 # [m/s] # kyon wheels
 
         self._stopping_thresh=0.01
 
-        phase_period_walk=2.0
+        phase_period_walk=3.5
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -135,20 +135,22 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         if self.demo_active():
             finished_and_demo=torch.logical_and(episode_finished.flatten(), self._demo_envs_idxs_bool)
             finished_demo_idxs=self._env_to_gait_sched_mapping[finished_and_demo]
+            terminated_and_demo=torch.logical_and(self._terminations.get_torch_mirror(gpu=self._use_gpu).flatten(), 
+                                    self._demo_envs_idxs_bool)
+            terminated_and_demo_idxs=self._env_to_gait_sched_mapping[terminated_and_demo]
             if self._use_gpu:
-                self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
-                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cuda().flatten())
+                self._gait_scheduler_walk.reset(to_be_reset=terminated_and_demo_idxs.cuda().flatten())
+                self._gait_scheduler_trot.reset(to_be_reset=terminated_and_demo_idxs.cuda().flatten())
                 # self._twist_smoother.reset_all(to_be_reset=finished_demo_idxs.cuda().flatten(),
                 #     value=0.0)
             else:
-                self._gait_scheduler_walk.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
-                self._gait_scheduler_trot.reset(to_be_reset=finished_demo_idxs.cpu().flatten())
+                self._gait_scheduler_walk.reset(to_be_reset=terminated_and_demo_idxs.cpu().flatten())
+                self._gait_scheduler_trot.reset(to_be_reset=terminated_and_demo_idxs.cpu().flatten())
                 # self._twist_smoother.reset_all(to_be_reset=finished_demo_idxs.cpu().flatten(),
                 #     value=0.0)
             
             if self._twist_smoother is not None: # smoother only reset at terminations
-                terminated_and_demo=torch.logical_and(self._terminations.get_torch_mirror(gpu=self._use_gpu).flatten(), 
-                                    self._demo_envs_idxs_bool)
+                
                 terminated_demo_idxs=self._env_to_gait_sched_mapping[terminated_and_demo]
                 if self._use_gpu:
                     self._twist_smoother.reset_all(to_be_reset=terminated_demo_idxs.cuda().flatten(),
