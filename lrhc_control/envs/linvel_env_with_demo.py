@@ -22,7 +22,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000):
         
-        self._full_demo=True # whether to override the full action
+        self._full_demo=False # whether to override the full action
         self._smooth_twist_cmd=True
         self._smoothing_horizon_twist=0.08
 
@@ -78,8 +78,9 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         
     def _init_gait_schedulers(self):
 
-        self._walk_to_trot_thresh=0.7 # [m/s] # centauro
-        # self._walk_to_trot_thresh=0.3 # [m/s] # kyon
+        # self._walk_to_trot_thresh=0.7 # [m/s] # centauro
+        self._walk_to_trot_thresh=0.3 # [m/s] # kyon no wheels
+        # self._walk_to_trot_thresh=0.9 # [m/s] # kyon wheels
 
         self._stopping_thresh=0.01
 
