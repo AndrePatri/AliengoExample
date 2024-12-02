@@ -22,7 +22,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000):
         
-        self._full_demo=False # whether to override the full action
+        self._full_demo=True # whether to override the full action
         self._smooth_twist_cmd=True
         self._smoothing_horizon_twist=0.08
 
@@ -78,10 +78,12 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         
     def _init_gait_schedulers(self):
 
-        self._walk_to_trot_thresh=0.2 # [m/s]
+        self._walk_to_trot_thresh=0.7 # [m/s] # centauro
+        # self._walk_to_trot_thresh=0.3 # [m/s] # kyon
+
         self._stopping_thresh=0.01
 
-        phase_period_walk=2.5
+        phase_period_walk=2.0
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -183,6 +185,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             self._gait_scheduler_trot.step()
             
             have_to_go_fast=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
+            have_to_go_slow=~have_to_go_fast
 
             fast_and_demo=torch.logical_and(have_to_go_fast.flatten(),self._demo_envs_idxs_bool)
 
@@ -193,10 +196,15 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             walk_signal=self._gait_scheduler_walk.get_signal(clone=True)[self._env_to_gait_sched_mapping[self._demo_envs_idxs_bool], :]
             is_contact_walk=walk_signal>self._gait_scheduler_walk.threshold()
             agent_action[self._demo_envs_idxs, 6:10] = 2.0*is_contact_walk-1.0
+
             if fast_and_demo.any():
                 # for fast enough refs, trot
                 trot_signal=self._gait_scheduler_trot.get_signal(clone=True)[self._env_to_gait_sched_mapping[fast_and_demo], :]
                 is_contact_trot=trot_signal>self._gait_scheduler_trot.threshold()
                 agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
+            
+            if have_to_go_slow.any(): # higher twist ref for walking
+                agent_action[have_to_go_slow.flatten(), 0:6]=2*agent_action[have_to_go_slow.flatten(), 0:6]
+                
             # if required, keep contact
             agent_action[stop_and_demo, 6:10] = 1.0

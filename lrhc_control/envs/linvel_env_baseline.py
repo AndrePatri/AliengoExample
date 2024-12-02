@@ -114,15 +114,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # task tracking
         self._task_offset = 10.0
-        self._task_scale = 1.5
+        self._task_scale = 2.0
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
         self._task_err_weights[0, 0] = 1.0
         self._task_err_weights[0, 1] = 1.0
         self._task_err_weights[0, 2] = 1.0
-        self._task_err_weights[0, 3] = 1e-3
-        self._task_err_weights[0, 4] = 1e-3
-        self._task_err_weights[0, 5] = 1e-3
+        self._task_err_weights[0, 3] = 1e-6
+        self._task_err_weights[0, 4] = 1e-6
+        self._task_err_weights[0, 5] = 1e-6
 
         # task pred tracking
         self._task_pred_offset = 0.0 # 10.0
@@ -628,9 +628,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         weighted_jnt_vel = torch.sum((jnts_vel_sqrd)*self._jnt_vel_penalty_weights, dim=1, keepdim=True)/self._jnt_vel_penalty_weights_sum
         return weighted_jnt_vel
     
-    def _task_perc_err_wms(self, task_ref, task_meas, weights):
+    def _task_perc_err_wms(self, task_ref, task_meas, weights, epsi: float = 0.0):
         ref_norm = task_ref.norm(dim=1,keepdim=True)
-        self._task_err_scaling[:, :] = ref_norm+1e-2
+        self._task_err_scaling[:, :] = ref_norm+epsi
         task_perc_err=self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
             scaling=self._task_err_scaling, weights=weights)
         perc_err_thresh=2.0 # no more than perc_err_thresh*100 % error on each dim
@@ -645,7 +645,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     
     def _task_perc_err_lin(self, task_ref, task_meas, weights):
         task_wmse = self._task_perc_err_wms(task_ref=task_ref, task_meas=task_meas,
-            weights=weights)
+            weights=weights, epsi=1e-2)
         return task_wmse.sqrt()
     
     def _task_err_lin(self, task_ref, task_meas, weights):
@@ -659,9 +659,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         return self._rhc_fail_idx_scale*rhc_fail_idx
     
     def _compute_step_rewards(self):
-        task_error_fun = self._task_perc_err_lin
+        # task_error_fun = self._task_perc_err_lin
         # task_error_fun= self._task_perc_err_wms
-        # task_error_fun = self._task_err_lin
+        task_error_fun = self._task_err_lin
         sub_rewards = self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)
 
         agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
