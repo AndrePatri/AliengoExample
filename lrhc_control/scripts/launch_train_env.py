@@ -134,10 +134,15 @@ if __name__ == "__main__":
         cluster_data[cluster_info_keys[i]] = cluster_info_data[i]
 
     custom_args={}
-    username = os.getlogin() # add machine info to db data
-    hostname = os.uname().nodename
-    user_host = f"{username}@{hostname}"
-    custom_args["uname_host"]=user_host
+    custom_args["uname_host"]="user_host"
+    try:
+        username = os.getlogin() # add machine info to db data
+        hostname = os.uname().nodename
+        user_host = f"{username}@{hostname}"
+        custom_args["uname_host"]=user_host
+    except:
+        pass
+    
     algo=None
     if not args.dummy:
         if args.sac:
