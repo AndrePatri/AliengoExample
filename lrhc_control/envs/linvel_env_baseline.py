@@ -157,7 +157,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         # task rand
         self._use_pof0 = True
-        self._pof0 = 0.01
+        self._pof0 = 0.05
         self._twist_ref_lb = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=-0.8) 
         self._twist_ref_ub = torch.full((1, 6), dtype=dtype, device=device,
