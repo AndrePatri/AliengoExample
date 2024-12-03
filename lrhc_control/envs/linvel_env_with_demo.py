@@ -77,14 +77,21 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 name=self.__class__.__name__+"TwistCmdSmoother")
         
     def _init_gait_schedulers(self):
+        
+        self._stopping_thresh=0.08
+        
+        # self._walk_to_trot_thresh=0.4 # [m/s] # kyon no wheels
+        # phase_period_walk=2.0 # kyon no wheels
+        # phase_period_trot=1.5
+
+        # self._walk_to_trot_thresh=1.5 # [m/s] # kyon wheels
+        # phase_period_walk=2.0 # kyon wheels
+        # phase_period_trot=2.0
 
         self._walk_to_trot_thresh=0.7 # [m/s] # centauro
-        # self._walk_to_trot_thresh=0.3 # [m/s] # kyon no wheels
-        # self._walk_to_trot_thresh=0.9 # [m/s] # kyon wheels
+        phase_period_walk=4.0 # centauro
+        phase_period_trot=1.5
 
-        self._stopping_thresh=0.01
-
-        phase_period_walk=3.5
         update_dt_walk = self._substep_dt*self._action_repeat
         self._pattern_gen_walk = QuadrupedGaitPatternGenerator(phase_period=phase_period_walk)
         gait_params_walk = self._pattern_gen_walk.get_params("walk")
@@ -103,7 +110,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             dtype=self._dtype
         )
 
-        phase_period_trot=1.5
+        
         update_dt_trot = self._substep_dt*self._action_repeat
         self._pattern_gen_trot = QuadrupedGaitPatternGenerator(phase_period=phase_period_trot)
         gait_params_trot = self._pattern_gen_trot.get_params("trot")
@@ -188,9 +195,9 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             self._gait_scheduler_trot.step()
             
             have_to_go_fast=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
-            have_to_go_slow=~have_to_go_fast
 
             fast_and_demo=torch.logical_and(have_to_go_fast.flatten(),self._demo_envs_idxs_bool)
+            have_to_go_slow_and_demo=~fast_and_demo
 
             have_to_stop=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)<self._stopping_thresh
             stop_and_demo=torch.logical_and(have_to_stop.flatten(),self._demo_envs_idxs_bool)
@@ -206,8 +213,10 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 is_contact_trot=trot_signal>self._gait_scheduler_trot.threshold()
                 agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
             
-            if have_to_go_slow.any(): # higher twist ref for walking
-                agent_action[have_to_go_slow.flatten(), 0:6]=2*agent_action[have_to_go_slow.flatten(), 0:6]
-                
-            # if required, keep contact
-            agent_action[stop_and_demo, 6:10] = 1.0
+            if have_to_go_slow_and_demo.any(): # higher twist ref for walking
+                agent_action[have_to_go_slow_and_demo, 0:6]=2*agent_action[have_to_go_slow_and_demo, 0:6]
+            
+            if stop_and_demo.any():
+                agent_action[stop_and_demo, 0:6]=0.0
+                # keep contact
+                agent_action[stop_and_demo, 6:10] = 1.0
