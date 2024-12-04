@@ -1197,7 +1197,7 @@ class LRhcEnvBase(ABC):
         pass
     
     @abstractmethod
-    def _sim_is_running(self) -> bool:
+    def _is_running(self) -> bool:
         pass
     
     @abstractmethod

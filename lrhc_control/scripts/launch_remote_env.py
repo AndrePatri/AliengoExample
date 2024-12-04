@@ -160,13 +160,14 @@ if __name__ == '__main__':
     env.reset(reset_sim=True)
 
     rt_factor = RtFactor(dt_nom=env.physics_dt(),
-                window_size=10000)
+                window_size=100)
     
-    while env._sim_is_running():
+    while env._is_running():
         
         if rt_factor.reset_due():
             rt_factor.reset()
         env.step() 
+
         rt_factor.update()
 
         for i in range(len(robot_names)):
