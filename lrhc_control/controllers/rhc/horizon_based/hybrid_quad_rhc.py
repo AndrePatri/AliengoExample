@@ -83,7 +83,7 @@ class HybridQuadRhc(RHController):
         self._custom_opts={"replace_continuous_joints": False,
             "use_force_feedback": False,
             "fixed_flights": True,
-            "lin_a_feedback": True,
+            "lin_a_feedback": False,
             "is_open_loop": self._open_loop, # fully open (just for db)
             "fully_closed": False, # closed loop with full feedback (just for db)
             "closed_partial": False, # closed loop with partial feedback
@@ -962,8 +962,8 @@ class HybridQuadRhc(RHController):
         jnts_v_rhc.setBounds(lb=v_jnts+self._alphas_v_jnts*jnt_v_delta, 
             ub=v_jnts+self._alphas_v_jnts*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:
-            lin_a_prb.setBounds(lb=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :]-bound_relaxation, 
-                ub=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :]+bound_relaxation, 
+            lin_a_prb.setBounds(lb=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :], 
+                ub=a_root[0:3, :]+self._alphas_a[0:3]*a_root_delta[0:3, :], 
                 nodes=0)
             
         # return state used for feedback
