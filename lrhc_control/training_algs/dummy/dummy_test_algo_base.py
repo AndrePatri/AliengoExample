@@ -1,4 +1,4 @@
-from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal
+from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 from lrhc_control.agents.dummies.dummy import DummyAgent
 
 import torch 
@@ -735,6 +735,14 @@ class DummyTestAlgoBase(ABC):
             safe=False,
             force_reconnection=True)
         self._qf_vals.run()
+        self._qf_trgt=QfTrgt(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._qf_trgt.run()
     
     def _switch_training_mode(self, 
                     train: bool = True):
