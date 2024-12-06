@@ -388,7 +388,7 @@ class LRhcEnvBase(ABC):
             self._jnt_imp_cntrl_shared_data[robot_name].run()
 
             for n in range(self._n_init_steps): # run some initialization steps
-                self._step_sim()
+                self._step_world()
             self._read_jnts_state_from_robot(robot_name=robot_name,
                 env_indxs=None)
             self._read_root_state_from_robot(robot_name=robot_name,
@@ -429,13 +429,13 @@ class LRhcEnvBase(ABC):
         if self._debug:
             self._pre_step_db()
             self._env_timer=time.perf_counter()
-            self._step_sim()
+            self._step_world()
             self.debug_data["time_to_step_world"] = \
                 time.perf_counter() - self._env_timer
             self._post_sim_step_db()
         else:
             self._pre_step()
-            self._step_sim()
+            self._step_world()
             self._post_sim_step()
 
         return success
@@ -600,6 +600,7 @@ class LRhcEnvBase(ABC):
                     if failed is not None and self._env_opts["deact_when_failure"]: # deactivate robot completely 
                         self._deactivate(env_indxs=failed,
                             robot_name=robot_name)
+                    
                     self._process_remote_reset_req(robot_name=robot_name) # wait for remote reset request (blocking)
                     self._wait_for_remote_step_req(robot_name=robot_name)
                 else:
@@ -1287,5 +1288,5 @@ class LRhcEnvBase(ABC):
         pass
 
     @abstractmethod
-    def _step_sim(self) -> None:
+    def _step_world(self) -> None:
         pass
