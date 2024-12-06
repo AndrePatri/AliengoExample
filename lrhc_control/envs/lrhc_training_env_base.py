@@ -522,7 +522,7 @@ class LRhcTrainingEnvBase(ABC):
                             truncated)
         episode_finished_cpu = episode_finished.cpu()
 
-        if self._rand_safety_reset_counter is not None:
+        if self._rand_safety_reset_counter is not None and self._use_random_safety_reset:
             self._rand_safety_reset_counter.increment(to_be_incremented=episode_finished_cpu.flatten())
             # truncated[:,:] = torch.logical_or(truncated,
             #     self._rand_safety_reset_counter.time_limits_reached().cuda())
@@ -573,7 +573,7 @@ class LRhcTrainingEnvBase(ABC):
         self._task_rand_counter.reset(to_be_reset=episode_finished_cpu)
         # safety reset counter is only when it reches its reset interval (just to keep
         # the counter bounded)
-        if self._rand_safety_reset_counter is not None:
+        if self._rand_safety_reset_counter is not None and self._use_random_safety_reset:
             self._rand_safety_reset_counter.reset(to_be_reset=self._rand_safety_reset_counter.time_limits_reached())
 
         return rm_reset_ok
@@ -584,7 +584,7 @@ class LRhcTrainingEnvBase(ABC):
         terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
         to_be_reset=terminated.cpu()
 
-        if self._rand_safety_reset_counter is not None:
+        if self._rand_safety_reset_counter is not None and self._use_random_safety_reset:
             to_be_reset[:, :]=torch.logical_or(to_be_reset,
                 self._rand_safety_reset_counter.time_limits_reached())
 
