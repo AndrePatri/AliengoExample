@@ -405,7 +405,6 @@ class LRhcEnvBase(ABC):
                 reset_cluster=True,
                 reset_cluster_counter=False,
                 randomize=True)
-            self._set_startup_jnt_imp_gains(robot_name=robot_name)
 
             control_cluster=self.cluster_servers[robot_name]
             self._write_state_to_cluster(robot_name=robot_name)
@@ -418,9 +417,12 @@ class LRhcEnvBase(ABC):
 
             if self._use_remote_stepping[i]:
                 self._wait_for_remote_step_req(robot_name=robot_name)
+            
+            self._set_startup_jnt_imp_gains(robot_name=robot_name) # set gains to
+            # startup config (usually lower)
 
             control_cluster.trigger_solution()
-
+            
         self._setup_done=True
 
     def step(self) -> bool:
@@ -482,7 +484,7 @@ class LRhcEnvBase(ABC):
     def _write_state_to_cluster(self, 
         robot_name: str, 
         env_indxs: torch.Tensor = None,
-        transf_to_base_loc: bool = True):
+        base_loc: bool = True):
         
         if self._debug:
             if not isinstance(env_indxs, (torch.Tensor, type(None))):
@@ -499,19 +501,19 @@ class LRhcEnvBase(ABC):
                 data_type="q", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # twist
-        rhc_state.root_state.set(data=self.root_v(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
+        rhc_state.root_state.set(data=self.root_v(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="v", robot_idxs = env_indxs, gpu=self._use_gpu)
-        rhc_state.root_state.set(data=self.root_omega(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
+        rhc_state.root_state.set(data=self.root_omega(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="omega", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # angular accc.
-        rhc_state.root_state.set(data=self.root_a(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
+        rhc_state.root_state.set(data=self.root_a(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="a", robot_idxs = env_indxs, gpu=self._use_gpu)
-        rhc_state.root_state.set(data=self.root_alpha(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
+        rhc_state.root_state.set(data=self.root_alpha(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="alpha", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # gravity vec
-        rhc_state.root_state.set(data=self.gravity(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
+        rhc_state.root_state.set(data=self.gravity(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
                 data_type="gn", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # joints
@@ -783,10 +785,10 @@ class LRhcEnvBase(ABC):
     def root_v(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
 
         root_v=self._root_v[robot_name]
-        if transf_to_base_loc:
+        if base_loc:
             root_v=self._root_v_base_loc[robot_name]
         if env_idxs is None:
             return root_v
@@ -796,10 +798,10 @@ class LRhcEnvBase(ABC):
     def root_omega(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
 
         root_omega=self._root_omega[robot_name]
-        if transf_to_base_loc:
+        if base_loc:
             root_omega=self._root_omega_base_loc[robot_name]
         if env_idxs is None:
             return root_omega
@@ -809,10 +811,10 @@ class LRhcEnvBase(ABC):
     def root_a(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
 
         root_a=self._root_a[robot_name]
-        if transf_to_base_loc:
+        if base_loc:
             root_a=self._root_a_base_loc[robot_name]
         if env_idxs is None:
             return root_a
@@ -822,10 +824,10 @@ class LRhcEnvBase(ABC):
     def root_alpha(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
 
         root_alpha=self._root_alpha[robot_name]
-        if transf_to_base_loc:
+        if base_loc:
             root_alpha=self._root_alpha_base_loc[robot_name]
         if env_idxs is None:
             return root_alpha
@@ -835,10 +837,10 @@ class LRhcEnvBase(ABC):
     def gravity(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
 
         gravity_loc=self._gravity_normalized[robot_name]
-        if transf_to_base_loc:
+        if base_loc:
             gravity_loc=self._gravity_normalized_base_loc[robot_name]
         if env_idxs is None:
             return gravity_loc
