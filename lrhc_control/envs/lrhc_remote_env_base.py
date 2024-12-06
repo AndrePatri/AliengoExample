@@ -482,7 +482,7 @@ class LRhcEnvBase(ABC):
     def _write_state_to_cluster(self, 
         robot_name: str, 
         env_indxs: torch.Tensor = None,
-        base_loc: bool = True):
+        transf_to_base_loc: bool = True):
         
         if self._debug:
             if not isinstance(env_indxs, (torch.Tensor, type(None))):
@@ -782,10 +782,10 @@ class LRhcEnvBase(ABC):
     def root_v(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            base_loc: bool = True):
+            transf_to_base_loc: bool = True):
 
         root_v=self._root_v[robot_name]
-        if base_loc:
+        if transf_to_base_loc:
             root_v=self._root_v_base_loc[robot_name]
         if env_idxs is None:
             return root_v
@@ -795,10 +795,10 @@ class LRhcEnvBase(ABC):
     def root_omega(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            base_loc: bool = True):
+            transf_to_base_loc: bool = True):
 
         root_omega=self._root_omega[robot_name]
-        if base_loc:
+        if transf_to_base_loc:
             root_omega=self._root_omega_base_loc[robot_name]
         if env_idxs is None:
             return root_omega
@@ -808,10 +808,10 @@ class LRhcEnvBase(ABC):
     def root_a(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            base_loc: bool = True):
+            transf_to_base_loc: bool = True):
 
         root_a=self._root_a[robot_name]
-        if base_loc:
+        if transf_to_base_loc:
             root_a=self._root_a_base_loc[robot_name]
         if env_idxs is None:
             return root_a
@@ -821,10 +821,10 @@ class LRhcEnvBase(ABC):
     def root_alpha(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            base_loc: bool = True):
+            transf_to_base_loc: bool = True):
 
         root_alpha=self._root_alpha[robot_name]
-        if base_loc:
+        if transf_to_base_loc:
             root_alpha=self._root_alpha_base_loc[robot_name]
         if env_idxs is None:
             return root_alpha
@@ -834,10 +834,10 @@ class LRhcEnvBase(ABC):
     def gravity(self,
             robot_name: str,
             env_idxs: torch.Tensor = None,
-            base_loc: bool = True):
+            transf_to_base_loc: bool = True):
 
         gravity_loc=self._gravity_normalized[robot_name]
-        if base_loc:
+        if transf_to_base_loc:
             gravity_loc=self._gravity_normalized_base_loc[robot_name]
         if env_idxs is None:
             return gravity_loc
