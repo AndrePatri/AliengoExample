@@ -81,6 +81,7 @@ if __name__ == '__main__':
     parser.add_argument('--stime_trgt', type=float, default=None, help='sim time for which this bridge runs (None -> indefinetly)')
     parser.add_argument('--srdf_path', type=str, help='path to SRDF path specifying homing configuration, to be used for missing joints', default=None)
     parser.add_argument('--abort_wallmin', type=float, default=5.0, help='abort bridge if no response wihtin this timeout')
+    parser.add_argument('--pub_stime',action='store_true', help='whether to publish /clock')
 
     args = parser.parse_args()
 
@@ -104,7 +105,8 @@ if __name__ == '__main__':
                         env_idx=args.env_idx,
                         sim_time_trgt=args.stime_trgt,
                         srdf_homing_file_path=args.srdf_path,
-                        abort_wallmin=args.abort_wallmin)
+                        abort_wallmin=args.abort_wallmin, 
+                        pub_stime=args.pub_stime)
     else:
 
         from lrhc_control.utils.rhc_viz.rhc2viz2 import RhcToViz2Bridge
@@ -120,7 +122,8 @@ if __name__ == '__main__':
                         sim_time_trgt=args.stime_trgt,
                         srdf_homing_file_path=args.srdf_path,
                         abort_wallmin=args.abort_wallmin,
-                        update_dt=update_dt)
+                        update_dt=update_dt, 
+                        pub_stime=args.pub_stime)
 
     bridge.run()
 
