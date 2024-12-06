@@ -1659,7 +1659,7 @@ class LRhcTrainingEnvBase(ABC):
     
     def _get_avrg_substep_root_twist(self, 
             out: torch.Tensor,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
         # to be called at each substep
         robot_p_meas = self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
         robot_q_meas = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
@@ -1680,7 +1680,7 @@ class LRhcTrainingEnvBase(ABC):
 
     def _get_avrg_step_root_twist(self, 
             out: torch.Tensor,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
         # to be called after substeps of actions repeats
         robot_p_meas = self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)
         robot_q_meas = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
@@ -1698,7 +1698,7 @@ class LRhcTrainingEnvBase(ABC):
 
     def _get_avrg_rhc_root_twist(self,
             out: torch.Tensor,
-            transf_to_base_loc: bool = True):
+            base_loc: bool = True):
         
         rhc_root_p =self._rhc_cmds.root_state.get(data_type="p",gpu=self._use_gpu)
         rhc_root_q =self._rhc_cmds.root_state.get(data_type="q",gpu=self._use_gpu)
