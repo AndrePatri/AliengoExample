@@ -257,6 +257,8 @@ class SActorCriticAlgoBase(ABC):
 
         # reset environment
         self._env.reset()
+        if self._eval:
+            self._env.switch_random_reset(on=False)
 
         # create dump directory + copy important files for debug
         self._init_drop_dir(drop_dir_name)

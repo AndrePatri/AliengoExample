@@ -197,7 +197,8 @@ class DummyTestAlgoBase(ABC):
                 wandb.watch(self._agent, log="all")
         
         # self._env.reset()
-        
+        self._env.switch_random_reset(on=False)
+
         self._setup_done = True
 
         self._is_done = False

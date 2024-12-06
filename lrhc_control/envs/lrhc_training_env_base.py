@@ -1482,6 +1482,9 @@ class LRhcTrainingEnvBase(ABC):
         self._obs_offset = (self._obs_ub + self._obs_lb)/2.0
         return self._obs_offset
     
+    def switch_random_reset(self, on: bool = True):
+        self._use_random_safety_reset=on
+
     def set_jnts_remapping(self, 
         remapping: List = None):
 
