@@ -499,19 +499,19 @@ class LRhcEnvBase(ABC):
                 data_type="q", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # twist
-        rhc_state.root_state.set(data=self.root_v(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+        rhc_state.root_state.set(data=self.root_v(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
                 data_type="v", robot_idxs = env_indxs, gpu=self._use_gpu)
-        rhc_state.root_state.set(data=self.root_omega(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+        rhc_state.root_state.set(data=self.root_omega(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
                 data_type="omega", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # angular accc.
-        rhc_state.root_state.set(data=self.root_a(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+        rhc_state.root_state.set(data=self.root_a(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
                 data_type="a", robot_idxs = env_indxs, gpu=self._use_gpu)
-        rhc_state.root_state.set(data=self.root_alpha(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+        rhc_state.root_state.set(data=self.root_alpha(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
                 data_type="alpha", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # gravity vec
-        rhc_state.root_state.set(data=self.gravity(robot_name=robot_name, env_idxs=env_indxs,base_loc=base_loc), 
+        rhc_state.root_state.set(data=self.gravity(robot_name=robot_name, env_idxs=env_indxs,transf_to_base_loc=transf_to_base_loc), 
                 data_type="gn", robot_idxs = env_indxs, gpu=self._use_gpu)
         
         # joints
