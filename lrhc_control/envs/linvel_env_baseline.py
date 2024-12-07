@@ -48,12 +48,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._action_smoothing_horizon_c=0.01
         self._action_smoothing_horizon_d=0.1
 
-        self._use_track_reward_smoother=True # whether to smooth vel error signal
+        self._use_track_reward_smoother=False # whether to smooth vel error signal
         self._smoothing_horizon_vel_err=0.08
         self._track_rew_smoother=None
 
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
+        self._directional_tracking=True # whether to compute tracking rew based on reference direction
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
         self._add_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True
@@ -118,8 +119,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
         self._task_err_weights[0, 0] = 1.0
-        self._task_err_weights[0, 1] = 1.0
-        self._task_err_weights[0, 2] = 1.0
+        self._task_err_weights[0, 1] = 0.1
+        self._task_err_weights[0, 2] = 0.1
         self._task_err_weights[0, 3] = 1e-6
         self._task_err_weights[0, 4] = 1e-6
         self._task_err_weights[0, 5] = 1e-6
@@ -132,9 +133,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._task_pred_err_weights[0, 0] = 1.0
         self._task_pred_err_weights[0, 1] = 1.0
         self._task_pred_err_weights[0, 2] = 1.0
-        self._task_pred_err_weights[0, 3] = 1e-1
-        self._task_pred_err_weights[0, 4] = 1e-1
-        self._task_pred_err_weights[0, 5] = 1e-1
+        self._task_pred_err_weights[0, 3] = 1e-6
+        self._task_pred_err_weights[0, 4] = 1e-6
+        self._task_pred_err_weights[0, 5] = 1e-6
 
         # fail idx
         self._rhc_fail_idx_offset = 0.0
@@ -628,11 +629,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         weighted_jnt_vel = torch.sum((jnts_vel_sqrd)*self._jnt_vel_penalty_weights, dim=1, keepdim=True)/self._jnt_vel_penalty_weights_sum
         return weighted_jnt_vel
     
-    def _task_perc_err_wms(self, task_ref, task_meas, weights, epsi: float = 0.0):
+    def _task_perc_err_wms(self, task_ref, task_meas, weights, epsi: float = 0.0, directional: bool = False):
         ref_norm = task_ref.norm(dim=1,keepdim=True)
         self._task_err_scaling[:, :] = ref_norm+epsi
-        task_perc_err=self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
-            scaling=self._task_err_scaling, weights=weights)
+        if directional:
+            task_perc_err=self._task_err_directional(task_ref=task_ref, task_meas=task_meas, 
+                scaling=self._task_err_scaling, weights=weights)
+        else:
+            task_perc_err=self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
+                scaling=self._task_err_scaling, weights=weights)
         perc_err_thresh=2.0 # no more than perc_err_thresh*100 % error on each dim
         task_perc_err.clamp_(0.0,perc_err_thresh**2) 
         return task_perc_err
@@ -643,15 +648,36 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_wmse = torch.sum(scaled_error*scaled_error*weights, dim=1, keepdim=True)/torch.sum(weights).item()
         return task_wmse # weighted mean square error (along task dimension)
     
+    def _task_err_directional(self, task_ref, task_meas, scaling, weights):
+        task_error = (task_meas-task_ref)
+        task_error=task_error/scaling
+        task_ref_xy_linvel=task_ref[:, 0:2]
+        task_error_xy_linvel=task_error[:, 0:2]
+        task_ref_linvel_norm=task_ref_xy_linvel.norm(dim=1,keepdim=True)
+        task_ref_xy_versor=task_ref_xy_linvel/task_ref_linvel_norm
+
+        xy_error_proj=task_error_xy_linvel*task_ref_xy_versor
+        below_thresh=task_ref_linvel_norm<1e-6 # handle small refs
+        xy_error_proj[below_thresh.flatten(), :]=task_meas[below_thresh.flatten(), 0:2]
+        
+        full_error=torch.cat((xy_error_proj,task_error[:, 2:6]), dim=1)
+        task_wmse_dir = torch.sum(full_error*full_error*weights, dim=1, keepdim=True)/torch.sum(weights).item()
+        return task_wmse_dir # weighted mean square error (along task dimension)
+    
     def _task_perc_err_lin(self, task_ref, task_meas, weights):
         task_wmse = self._task_perc_err_wms(task_ref=task_ref, task_meas=task_meas,
             weights=weights, epsi=1e-2)
         return task_wmse.sqrt()
     
-    def _task_err_lin(self, task_ref, task_meas, weights):
+    def _task_err_lin(self, task_ref, task_meas, weights, directional: bool = False):
         self._task_err_scaling[:, :] = 1
-        task_wmse = self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
-            scaling=self._task_err_scaling, weights=weights)
+        if directional:
+            task_wmse = self._task_err_directional(task_ref=task_ref, task_meas=task_meas, 
+                scaling=self._task_err_scaling, weights=weights)
+        else:
+            task_wmse = self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
+                scaling=self._task_err_scaling, weights=weights)
+            
         return task_wmse.sqrt()
     
     def _rhc_fail_idx(self, gpu: bool):
@@ -668,7 +694,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._get_avrg_step_root_twist(out=self._step_avrg_root_twist_base_loc, base_loc=True)
         task_error = task_error_fun(task_meas=self._step_avrg_root_twist_base_loc, 
             task_ref=agent_task_ref_base_loc,
-            weights=self._task_err_weights)
+            weights=self._task_err_weights,
+            directional=self._directional_tracking)
 
         fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
         sub_rewards[:, 0:1] =  self._task_offset*(1-fail_idx)*torch.exp(-self._task_scale*task_error)
@@ -681,7 +708,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             # from MPC after stepping
             task_pred_error=task_error_fun(task_meas=self._root_twist_avrg_rhc_base_loc_next, 
                 task_ref=agent_task_ref_base_loc,
-                weights=self._task_pred_err_weights)
+                weights=self._task_pred_err_weights,
+                directional=self._directional_tracking)
             sub_rewards[:, 1:2] = self._task_pred_offset*torch.exp(-self._task_pred_scale*task_pred_error)
 
         # sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
@@ -702,7 +730,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # #     # from MPC after stepping
         # #     task_pred_error=task_error_fun(task_meas=self._root_twist_avrg_rhc_base_loc_next, 
         # #         task_ref=agent_task_ref_base_loc,
-        # #         weights=self._task_pred_err_weights)
+        # #         weights=self._task_pred_err_weights,
+        # #         directional=self._directional_tracking)
         # #     self._substep_rewards[:, 1:2] = self._task_pred_offset*torch.exp(-self._task_pred_scale*task_pred_error)
 
         # # self._substep_rewards[:, 1:2] =self._power_offset-self._power_scale*CoT
