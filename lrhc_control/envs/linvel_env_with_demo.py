@@ -78,7 +78,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         
     def _init_gait_schedulers(self):
         
-        self._stopping_thresh=0.08
+        self._stopping_thresh=0.01
         
         # self._walk_to_trot_thresh=0.4 # [m/s] # kyon no wheels
         # phase_period_walk=2.0 # kyon no wheels
@@ -88,7 +88,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         # phase_period_walk=2.0 # kyon wheels
         # phase_period_trot=2.0
 
-        self._walk_to_trot_thresh=0.7 # [m/s] # centauro
+        self._walk_to_trot_thresh=0.2 # [m/s] # centauro
         phase_period_walk=4.0 # centauro
         phase_period_trot=1.5
 
@@ -175,19 +175,6 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             agent_action = self.get_actions()
             agent_twist_ref_current = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
-            if self._full_demo:
-                # overwriting agent's twist action with the identity wrt the reference (both 
-                # are base frame)
-                if self._twist_smoother is not None:
-                    # smooth action
-                    self._twist_smoother.update(new_signal=
-                        agent_twist_ref_current[self._demo_envs_idxs, :])
-                    agent_action[self._demo_envs_idxs, 0:6]=self._twist_smoother.get()
-                else:
-                # agent_twist_ref_current and agent action twist are base local
-                    agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
-                # agent_action[self._demo_envs_idxs, 0:6]=0.0
-
             # overwriting agent gait actions with the ones taken from the gait schedulers for 
             # (just for demonstration environments)
 
@@ -217,6 +204,19 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 agent_action[have_to_go_slow_and_demo, 0:6]=2*agent_action[have_to_go_slow_and_demo, 0:6]
             
             if stop_and_demo.any():
-                agent_action[stop_and_demo, 0:6]=0.0
                 # keep contact
                 agent_action[stop_and_demo, 6:10] = 1.0
+
+            if self._full_demo:
+                # overwriting agent's twist action with the identity wrt the reference (both 
+                # are base frame)
+                if self._twist_smoother is not None:
+                    # smooth action
+                    self._twist_smoother.update(new_signal=
+                        agent_twist_ref_current[self._demo_envs_idxs, :])
+                    agent_action[self._demo_envs_idxs, 0:6]=self._twist_smoother.get()
+                else:
+                # agent_twist_ref_current and agent action twist are base local
+                    agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
+                    
+                agent_action[stop_and_demo, 0:6]=0.0
