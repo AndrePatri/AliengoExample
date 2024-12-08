@@ -654,13 +654,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_ref_xy_linvel=task_ref[:, 0:2]
         task_error_xy_linvel=task_error[:, 0:2]
         task_ref_linvel_norm=task_ref_xy_linvel.norm(dim=1,keepdim=True)
-        task_ref_xy_versor=task_ref_xy_linvel/task_ref_linvel_norm
+        task_ref_xy_versor=task_ref_xy_linvel/(task_ref_linvel_norm+1e-8)
 
-        xy_error_proj=task_error_xy_linvel*task_ref_xy_versor
-        below_thresh=task_ref_linvel_norm<1e-6 # handle small refs
-        xy_error_proj[below_thresh.flatten(), :]=task_meas[below_thresh.flatten(), 0:2]
-        
-        full_error=torch.cat((xy_error_proj,task_error[:, 2:6]), dim=1)
+        longitudinal_error_norm=torch.sum(task_error_xy_linvel*task_ref_xy_versor, dim=1, keepdim=True)
+        lateral_error_norm=torch.norm(task_error_xy_linvel-longitudinal_error_norm*task_ref_xy_versor, dim=1, keepdim=True)
+
+        # handle small refs
+        below_thresh=task_ref_linvel_norm<1e-6 
+        longitudinal_error_norm[below_thresh.flatten(), :]=task_meas[below_thresh.flatten(), 0:1]
+        lateral_error_norm[below_thresh.flatten(), :]=task_meas[below_thresh.flatten(), 1:2]
+
+        full_error=torch.cat((longitudinal_error_norm, lateral_error_norm, task_error[:, 2:6]), dim=1)
         task_wmse_dir = torch.sum(full_error*full_error*weights, dim=1, keepdim=True)/torch.sum(weights).item()
         return task_wmse_dir # weighted mean square error (along task dimension)
     
