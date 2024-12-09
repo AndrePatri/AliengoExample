@@ -22,7 +22,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000):
         
-        self._full_demo=False # whether to override the full action
+        self._full_demo=True # whether to override the full action
         self._smooth_twist_cmd=True
         self._smoothing_horizon_twist=0.08
 
@@ -88,7 +88,7 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         # phase_period_walk=2.0 # kyon wheels
         # phase_period_trot=2.0
 
-        self._walk_to_trot_thresh=0.2 # [m/s] # centauro
+        self._walk_to_trot_thresh=0.5 # [m/s] # centauro
         phase_period_walk=4.0 # centauro
         phase_period_trot=1.5
 
@@ -200,9 +200,6 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 is_contact_trot=trot_signal>self._gait_scheduler_trot.threshold()
                 agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
             
-            if have_to_go_slow_and_demo.any(): # higher twist ref for walking
-                agent_action[have_to_go_slow_and_demo, 0:6]=2*agent_action[have_to_go_slow_and_demo, 0:6]
-            
             if stop_and_demo.any():
                 # keep contact
                 agent_action[stop_and_demo, 6:10] = 1.0
@@ -212,11 +209,15 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 # are base frame)
                 if self._twist_smoother is not None:
                     # smooth action
+                    if have_to_go_slow_and_demo.any(): # higher twist ref for walking
+                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=2*agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
                     self._twist_smoother.update(new_signal=
                         agent_twist_ref_current[self._demo_envs_idxs, :])
                     agent_action[self._demo_envs_idxs, 0:6]=self._twist_smoother.get()
                 else:
                 # agent_twist_ref_current and agent action twist are base local
+                    if have_to_go_slow_and_demo.any(): # higher twist ref for walking
+                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=2*agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
                     agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
                     
                 agent_action[stop_and_demo, 0:6]=0.0
