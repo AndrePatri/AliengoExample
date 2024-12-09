@@ -198,9 +198,13 @@ class AgentRefsFromKeyboard:
             world2base_frame_twist(t_w=self._current_twist_ref_world.reshape(1, -1), 
                 q_b=robot_q, 
                 t_out=self._current_twist_ref_base)
-        
-        self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
-                                        robot_idxs=self.cluster_idx_np)
+                
+            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
+                                            robot_idxs=self.cluster_idx_np)
+        else:
+            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
+                                            robot_idxs=self.cluster_idx_np)
+            
         self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
                                         n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
                                         read=False)   
@@ -253,7 +257,7 @@ class AgentRefsFromKeyboard:
             
         if hasattr(key, 'char'):
             
-            self._current_twist_ref_base[:, :]=0.0
+            # self._current_twist_ref_base[:, :]=0.0
             # nullify vel ref
             # self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._twist_null,
             #                     robot_idxs=self.cluster_idx_np)
