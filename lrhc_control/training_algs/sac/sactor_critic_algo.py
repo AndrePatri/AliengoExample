@@ -431,6 +431,8 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
             hf.create_dataset('tot_rew_min_over_envs', data=self._tot_rew_min_over_envs.numpy())
             
+            hf.create_dataset('ep_tsteps_env_distribution', data=self._ep_tsteps_env_distribution.numpy())
+
             if self._n_expl_envs > 0:
                 # expl envs
                 hf.create_dataset('sub_rew_max_expl', data=self._sub_rew_max_expl.numpy())
@@ -440,6 +442,8 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('sub_rew_avrg_over_envs_expl', data=self._sub_rew_avrg_over_envs_expl.numpy())
                 hf.create_dataset('sub_rew_min_over_envs_expl', data=self._sub_rew_min_over_envs_expl.numpy())
 
+                hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
+                
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
             
@@ -452,6 +456,8 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('sub_rew_avrg_over_envs_demo', data=self._sub_rew_avrg_over_envs_demo.numpy())
                 hf.create_dataset('sub_rew_min_over_envs_demo', data=self._sub_rew_min_over_envs_demo.numpy())
 
+                hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
+
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
             hf.create_dataset('env_step_rt_factor', data=self._env_step_rt_factor.numpy())
@@ -462,7 +468,7 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('n_policy_updates', data=self._n_policy_updates.numpy())
             hf.create_dataset('n_qfun_updates', data=self._n_qfun_updates.numpy())
             hf.create_dataset('n_tqfun_updates', data=self._n_tqfun_updates.numpy())
-
+            
             hf.create_dataset('elapsed_min', data=self._elapsed_min.numpy())
 
             # algo data 
@@ -486,6 +492,7 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('policy_entropy_std', data=self._policy_entropy_std.numpy())
             hf.create_dataset('policy_entropy_max', data=self._policy_entropy_max.numpy())
             hf.create_dataset('policy_entropy_min', data=self._policy_entropy_min.numpy())
+            hf.create_dataset('target_entropy', data=self._target_entropy)
 
             # dump all custom env data
             db_data_names = list(self._env.custom_db_data.keys())
@@ -842,7 +849,7 @@ class SActorCriticAlgoBase(ABC):
                 # exploration envs
                 if self._n_expl_envs > 0:
                     self._wandb_d.update({'correlation_db/ep_timesteps_expl_env_distr': 
-                        wandb.Histogram(self._ep_tsteps_demo_env_distribution[self._log_it_counter, :, :].numpy())})
+                        wandb.Histogram(self._ep_tsteps_expl_env_distribution[self._log_it_counter, :, :].numpy())})
 
                     # sub reward from expl envs
                     self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_max_expl":
