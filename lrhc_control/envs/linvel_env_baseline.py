@@ -118,24 +118,40 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._task_scale = 2.0
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
-        self._task_err_weights[0, 0] = 1.0
-        self._task_err_weights[0, 1] = 0.1
-        self._task_err_weights[0, 2] = 0.1
-        self._task_err_weights[0, 3] = 1e-6
-        self._task_err_weights[0, 4] = 1e-6
-        self._task_err_weights[0, 5] = 1e-6
+        if self._directional_tracking:
+            self._task_err_weights[0, 0] = 1.0
+            self._task_err_weights[0, 1] = 0.1
+            self._task_err_weights[0, 2] = 0.1
+            self._task_err_weights[0, 3] = 1e-6
+            self._task_err_weights[0, 4] = 1e-6
+            self._task_err_weights[0, 5] = 1e-6
+        else:
+            self._task_err_weights[0, 0] = 1.0
+            self._task_err_weights[0, 1] = 1.0
+            self._task_err_weights[0, 2] = 1.0
+            self._task_err_weights[0, 3] = 1e-6
+            self._task_err_weights[0, 4] = 1e-6
+            self._task_err_weights[0, 5] = 1e-6
 
         # task pred tracking
         self._task_pred_offset = 0.0 # 10.0
         self._task_pred_scale = 1.5 # perc-based
         self._task_pred_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
-        self._task_pred_err_weights[0, 0] = 1.0
-        self._task_pred_err_weights[0, 1] = 1.0
-        self._task_pred_err_weights[0, 2] = 1.0
-        self._task_pred_err_weights[0, 3] = 1e-6
-        self._task_pred_err_weights[0, 4] = 1e-6
-        self._task_pred_err_weights[0, 5] = 1e-6
+        if self._directional_tracking:
+            self._task_pred_err_weights[0, 0] = 1.0
+            self._task_pred_err_weights[0, 1] = 0.1
+            self._task_pred_err_weights[0, 2] = 0.1
+            self._task_pred_err_weights[0, 3] = 1e-6
+            self._task_pred_err_weights[0, 4] = 1e-6
+            self._task_pred_err_weights[0, 5] = 1e-6
+        else:
+            self._task_err_weights[0, 0] = 1.0
+            self._task_err_weights[0, 1] = 1.0
+            self._task_err_weights[0, 2] = 1.0
+            self._task_err_weights[0, 3] = 1e-6
+            self._task_err_weights[0, 4] = 1e-6
+            self._task_err_weights[0, 5] = 1e-6
 
         # fail idx
         self._rhc_fail_idx_offset = 0.0
@@ -157,8 +173,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._jnt_vel_penalty_weights_sum = torch.sum(self._jnt_vel_penalty_weights).item()
         
         # task rand
-        self._use_pof0 = True
-        self._pof0 = 0.05
+        self._use_pof0 = False
+        self._pof0 = 0.01
         self._twist_ref_lb = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=-0.8) 
         self._twist_ref_ub = torch.full((1, 6), dtype=dtype, device=device,
