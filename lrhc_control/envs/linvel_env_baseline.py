@@ -54,6 +54,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
+        self._use_perc_error=True
         self._directional_tracking=True # whether to compute tracking rew based on reference direction
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
         self._add_contact_f_to_obs=True # add estimate vertical contact f to obs
@@ -654,8 +655,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         else:
             task_perc_err=self._task_err_wms(task_ref=task_ref, task_meas=task_meas, 
                 scaling=self._task_err_scaling, weights=weights)
-        perc_err_thresh=2.0 # no more than perc_err_thresh*100 % error on each dim
-        task_perc_err.clamp_(0.0,perc_err_thresh**2) 
+        # perc_err_thresh=2.0 # no more than perc_err_thresh*100 % error on each dim
+        # task_perc_err.clamp_(0.0,perc_err_thresh**2) 
         return task_perc_err
     
     def _task_err_wms(self, task_ref, task_meas, scaling, weights):
@@ -684,9 +685,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_wmse_dir = torch.sum(full_error*full_error*weights, dim=1, keepdim=True)/torch.sum(weights).item()
         return task_wmse_dir # weighted mean square error (along task dimension)
     
-    def _task_perc_err_lin(self, task_ref, task_meas, weights):
+    def _task_perc_err_lin(self, task_ref, task_meas, weights, directional):
         task_wmse = self._task_perc_err_wms(task_ref=task_ref, task_meas=task_meas,
-            weights=weights, epsi=1e-2)
+            weights=weights, epsi=1e-1, directional=directional)
         return task_wmse.sqrt()
     
     def _task_err_lin(self, task_ref, task_meas, weights, directional: bool = False):
@@ -705,9 +706,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         return self._rhc_fail_idx_scale*rhc_fail_idx
     
     def _compute_step_rewards(self):
-        # task_error_fun = self._task_perc_err_lin
+    
         # task_error_fun= self._task_perc_err_wms
         task_error_fun = self._task_err_lin
+        if self._use_perc_error:
+            task_error_fun = self._task_perc_err_lin
+
         sub_rewards = self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)
 
         agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
@@ -735,8 +739,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
 
     def _compute_substep_rewards(self):
-        task_error_fun = self._task_perc_err_lin
 
+        task_error_fun = self._task_err_lin
+        if self._use_perc_error:
+            task_error_fun = self._task_perc_err_lin
+            
         # jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
         # jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
         # agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
