@@ -1,6 +1,8 @@
 from lrhc_control.agents.sactor_critic.sac import SACAgent
 
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
+from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
+
 import torch 
 import torch.optim as optim
 import torch.nn as nn
@@ -720,6 +722,14 @@ class SActorCriticAlgoBase(ABC):
                 self._running_mean_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_mean()
                 self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
 
+            # write some episodic db info on shared mem
+            sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
+            sub_returns[:, :]=self._episodic_reward_metrics.get_sub_rew_avrg()
+            tot_returns=self._tot_returns.get_torch_mirror(gpu=False)
+            tot_returns[:, :]=self._episodic_reward_metrics.get_tot_rew_avrg_over_envs()
+            self._sub_returns.synch_all(read=False)
+            self._tot_returns.synch_all(read=False)
+            
             self._log_info()
 
             self._log_it_counter+=1 
@@ -1544,3 +1554,25 @@ class SActorCriticAlgoBase(ABC):
             safe=False,
             force_reconnection=True)
         self._qf_trgt.run()
+
+        # episodic returns
+        reward_names=self._episodic_reward_metrics.data_names()
+        self._sub_returns=SubReturns(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            n_rewards=len(reward_names),
+            reward_names=reward_names,
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._sub_returns.run()
+
+        self._tot_returns=TotReturns(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._tot_returns.run()

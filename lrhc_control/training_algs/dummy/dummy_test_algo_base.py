@@ -1,4 +1,6 @@
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
+from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
+
 from lrhc_control.agents.dummies.dummy import DummyAgent
 
 import torch 
@@ -387,6 +389,14 @@ class DummyTestAlgoBase(ABC):
                 self._custom_env_data[dbdatan]["avrg_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg_over_envs()
                 self._custom_env_data[dbdatan]["min_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_min_over_envs()
 
+            # write some episodic db info on shared mem
+            sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
+            sub_returns[:, :]=self._episodic_reward_metrics.get_sub_rew_avrg()
+            tot_returns=self._tot_returns.get_torch_mirror(gpu=False)
+            tot_returns[:, :]=self._episodic_reward_metrics.get_tot_rew_avrg_over_envs()
+            self._sub_returns.synch_all(read=False)
+            self._tot_returns.synch_all(read=False)
+
             self._log_info()
 
             self._log_it_counter+=1 
@@ -744,6 +754,28 @@ class DummyTestAlgoBase(ABC):
             safe=False,
             force_reconnection=True)
         self._qf_trgt.run()
+
+        # episodic returns
+        reward_names=self._episodic_reward_metrics.data_names()
+        self._sub_returns=SubReturns(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            n_rewards=len(reward_names),
+            reward_names=reward_names,
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._sub_returns.run()
+
+        self._tot_returns=TotReturns(namespace=self._ns,
+            is_server=True, 
+            n_envs=self._num_envs, 
+            verbose=self._verbose, 
+            vlevel=VLevel.V2,
+            safe=False,
+            force_reconnection=True)
+        self._tot_returns.run()
     
     def _switch_training_mode(self, 
                     train: bool = True):

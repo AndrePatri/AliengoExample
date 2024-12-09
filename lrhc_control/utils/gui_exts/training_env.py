@@ -16,6 +16,7 @@ from lrhc_control.utils.shared_data.training_env import Terminations, SubTermina
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
 from lrhc_control.utils.shared_data.training_env import EpisodesCounter
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
+from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
 
 import numpy as np
 
@@ -144,13 +145,27 @@ class TrainingEnvData(SharedDataWindow):
                                 safe=False,
                                 verbose=True,
                                 vlevel=VLevel.V2))
+        
+        self.shared_data_clients.append(SubReturns(namespace=self.namespace,
+                                            is_server=False,
+                                            verbose=True,
+                                            vlevel=VLevel.V2,
+                                            safe=False,
+                                            with_gpu_mirror=False))
+        
+        self.shared_data_clients.append(TotReturns(namespace=self.namespace,
+                                            is_server=False,
+                                            verbose=True,
+                                            vlevel=VLevel.V2,
+                                            safe=False,
+                                            with_gpu_mirror=False))
 
         for client in self.shared_data_clients:
             client.run()
 
     def _post_shared_init(self):
         
-        self.grid_n_rows = 6
+        self.grid_n_rows = 7
 
         self.grid_n_cols = 2
 
@@ -290,6 +305,28 @@ class TrainingEnvData(SharedDataWindow):
                 legend_list=["qf value", "qf target"], 
                 ylabel="[float]"))
         
+        self.rt_plotters.append(RtPlotWindow(data_dim=len(self.shared_data_clients[4].col_names()),
+                                    n_data = n_envs,
+                                    update_data_dt=self.update_data_dt, 
+                                    update_plot_dt=self.update_plot_dt,
+                                    window_duration=self.window_duration, 
+                                    parent=None, 
+                                    base_name=f"Episodic returns - detailed (undiscounted)", 
+                                    window_buffer_factor=self.window_buffer_factor, 
+                                    legend_list=self.shared_data_clients[4].col_names(), 
+                                    ylabel="[float]"))
+
+        self.rt_plotters.append(RtPlotWindow(data_dim=len(self.shared_data_clients[5].col_names()),
+                                    n_data = n_envs,
+                                    update_data_dt=self.update_data_dt, 
+                                    update_plot_dt=self.update_plot_dt,
+                                    window_duration=self.window_duration, 
+                                    parent=None, 
+                                    base_name=f"Episodic returns - total (undiscounted)", 
+                                    window_buffer_factor=self.window_buffer_factor, 
+                                    legend_list=self.shared_data_clients[5].col_names(), 
+                                    ylabel="[float]"))
+        
         self.grid.addFrame(self.rt_plotters[0].base_frame, 0, 0)
         self.grid.addFrame(self.rt_plotters[1].base_frame, 0, 1)
         self.grid.addFrame(self.rt_plotters[2].base_frame, 1, 0)
@@ -302,6 +339,8 @@ class TrainingEnvData(SharedDataWindow):
         self.grid.addFrame(self.rt_plotters[9].base_frame, 4, 1)
         self.grid.addFrame(self.rt_plotters[10].base_frame, 5, 0)
         self.grid.addFrame(self.rt_plotters[11].base_frame, 5, 1)
+        self.grid.addFrame(self.rt_plotters[12].base_frame, 6, 0)
+        self.grid.addFrame(self.rt_plotters[13].base_frame, 6, 1)
 
     def _finalize_grid(self):
                 
@@ -361,6 +400,9 @@ class TrainingEnvData(SharedDataWindow):
 
             self.shared_data_clients[12].synch_all(read=True, retry=True) # q fun
             self.shared_data_clients[13].synch_all(read=True, retry=True) # q target
+            
+            self.shared_data_clients[14].synch_all(read=True, retry=True) # sub return
+            self.shared_data_clients[15].synch_all(read=True, retry=True) # tot return 
 
             # update plots
             self.rt_plotters[0].rt_plot_widget.update(env_data)
@@ -378,3 +420,10 @@ class TrainingEnvData(SharedDataWindow):
             qf_trgt=self.shared_data_clients[13].get_numpy_mirror()
             q_data_cat=np.concatenate((qf_val, qf_trgt), axis=1)
             self.rt_plotters[11].rt_plot_widget.update(np.transpose(q_data_cat))
+
+            qf_val=self.shared_data_clients[12].get_numpy_mirror()
+            qf_trgt=self.shared_data_clients[13].get_numpy_mirror()
+
+            self.rt_plotters[12].rt_plot_widget.update(np.transpose(self.shared_data_clients[14].get_numpy_mirror()))
+            self.rt_plotters[13].rt_plot_widget.update(np.transpose(self.shared_data_clients[15].get_numpy_mirror()))
+

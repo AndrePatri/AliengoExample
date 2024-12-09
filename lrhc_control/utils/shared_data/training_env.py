@@ -351,7 +351,74 @@ class TotRewards(NamedSharedTWrapper):
                     force_reconnection=force_reconnection,
                     with_gpu_mirror=with_gpu_mirror,
                     fill_value=fill_value)
-        
+
+class SubReturns(NamedSharedTWrapper):
+
+    def __init__(self,
+            namespace: str,
+            n_envs: int = None, 
+            n_rewards: int = None, 
+            reward_names: List[str] = None,
+            env_names: List[str] = None,
+            is_server = False, 
+            verbose: bool = False, 
+            vlevel: VLevel = VLevel.V0,
+            safe: bool = True,
+            force_reconnection: bool = False,
+            with_gpu_mirror: bool = False,
+            fill_value = 0.0,
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
+
+        basename = "SubReturns"
+
+        super().__init__(namespace=namespace,
+                    basename=basename,
+                    n_rows=n_envs,
+                    n_cols=n_rewards,
+                    dtype=dtype,
+                    col_names=reward_names,
+                    row_names=env_names,
+                    is_server=is_server,
+                    verbose=verbose,
+                    vlevel=vlevel,
+                    safe=safe,
+                    force_reconnection=force_reconnection,
+                    with_gpu_mirror=with_gpu_mirror,
+                    fill_value=fill_value)
+
+class TotReturns(NamedSharedTWrapper):
+
+    def __init__(self,
+            namespace: str,
+            n_envs: int = None, 
+            reward_names: List[str] = None,
+            env_names: List[str] = None,
+            is_server = False, 
+            verbose: bool = False, 
+            vlevel: VLevel = VLevel.V0,
+            safe: bool = True,
+            force_reconnection: bool = False,
+            with_gpu_mirror: bool = False,
+            fill_value = 0.0,
+            dtype: eigenipc_dtype=eigenipc_dtype.Float):
+
+        basename = "TotReturns"
+
+        super().__init__(namespace=namespace,
+                    basename=basename,
+                    n_rows=n_envs,
+                    n_cols=1,
+                    dtype=dtype,
+                    col_names=reward_names,
+                    row_names=env_names,
+                    is_server=is_server,
+                    verbose=verbose,
+                    vlevel=vlevel,
+                    safe=safe,
+                    force_reconnection=force_reconnection,
+                    with_gpu_mirror=with_gpu_mirror,
+                    fill_value=fill_value)
+
 class Observations(NamedSharedTWrapper):
 
     def __init__(self,
