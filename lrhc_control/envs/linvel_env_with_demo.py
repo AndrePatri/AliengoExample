@@ -181,14 +181,14 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             self._gait_scheduler_walk.step()
             self._gait_scheduler_trot.step()
             
-            have_to_go_fast_linvel=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
+            have_to_go_fast_linvel=agent_twist_ref_current[:, 0:2].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh
             have_to_go_fast_omega=agent_twist_ref_current[:, 3:6].norm(dim=1,keepdim=True)>self._walk_to_trot_thresh_omega
             have_to_go_fast=torch.logical_or(have_to_go_fast_linvel, have_to_go_fast_omega)
 
             fast_and_demo=torch.logical_and(have_to_go_fast.flatten(),self._demo_envs_idxs_bool)
             have_to_go_slow_and_demo=~fast_and_demo
 
-            have_to_stop_linvel=agent_twist_ref_current[:, 0:3].norm(dim=1,keepdim=True)<self._stopping_thresh
+            have_to_stop_linvel=agent_twist_ref_current[:, 0:2].norm(dim=1,keepdim=True)<self._stopping_thresh
             have_to_stop_omega=agent_twist_ref_current[:, 3:6].norm(dim=1,keepdim=True)<self._stopping_thresh
             have_to_stop=torch.logical_and(have_to_stop_linvel, have_to_stop_omega)
             stop_and_demo=torch.logical_and(have_to_stop.flatten(),self._demo_envs_idxs_bool)
