@@ -349,11 +349,11 @@ class AgentRefsFromKeyboard:
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "p" and self.enable_navigation:
-            self._update_navigation(nav_type="lin",
+            self._update_navigation(nav_type="vertical",
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "m" and self.enable_navigation:
-            self._update_navigation(nav_type="lin",
+            self._update_navigation(nav_type="vertical",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
             
