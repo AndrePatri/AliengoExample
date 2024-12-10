@@ -128,11 +128,7 @@ class AgentRefsFromKeyboard:
                     reset: bool = False,
                     refs_in_wframe: bool = False):
         
-        current_twist_ref=None
-        if refs_in_wframe:
-            current_twist_ref=self._current_twist_ref_world
-        else:
-            current_twist_ref = self._current_twist_ref_base.reshape(-1)
+        current_twist_ref=self._current_twist_ref_world
 
         # randomizng in base frame if not refs_in_wframe, otherwise world
         if not reset:
@@ -242,6 +238,7 @@ class AgentRefsFromKeyboard:
             self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                             robot_idxs=self.cluster_idx_np)
         else:
+            self._current_twist_ref_base[:, :]=self._current_twist_ref_world.reshape(1, -1)
             self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                             robot_idxs=self.cluster_idx_np)
             
