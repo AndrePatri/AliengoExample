@@ -51,3 +51,7 @@ class RhcToVizBridge(RhcToVizBridgeBase):
         self.handshaker = RHCVizHandshake(handshake_topic=self.ros_names.handshake_topicname(basename=self.rhcviz_basename, 
                     namespace=self._remap_namespace),
                 is_server=True)
+    
+    def close(self):
+        super().close()
+        # rospy.signal_shutdown("closing rhc2viz bridge")
