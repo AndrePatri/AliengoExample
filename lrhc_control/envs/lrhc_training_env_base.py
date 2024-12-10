@@ -584,7 +584,7 @@ class LRhcTrainingEnvBase(ABC):
         terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
         to_be_reset=terminated.cpu()
 
-        if self._rand_safety_reset_counter is not None and self._use_random_safety_reset:
+        if (self._rand_safety_reset_counter is not None) and self._use_random_safety_reset:
             to_be_reset[:, :]=torch.logical_or(to_be_reset,
                 self._rand_safety_reset_counter.time_limits_reached())
 
