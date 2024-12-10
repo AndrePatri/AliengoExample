@@ -115,8 +115,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._health_value = 10.0
 
         # task tracking
-        self._task_offset = 10.0
-        self._task_scale = 2.0
+        self._task_offset = 1.0
+        self._task_scale = 5.0
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
         if self._directional_tracking:
@@ -147,12 +147,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._task_pred_err_weights[0, 4] = 1e-6
             self._task_pred_err_weights[0, 5] = 1e-6
         else:
-            self._task_err_weights[0, 0] = 1.0
-            self._task_err_weights[0, 1] = 1.0
-            self._task_err_weights[0, 2] = 1.0
-            self._task_err_weights[0, 3] = 1e-6
-            self._task_err_weights[0, 4] = 1e-6
-            self._task_err_weights[0, 5] = 1e-6
+            self._task_pred_err_weights[0, 0] = 1.0
+            self._task_pred_err_weights[0, 1] = 1.0
+            self._task_pred_err_weights[0, 2] = 1.0
+            self._task_pred_err_weights[0, 3] = 1e-6
+            self._task_pred_err_weights[0, 4] = 1e-6
+            self._task_pred_err_weights[0, 5] = 1e-6
 
         # fail idx
         self._rhc_fail_idx_offset = 0.0
@@ -182,7 +182,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                             fill_value=0.8)
         
         # task reference parameters (specified in world frame)
-        self.max_ref=1.0
+        self.max_ref=0.2
         self._twist_ref_lb[0, 0] = -self.max_ref
         self._twist_ref_lb[0, 1] = -self.max_ref
         self._twist_ref_lb[0, 2] = 0.0

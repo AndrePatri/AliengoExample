@@ -88,8 +88,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
         # phase_period_walk=2.0 # kyon wheels
         # phase_period_trot=2.0
 
-        self._walk_to_trot_thresh=0.5 # [m/s] # centauro
-        phase_period_walk=4.0 # centauro
+        self._walk_to_trot_thresh=0.3 # [m/s] # centauro
+        phase_period_walk=3.5 # centauro
         phase_period_trot=1.5
 
         update_dt_walk = self._substep_dt*self._action_repeat
@@ -210,14 +210,14 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
                 if self._twist_smoother is not None:
                     # smooth action
                     if have_to_go_slow_and_demo.any(): # higher twist ref for walking
-                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=2*agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
+                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
                     self._twist_smoother.update(new_signal=
                         agent_twist_ref_current[self._demo_envs_idxs, :])
                     agent_action[self._demo_envs_idxs, 0:6]=self._twist_smoother.get()
                 else:
                 # agent_twist_ref_current and agent action twist are base local
                     if have_to_go_slow_and_demo.any(): # higher twist ref for walking
-                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=2*agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
+                        agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]=agent_twist_ref_current[have_to_go_slow_and_demo, 0:6]
                     agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
                     
                 agent_action[stop_and_demo, 0:6]=0.0
