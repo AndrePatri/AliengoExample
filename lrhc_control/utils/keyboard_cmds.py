@@ -31,8 +31,13 @@ class AgentRefsFromKeyboard:
         self._closed = False
         
         self.enable_navigation = False
+        self.enable_omega = False
+        self.enable_omega_roll = False
+        self.enable_omega_pitch = False
+        self.enable_omega_yaw = False
 
-        self.dxy = 0.05 # [m]
+        self.dxy = 0.05 # [m/s]
+        self.dvxyz = 0.05 # [m/s]
         self.dheading=0.05
         self._dtwist = 1.0 * math.pi / 180.0 # [rad]
 
@@ -118,58 +123,89 @@ class AgentRefsFromKeyboard:
         self.cluster_idx_np = self.cluster_idx            
     
     def _update_navigation(self, 
-                    type: str = "",
+                    nav_type: str = "",
                     increment = True,
                     reset: bool = False,
                     refs_in_wframe: bool = False):
         
-        current_twist_ref=None
-        if refs_in_wframe:
-            current_twist_ref=self._current_twist_ref_world
-        else:
-            current_twist_ref = self._current_twist_ref_base.reshape(-1)
+        current_twist_ref=self._current_twist_ref_world
 
         # randomizng in base frame if not refs_in_wframe, otherwise world
         if not reset:
-            if type=="lateral" and not increment:
+
+            # xy vel (polar coordinates)
+            if nav_type=="lateral" and not increment:
                 if self._heading_lat>0:
                     self._heading_lat=self._heading_lat + self.dheading
                 else:
                     self._heading_lat=self._heading_lat - self.dheading
                 self._heading_frontal=self._heading_lat-np.pi/2
-            if type=="lateral" and increment:
+            if nav_type=="lateral" and increment:
                 if self._heading_lat>0:
                     self._heading_lat=self._heading_lat - self.dheading
                 else:
                     self._heading_lat=self._heading_lat + self.dheading
                 self._heading_frontal=self._heading_lat-np.pi/2
-            if type=="frontal" and not increment:
+            if nav_type=="frontal" and not increment:
                 if self._heading_frontal>0:
                     self._heading_frontal=self._heading_frontal + self.dheading
                 else:
                     self._heading_frontal=self._heading_frontal - self.dheading
                 self._heading_lat=self._heading_frontal+np.pi/2
-            if type=="frontal" and increment:
+            if nav_type=="frontal" and increment:
                 if self._heading_frontal>0:
                     self._heading_frontal=self._heading_frontal - self.dheading
                 else:
                     self._heading_frontal=self._heading_frontal + self.dheading
                 self._heading_lat=self._heading_frontal+np.pi/2
             
-            if type=="magnitude" and increment:
+            if nav_type=="magnitude" and increment:
                 self._v_magnitude=self._v_magnitude+self.dxy
-            if type=="magnitude" and not increment:
+            if nav_type=="magnitude" and not increment:
                 self._v_magnitude=self._v_magnitude-self.dxy
+
+            # vertical vel
+            if nav_type=="vertical" and not increment:
+                # frontal motion
+                current_twist_ref[2] = current_twist_ref[2] - self.dvxyz
+            if nav_type=="vertical" and increment:
+                # frontal motion
+                current_twist_ref[2] = current_twist_ref[2] + self.dvxyz
+
+            # omega
+            if nav_type=="twist_roll" and increment:
+                # rotate counter-clockwise
+                current_twist_ref[3] = current_twist_ref[3] + self._dtwist 
+            if nav_type=="twist_roll" and not increment:
+                current_twist_ref[3] = current_twist_ref[3] - self._dtwist 
+            if nav_type=="twist_pitch" and increment:
+                # rotate counter-clockwise
+                current_twist_ref[4] = current_twist_ref[4] + self._dtwist 
+            if nav_type=="twist_pitch" and not increment:
+                current_twist_ref[4] = current_twist_ref[4] - self._dtwist 
+            if nav_type=="twist_yaw" and increment:
+                # rotate counter-omega_cmd
+                current_twist_ref[5] = current_twist_ref[5] + self._dtwist
+            if nav_type=="twist_yaw" and not increment:
+                current_twist_ref[5] = current_twist_ref[5] - self._dtwist 
+
         else:
-            self._v_magnitude=0.0
-            self._heading=0.0
-            self._heading_frontal=0.0
-            self._heading_lat=self._heading_frontal+np.pi/2
+
+            if "lin" in nav_type:
+                self._v_magnitude=0.0
+                self._heading=0.0
+                self._heading_frontal=0.0
+                self._heading_lat=self._heading_frontal+np.pi/2
+                
+                current_twist_ref[0:3] = 0
+                if self._agent_refs_world:
+                    self._current_twist_ref_world[0:3]=0
             
-            current_twist_ref[:] = 0
-            if self._agent_refs_world:
-                self._current_twist_ref_world[:]=0
-        
+            if "omega" in nav_type:
+                current_twist_ref[3:] = 0
+                if self._agent_refs_world:
+                    self._current_twist_ref_world[3:]=0
+
         if self._heading_frontal>math.pi:
             self._heading_frontal=math.pi
         if self._heading_frontal<-math.pi:
@@ -202,12 +238,74 @@ class AgentRefsFromKeyboard:
             self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                             robot_idxs=self.cluster_idx_np)
         else:
+            self._current_twist_ref_base[:, :]=self._current_twist_ref_world.reshape(1, -1)
             self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                             robot_idxs=self.cluster_idx_np)
             
         self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
                                         n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
                                         read=False)   
+        
+    def _set_omega(self, 
+                key):
+        
+        if key.char == "T":
+            self.enable_omega = not self.enable_omega
+            info = f"Twist change enabled: {self.enable_omega}"
+            Journal.log(self.__class__.__name__,
+                "_set_linvel",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+
+        if not self.enable_omega:
+            self._update_navigation(nav_type="omega",reset=True)
+
+        if self.enable_omega and key.char == "x":
+            self.enable_omega_roll = not self.enable_omega_roll
+            info = f"Twist roll change enabled: {self.enable_omega_roll}"
+            Journal.log(self.__class__.__name__,
+                "_set_linvel",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+        if self.enable_omega and key.char == "y":
+            self.enable_omega_pitch = not self.enable_omega_pitch
+            info = f"Twist pitch change enabled: {self.enable_omega_pitch}"
+            Journal.log(self.__class__.__name__,
+                "_set_linvel",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+        if self.enable_omega and key.char == "z":
+            self.enable_omega_yaw = not self.enable_omega_yaw
+            info = f"Twist yaw change enabled: {self.enable_omega_yaw}"
+            Journal.log(self.__class__.__name__,
+                "_set_linvel",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+
+        if key.char == "9":
+            if self.enable_omega_roll:
+                self._update_navigation(nav_type="twist_roll",
+                                    increment = True)
+            if self.enable_omega_pitch:
+                self._update_navigation(nav_type="twist_pitch",
+                                    increment = True)
+            if self.enable_omega_yaw:
+                self._update_navigation(nav_type="twist_yaw",
+                                    increment = True)
+        if key.char == "3":
+            if self.enable_omega_roll:
+                self._update_navigation(nav_type="twist_roll",
+                                    increment = False)
+            if self.enable_omega_pitch:
+                self._update_navigation(nav_type="twist_pitch",
+                                    increment = False)
+            if self.enable_omega_yaw:
+                self._update_navigation(nav_type="twist_yaw",
+                                    increment = False)
         
     def _set_navigation(self,
                 key):
@@ -221,37 +319,46 @@ class AgentRefsFromKeyboard:
                 throw_when_excep = True)
         
         if not self.enable_navigation:
-            self._update_navigation(reset = True)
+            self._update_navigation(nav_type="lin", reset = True)
             
         if key.char == "6" and self.enable_navigation:
-            self._update_navigation(type="lateral", 
+            self._update_navigation(nav_type="lateral", 
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "4" and self.enable_navigation:
-            self._update_navigation(type="lateral",
+            self._update_navigation(nav_type="lateral",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "8" and self.enable_navigation:
-            self._update_navigation(type="frontal",
+            self._update_navigation(nav_type="frontal",
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "2" and self.enable_navigation:
-            self._update_navigation(type="frontal",
+            self._update_navigation(nav_type="frontal",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "+" and self.enable_navigation:
-            self._update_navigation(type="magnitude",
+            self._update_navigation(nav_type="magnitude",
                             increment = True,
                             refs_in_wframe=self._agent_refs_world)
         if key.char == "-" and self.enable_navigation:
-            self._update_navigation(type="magnitude",
+            self._update_navigation(nav_type="magnitude",
                             increment = False,
                             refs_in_wframe=self._agent_refs_world)
-                
+        if key.char == "p" and self.enable_navigation:
+            self._update_navigation(nav_type="vertical",
+                            increment = True,
+                            refs_in_wframe=self._agent_refs_world)
+        if key.char == "m" and self.enable_navigation:
+            self._update_navigation(nav_type="vertical",
+                            increment = False,
+                            refs_in_wframe=self._agent_refs_world)
+            
     def _on_press(self, key):
 
         if hasattr(key, 'char'):
             self._set_navigation(key)
+            self._set_omega(key)
 
     def _on_release(self, key):
             
@@ -310,13 +417,13 @@ class AgentActionsFromKeyboard:
         self.height_dh = 0.02 # [m]
 
         self.enable_navigation = False
-        self.enable_twist = False
-        self.enable_twist_roll = False
-        self.enable_twist_pitch = False
-        self.enable_twist_yaw = False
+        self.enable_omega = False
+        self.enable_omega_roll = False
+        self.enable_omega_pitch = False
+        self.enable_omega_yaw = False
 
-        self.dvxyz = 0.05 # [m]
-        self.domega = 1.0 * math.pi / 180.0 # [rad]
+        self.dvxyz = 0.05 # [m/s]
+        self.domega = 1.0 * math.pi / 180.0 # [rad/s]
 
         self._phase_id_current=0
         self._contact_dpos=0.02
@@ -520,36 +627,36 @@ class AgentActionsFromKeyboard:
                 key):
         
         if key.char == "T":
-            self.enable_twist = not self.enable_twist
-            info = f"Twist change enabled: {self.enable_twist}"
+            self.enable_omega = not self.enable_omega
+            info = f"Twist change enabled: {self.enable_omega}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
 
-        if not self.enable_twist:
+        if not self.enable_omega:
             self._update_navigation(type="twist",reset=True)
 
-        if self.enable_twist and key.char == "x":
-            self.enable_twist_roll = not self.enable_twist_roll
-            info = f"Twist roll change enabled: {self.enable_twist_roll}"
+        if self.enable_omega and key.char == "x":
+            self.enable_omega_roll = not self.enable_omega_roll
+            info = f"Twist roll change enabled: {self.enable_omega_roll}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-        if self.enable_twist and key.char == "y":
-            self.enable_twist_pitch = not self.enable_twist_pitch
-            info = f"Twist pitch change enabled: {self.enable_twist_pitch}"
+        if self.enable_omega and key.char == "y":
+            self.enable_omega_pitch = not self.enable_omega_pitch
+            info = f"Twist pitch change enabled: {self.enable_omega_pitch}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-        if self.enable_twist and key.char == "z":
-            self.enable_twist_yaw = not self.enable_twist_yaw
-            info = f"Twist yaw change enabled: {self.enable_twist_yaw}"
+        if self.enable_omega and key.char == "z":
+            self.enable_omega_yaw = not self.enable_omega_yaw
+            info = f"Twist yaw change enabled: {self.enable_omega_yaw}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
@@ -557,23 +664,23 @@ class AgentActionsFromKeyboard:
                 throw_when_excep = True)
 
         if key.char == "+":
-            if self.enable_twist_roll:
+            if self.enable_omega_roll:
                 self._update_navigation(type="twist_roll",
                                     increment = True)
-            if self.enable_twist_pitch:
+            if self.enable_omega_pitch:
                 self._update_navigation(type="twist_pitch",
                                     increment = True)
-            if self.enable_twist_yaw:
+            if self.enable_omega_yaw:
                 self._update_navigation(type="twist_yaw",
                                     increment = True)
         if key.char == "-":
-            if self.enable_twist_roll:
+            if self.enable_omega_roll:
                 self._update_navigation(type="twist_roll",
                                     increment = False)
-            if self.enable_twist_pitch:
+            if self.enable_omega_pitch:
                 self._update_navigation(type="twist_pitch",
                                     increment = False)
-            if self.enable_twist_yaw:
+            if self.enable_omega_yaw:
                 self._update_navigation(type="twist_yaw",
                                     increment = False)
 
@@ -732,10 +839,10 @@ class RefsFromKeyboard:
         self.height_dh = 0.02 # [m]
 
         self.enable_navigation = False
-        self.enable_twist = False
-        self.enable_twist_roll = False
-        self.enable_twist_pitch = False
-        self.enable_twist_yaw = False
+        self.enable_omega = False
+        self.enable_omega_roll = False
+        self.enable_omega_pitch = False
+        self.enable_omega_yaw = False
 
         self.dxy = 0.05 # [m]
         self._dtwist = 1.0 * math.pi / 180.0 # [rad]
@@ -990,36 +1097,36 @@ class RefsFromKeyboard:
                 key):
         
         if key.char == "T":
-            self.enable_twist = not self.enable_twist
-            info = f"Twist change enabled: {self.enable_twist}"
+            self.enable_omega = not self.enable_omega
+            info = f"Twist change enabled: {self.enable_omega}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
 
-        if not self.enable_twist:
+        if not self.enable_omega:
             self._update_navigation(type="twist",reset=True)
 
-        if self.enable_twist and key.char == "x":
-            self.enable_twist_roll = not self.enable_twist_roll
-            info = f"Twist roll change enabled: {self.enable_twist_roll}"
+        if self.enable_omega and key.char == "x":
+            self.enable_omega_roll = not self.enable_omega_roll
+            info = f"Twist roll change enabled: {self.enable_omega_roll}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-        if self.enable_twist and key.char == "y":
-            self.enable_twist_pitch = not self.enable_twist_pitch
-            info = f"Twist pitch change enabled: {self.enable_twist_pitch}"
+        if self.enable_omega and key.char == "y":
+            self.enable_omega_pitch = not self.enable_omega_pitch
+            info = f"Twist pitch change enabled: {self.enable_omega_pitch}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-        if self.enable_twist and key.char == "z":
-            self.enable_twist_yaw = not self.enable_twist_yaw
-            info = f"Twist yaw change enabled: {self.enable_twist_yaw}"
+        if self.enable_omega and key.char == "z":
+            self.enable_omega_yaw = not self.enable_omega_yaw
+            info = f"Twist yaw change enabled: {self.enable_omega_yaw}"
             Journal.log(self.__class__.__name__,
                 "_set_linvel",
                 info,
@@ -1027,23 +1134,23 @@ class RefsFromKeyboard:
                 throw_when_excep = True)
 
         if key.char == "+":
-            if self.enable_twist_roll:
+            if self.enable_omega_roll:
                 self._update_navigation(type="twist_roll",
                                     increment = True)
-            if self.enable_twist_pitch:
+            if self.enable_omega_pitch:
                 self._update_navigation(type="twist_pitch",
                                     increment = True)
-            if self.enable_twist_yaw:
+            if self.enable_omega_yaw:
                 self._update_navigation(type="twist_yaw",
                                     increment = True)
         if key.char == "-":
-            if self.enable_twist_roll:
+            if self.enable_omega_roll:
                 self._update_navigation(type="twist_roll",
                                     increment = False)
-            if self.enable_twist_pitch:
+            if self.enable_omega_pitch:
                 self._update_navigation(type="twist_pitch",
                                     increment = False)
-            if self.enable_twist_yaw:
+            if self.enable_omega_yaw:
                 self._update_navigation(type="twist_yaw",
                                     increment = False)
             

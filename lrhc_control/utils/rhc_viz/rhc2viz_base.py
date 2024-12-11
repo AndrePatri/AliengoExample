@@ -31,6 +31,7 @@ from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import String
 from rosgraph_msgs.msg import Clock
 
+import signal
 class RhcToVizBridgeBase(ABC):
     
     def __init__(self, 
@@ -336,6 +337,12 @@ class RhcToVizBridgeBase(ABC):
 
     def run(self, sim_time: float = None):
 
+        def signal_handler(signum, frame):
+            self._is_running=False
+
+        # Register the handler for SIGINT (Control+C)
+        signal.signal(signal.SIGINT, signal_handler)
+
         if sim_time is not None:
             self._sim_time_trgt=sim_time
         else:
@@ -352,7 +359,6 @@ class RhcToVizBridgeBase(ABC):
         
         return finished
         
-
     def step(self):
 
         t_before_update = time.monotonic() 
@@ -453,7 +459,6 @@ class RhcToVizBridgeBase(ABC):
             if not self.rhc_cmds is None:
                 self.rhc_cmds.close()
 
-            self.node.destroy_node()
             # rclpy.shutdown()
             self._closed=True
             self._is_running=False

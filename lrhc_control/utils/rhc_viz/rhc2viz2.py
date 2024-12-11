@@ -68,3 +68,7 @@ class RhcToViz2Bridge(RhcToVizBridgeBase):
                                                                                 namespace=self._remap_namespace),
                                 node=self.node,
                                 is_server=True)
+        
+    def close(self):
+        super().close()
+        self.node.destroy_node()
