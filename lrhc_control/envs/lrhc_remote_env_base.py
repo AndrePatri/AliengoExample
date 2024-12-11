@@ -679,12 +679,15 @@ class LRhcEnvBase(ABC):
             control_cluster = self.cluster_servers[robot_name]
             self.cluster_sim_step_counters[robot_name]+=1 # this has to be update with sim freq
             if self._debug:
-                self.debug_data["sim_time"][robot_name]=self.cluster_sim_step_counters[robot_name]*self.physics_dt()
+                self.debug_data["sim_time"][robot_name]=self._get_world_time()
                 self.debug_data["cluster_sol_time"][robot_name] = \
                     control_cluster.solution_time()
                 
         self.step_counter +=1
 
+    def _get_world_time(self, robot_name: str):
+        return self.cluster_sim_step_counters[robot_name]*self.physics_dt()
+    
     def _post_sim_step(self) -> bool:
 
         for i in range(len(self._robot_names)):
