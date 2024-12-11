@@ -485,10 +485,7 @@ class RhcToVizBridgeBase(ABC):
     def _publish(self):
         
         if self.simtime_pub is not None:
-            self._ros_clock.clock.sec = int(self._sim_time)
-            self._ros_clock.clock.nanosec = int((self._sim_time - self._ros_clock.clock.sec)*1e9)
-
-            self.simtime_pub.publish(self._ros_clock)
+            self.pub_stime(stime=self._sim_time)
         # continously publish also joint names 
 
         self.robot_jntnames_pub.publish(String(data=self.jnt_names_robot_encoded))
@@ -582,4 +579,8 @@ class RhcToVizBridgeBase(ABC):
 
     @abstractmethod
     def _init_ros_pubs(self, id: str):
+        pass
+
+    @abstractmethod
+    def pub_stime(self, stime: float):
         pass

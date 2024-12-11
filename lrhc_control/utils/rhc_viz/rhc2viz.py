@@ -55,3 +55,10 @@ class RhcToVizBridge(RhcToVizBridgeBase):
     def close(self):
         super().close()
         # rospy.signal_shutdown("closing rhc2viz bridge")
+    
+    def pub_stime(self, stime: float):
+        # Create a Clock message
+        self._ros_clock.clock = rospy.Time.from_sec(stime)  # Convert float time to rospy.Time
+
+        # Publish the Clock message
+        self.simtime_pub.publish(self._ros_clock)

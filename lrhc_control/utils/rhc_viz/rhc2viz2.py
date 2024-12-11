@@ -68,6 +68,13 @@ class RhcToViz2Bridge(RhcToVizBridgeBase):
                                                                                 namespace=self._remap_namespace),
                                 node=self.node,
                                 is_server=True)
+    
+    def pub_stime(self, stime: float):
+
+        self._ros_clock.clock.sec = int(stime)
+        self._ros_clock.clock.nanosec = int((stime - self._ros_clock.clock.sec)*1e9)
+
+        self.simtime_pub.publish(self._ros_clock)
         
     def close(self):
         super().close()

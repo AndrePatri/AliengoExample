@@ -28,11 +28,14 @@ class RosBagDumper():
             rhc_refs_in_h_frame:bool=True,
             agent_refs_in_h_frame:bool=False,
             use_static_idx: bool = True,
-            pub_stime: bool = True):
+            pub_stime: bool = True,
+            add_xbot_topics: bool = False):
 
         self._closed=False
         
         self._pub_stime=pub_stime
+
+        self._add_xbot_topics=add_xbot_topics
 
         self._ns=ns
         self._remap_ns=remap_ns
@@ -269,15 +272,20 @@ class RosBagDumper():
         command=None
         if not shell:
             if self._ros2:
-                command = [f"{this_dir_path}/launch_ros2bag.sh", "--ns", namespace, "--id", bag_id, "--output_path", dump_path]
+                command = [f"{this_dir_path}/launch_ros2bag.sh", "--ns", namespace, "--id", bag_id, "--xbot", str(int(self._add_xbot_topics)), "--output_path", dump_path]
             else:
-                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--id", bag_id, "--output_path", dump_path]
+                command = [f"{this_dir_path}/launch_ros1bag.sh", "--ns", namespace, "--id", bag_id, "--xbot", str(int(self._add_xbot_topics)), "--output_path", dump_path]
+            
+            # if self._add_xbot_topics:
+            #     command.append("--xbot")
         else:
             if self._ros2:
-                command = f"{this_dir_path}/launch_ros2bag.sh --ns {namespace} --id {bag_id} --output_path {dump_path}"
+                command = f"{this_dir_path}/launch_ros2bag.sh --ns {namespace} --id {bag_id} --xbot {str(int(self._add_xbot_topics))} --output_path {dump_path}"
             else:
-                command = f"{this_dir_path}/launch_ros1bag.sh --ns {namespace} --id {bag_id} --output_path {dump_path}"
-
+                command = f"{this_dir_path}/launch_ros1bag.sh --ns {namespace} --id {bag_id} --xbot {str(int(self._add_xbot_topics))} --output_path {dump_path}"
+            # if self._add_xbot_topics:
+            #     command = command + " --xbot"
+        
         import subprocess
 
         exit_req=False
