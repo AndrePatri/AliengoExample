@@ -511,7 +511,7 @@ class DummyTestAlgoBase(ABC):
                 f"avg: {self._sub_rew_avrg_over_envs[self._log_it_counter, :]}\n" + \
                 f"min: {self._sub_rew_min_over_envs[self._log_it_counter, :]}\n" + \
                 f"Current env. step sps: {self._env_step_fps[self._log_it_counter].item()}, time for experience collection {self._collection_dt[self._log_it_counter].item()} s\n" + \
-                f"Current env (sub-steping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n"            
+                f"Current env (sub-stepping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n"            
             
             Journal.log(self.__class__.__name__,
                 "_post_step",
