@@ -50,8 +50,11 @@ class RhcToVizBridgeBase(ABC):
             abort_wallmin: float = 5.0,
             use_static_idx: bool = True,
             update_dt: float = 0.1,
-            pub_stime: float = True):
+            pub_stime: float = True,
+            install_sighandler: bool = False):
         
+        self._install_sighandler=install_sighandler
+
         self._srdf_homing_file_path=srdf_homing_file_path # used to retrieve homing
         self._homer=None
         self._some_jnts_are_missing=False
@@ -337,11 +340,11 @@ class RhcToVizBridgeBase(ABC):
 
     def run(self, sim_time: float = None):
 
-        def signal_handler(signum, frame):
-            self._is_running=False
-
-        # Register the handler for SIGINT (Control+C)
-        signal.signal(signal.SIGINT, signal_handler)
+        if self._install_sighandler:
+            def signal_handler(signum, frame):
+                self._is_running=False
+            # Register the handler for SIGINT (Control+C)
+            signal.signal(signal.SIGINT, signal_handler)
 
         if sim_time is not None:
             self._sim_time_trgt=sim_time

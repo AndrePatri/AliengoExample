@@ -115,7 +115,8 @@ class RosBagDumper():
                 srdf_homing_file_path=self._srdf_path,
                 abort_wallmin=self._abort_wallmin,
                 use_static_idx=self._use_static_idx,
-                pub_stime=self._pub_stime)
+                pub_stime=self._pub_stime,
+                install_sighandler=True)
         else:
             from lrhc_control.utils.rhc_viz.rhc2viz2 import RhcToViz2Bridge
             self._bridge = RhcToViz2Bridge(namespace=self._ns, 
@@ -131,7 +132,8 @@ class RosBagDumper():
                 srdf_homing_file_path=self._srdf_path,
                 abort_wallmin=self._abort_wallmin,
                 use_static_idx=self._use_static_idx,
-                pub_stime=self._pub_stime)
+                pub_stime=self._pub_stime,
+                install_sighandler=False)
 
         # actual process recording bag
         from control_cluster_bridge.utilities.remote_triggering import RemoteTriggererSrvr
@@ -215,7 +217,7 @@ class RosBagDumper():
 
             return proc
         
-        ignore_keyboard_interrupt()
+        ignore_keyboard_interrupt() # we want to handle termination with custom logic
 
         import os
 

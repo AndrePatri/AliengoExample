@@ -44,7 +44,8 @@ if __name__ == '__main__':
                         sim_time_trgt=args.stime_trgt,
                         srdf_homing_file_path=args.srdf_path,
                         abort_wallmin=args.abort_wallmin, 
-                        pub_stime=args.pub_stime)
+                        pub_stime=args.pub_stime,
+                        install_sighandler=True)
     else:
 
         from lrhc_control.utils.rhc_viz.rhc2viz2 import RhcToViz2Bridge
@@ -61,7 +62,8 @@ if __name__ == '__main__':
                         srdf_homing_file_path=args.srdf_path,
                         abort_wallmin=args.abort_wallmin,
                         update_dt=update_dt, 
-                        pub_stime=args.pub_stime)
+                        pub_stime=args.pub_stime,
+                        install_sighandler=False)
 
     bridge.run()
 
