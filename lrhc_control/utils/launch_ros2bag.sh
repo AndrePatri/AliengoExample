@@ -2,7 +2,7 @@
 
 # Function to display usage information
 usage() {
-    echo "Usage: $0 --ns <namespace> --id <bag_id> --xbot <0/1> [--output_path <path>] [--xbot]"
+    echo "Usage: $0 --ns <namespace> --id <bag_id> --xbot <0/1> [--output_path <path>]"
     exit 1
 }
 
@@ -14,8 +14,8 @@ sigint_handler() {
 # Set the trap to catch SIGINT and call sigint_handler
 trap sigint_handler SIGINT
 
-# Check if the required argument is provided
-if [ "$#" -lt 6 ] || [ "$1" != "--ns" ] || [ "$3" != "--id" ]; then
+# Ensure the required arguments are provided
+if [ "$#" -lt 8 ] || [ "$1" != "--ns" ] || [ "$3" != "--id" ] || [ "$5" != "--xbot" ]; then
     usage
 fi
 
@@ -32,17 +32,16 @@ fi
 
 # Default output path to /tmp with namespace and date-time
 OUTPUT_PATH="/tmp/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
-
 # Check for optional --output_path argument
-if [ "$#" -eq 8 ] && [ "$6" == "--output_path" ]; then
-    OUTPUT_PATH="$9/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
+if [ "$#" -eq 8 ] && [ "$7" == "--output_path" ]; then
+    OUTPUT_PATH="$8/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
 fi
 
 # Source ROS setup
 source /opt/ros/humble/setup.bash
 
 # Change to the training data directory
-cd $HOME/training_data
+cd "$HOME/training_data"
 
 # Define the topics with the namespace replaced
 TOPICS=(

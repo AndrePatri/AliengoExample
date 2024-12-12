@@ -33,10 +33,9 @@ fi
 
 # Default output path to /tmp with namespace and date-time
 OUTPUT_PATH="/tmp/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
-
 # Check for optional --output_path argument
-if [ "$#" -eq 8 ] && [ "$6" == "--output_path" ]; then
-    OUTPUT_PATH="$9/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
+if [ "$#" -eq 8 ] && [ "$7" == "--output_path" ]; then
+    OUTPUT_PATH="$8/rosbag_${NAMESPACE}_$(date +%Y-%m-%d_%H-%M-%S)_${BAG_ID}"
 fi
 
 # Source ROS setup
