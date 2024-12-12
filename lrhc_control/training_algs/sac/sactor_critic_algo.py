@@ -1192,7 +1192,7 @@ class SActorCriticAlgoBase(ABC):
         self._lr_policy = 1e-3
         self._lr_q = 5e-4
 
-        self._discount_factor = 0.99
+        self._discount_factor = 0.999
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
