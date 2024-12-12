@@ -115,7 +115,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._health_value = 10.0
 
         # task tracking
-        self._task_offset = 1.0
+        self._task_offset = 10.0
         self._task_scale = 5.0
         self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
                             fill_value=0.0) 
