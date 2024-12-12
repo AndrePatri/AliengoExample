@@ -349,6 +349,454 @@ class SActorCriticAlgoBase(ABC):
 
         return self._model_path
 
+    def _init_params(self,
+            tot_tsteps: int,
+            run_name: str = "SACDefaultRunName"):
+
+        self._dtype = self._env.dtype()
+
+        self._num_envs = self._env.n_envs()
+        self._obs_dim = self._env.obs_dim()
+        self._actions_dim = self._env.actions_dim()
+
+        self._run_name = run_name # default
+        self._env_name = self._env.name()
+        self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
+        self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
+        self._env_n_action_reps = self._env.n_action_reps()
+        
+        self._use_gpu = self._env.using_gpu()
+        self._torch_device = torch.device("cpu") # defaults to cpu
+        self._torch_deterministic = True
+
+        # main algo settings
+
+        self._collection_freq=1
+        self._update_freq=1
+
+        self._replay_bf_full = False
+
+        self._replay_buffer_size_nominal = int(2e6) # 32768
+        self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
+        self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
+        self._batch_size = 8192
+        self._total_timesteps = int(tot_tsteps)
+        self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
+        self._total_timesteps_vec = self._total_timesteps // self._num_envs
+        self._total_steps = self._total_timesteps_vec//self._collection_freq
+        self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
+        self._total_timesteps = self._total_timesteps_vec*self._num_envs # actual n transitions
+
+        self._warmstart_timesteps = int(5e3)
+        self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
+        self._warmstart_steps=self._warmstart_vectimesteps//self._collection_freq
+        self._warmstart_vectimesteps=self._collection_freq*self._warmstart_steps
+        self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
+
+        self._lr_policy = 1e-3
+        self._lr_q = 5e-4
+
+        self._discount_factor = 0.999
+        self._smoothing_coeff = 0.005
+
+        self._policy_freq = 2
+        self._trgt_net_freq = 1
+
+        self._autotune = True
+        self._min_entropy_per_action=1.0
+        self._target_entropy = -self._min_entropy_per_action*self._env.actions_dim()
+        self._log_alpha = None
+        self._alpha = 0.2
+        
+        self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
+        self._allow_expl_during_eval=False
+        self._noise_freq = 50
+        self._noise_duration = 5 # should be less than _noise_freq
+
+        self._is_continuous_actions_bool=self._env.is_action_continuous()
+        self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
+        self._is_discrete_actions_bool=~self._is_continuous_actions
+        self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
+        
+        self._continuous_act_expl_noise_std=0.01
+        self._discrete_act_expl_noise_std=0.5
+
+        self._a_optimizer = None
+        
+        # debug
+        self._m_checkpoint_freq_nom = 1e6 # n totoal timesteps after which a checkpoint model is dumped
+        self._m_checkpoint_freq= self._m_checkpoint_freq_nom//self._num_envs
+
+        # default to all debug envs
+        self._db_env_selector=torch.tensor(list(range(0, self._num_envs)), dtype=torch.int)
+        self._db_env_selector_bool=torch.full((self._num_envs, ), 
+                dtype=torch.bool, device="cpu",
+                fill_value=True)
+
+        self._expl_env_selector=None
+        self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
+                fill_value=False)
+        self._pert_counter=0.0
+
+        if self._n_expl_envs>0 and ((self._num_envs-self._n_expl_envs)>0): # log data only from envs which are not altered (e.g. by exploration noise)
+            # computing expl env selector
+            self._expl_env_selector = torch.randperm(self._num_envs, device="cpu")[:self._n_expl_envs]
+            self._expl_env_selector_bool[self._expl_env_selector]=True
+            
+        # and db env. selector
+        self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
+        # (can be overridden thorugh the provided options)
+        self._demo_env_selector=self._env.demo_env_idxs()
+        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
+        if self._demo_env_selector_bool is None:
+            self._db_env_selector_bool[:]=~self._expl_env_selector_bool
+        else: # we log db data separately for env which are neither for demo nor for random exploration
+            self._demo_env_selector_bool=self._demo_env_selector_bool.cpu()
+            self._demo_env_selector=self._demo_env_selector.cpu()
+            self._db_env_selector_bool[:]=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
+                
+        self._n_expl_envs = self._expl_env_selector_bool.count_nonzero()
+        self._num_db_envs = self._db_env_selector_bool.count_nonzero()
+
+        if not self._num_db_envs>0:
+            Journal.log(self.__class__.__name__,
+                "_init_params",
+                "No indipendent db env can be computed (check your demo and expl settings)! Will use all envs.",
+                LogType.EXCEP,
+                throw_when_excep = False)
+            self._num_db_envs=self._num_envs
+            self._db_env_selector_bool[:]=True
+        self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
+        
+        self._transition_noise_freq=float(self._noise_duration)/float(self._noise_freq)
+        self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
+        self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
+
+        self._db_vecstep_frequency = 128 # log db data every n (vectorized) SUB timesteps
+        self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
+        # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
+        self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
+        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq #TD3 delayed update
+        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq # qf updated at each vec timesteps
+        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq//self._trgt_net_freq
+
+        self._exp_to_policy_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_policy_updates_to_be_done)
+        self._exp_to_qf_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_qf_updates_to_be_done)
+        self._exp_to_qft_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_tqf_updates_to_be_done)
+
+        self._db_data_size = round(self._total_timesteps_vec/self._db_vecstep_frequency)+self._db_vecstep_frequency
+        # write them to hyperparam dictionary for debugging
+        self._hyperparameters["n_envs"] = self._num_envs
+        self._hyperparameters["obs_dim"] = self._obs_dim
+        self._hyperparameters["actions_dim"] = self._actions_dim
+
+        self._hyperparameters["seed"] = self._seed
+        self._hyperparameters["using_gpu"] = self._use_gpu
+        self._hyperparameters["total_timesteps_vec"] = self._total_timesteps_vec
+
+        self._hyperparameters["collection_freq"]=self._collection_freq
+        self._hyperparameters["update_freq"]=self._update_freq
+        self._hyperparameters["total_steps"]=self._total_steps
+        
+        self._hyperparameters["n_policy_updates_when_done"] = self._n_policy_updates_to_be_done
+        self._hyperparameters["n_qf_updates_when_done"] = self._n_qf_updates_to_be_done
+        self._hyperparameters["n_tqf_updates_when_done"] = self._n_tqf_updates_to_be_done
+        self._hyperparameters["experience_to_policy_grad_steps_ratio"] = self._exp_to_policy_grad_ratio
+        self._hyperparameters["experience_to_quality_fun_grad_steps_ratio"] = self._exp_to_qf_grad_ratio
+        self._hyperparameters["experience_to_trgt_quality_fun_grad_steps_ratio"] = self._exp_to_qft_grad_ratio
+
+        self._hyperparameters["episodes timeout lb"] = self._episode_timeout_lb
+        self._hyperparameters["episodes timeout ub"] = self._episode_timeout_ub
+        self._hyperparameters["task rand timeout lb"] = self._task_rand_timeout_lb
+        self._hyperparameters["task rand timeout ub"] = self._task_rand_timeout_ub
+        
+        self._hyperparameters["warmstart_timesteps"] = self._warmstart_timesteps
+        self._hyperparameters["warmstart_vectimesteps"] = self._warmstart_vectimesteps
+        self._hyperparameters["replay_buffer_size_nominal"] = self._replay_buffer_size_nominal
+        self._hyperparameters["batch_size"] = self._batch_size
+        self._hyperparameters["total_timesteps"] = self._total_timesteps
+        self._hyperparameters["lr_policy"] = self._lr_policy
+        self._hyperparameters["lr_q"] = self._lr_q
+        self._hyperparameters["discount_factor"] = self._discount_factor
+        self._hyperparameters["smoothing_coeff"] = self._smoothing_coeff
+        self._hyperparameters["policy_freq"] = self._policy_freq
+        self._hyperparameters["trgt_net_freq"] = self._trgt_net_freq
+        self._hyperparameters["autotune"] = self._autotune
+        self._hyperparameters["target_entropy"] = self._target_entropy
+        self._hyperparameters["log_alpha"] = self._log_alpha
+        self._hyperparameters["alpha"] = self._alpha
+        self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
+        self._hyperparameters["db_vecstep_frequency"] = self._db_vecstep_frequency
+        self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
+        
+        self._hyperparameters["n_db_envs"] = self._num_db_envs
+        self._hyperparameters["n_expl_envs"] = self._n_expl_envs
+        self._hyperparameters["noise_freq"] = self._noise_freq
+        self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
+        self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
+        
+        # small debug log
+        info = f"\nUsing \n" + \
+            f"total (vectorized) timesteps to be simulated {self._total_timesteps_vec}\n" + \
+            f"total timesteps to be simulated {self._total_timesteps}\n" + \
+            f"warmstart timesteps {self._warmstart_timesteps}\n" + \
+            f"replay buffer nominal size {self._replay_buffer_size_nominal}\n" + \
+            f"replay buffer size {self._replay_buffer_size}\n" + \
+            f"batch size {self._batch_size}\n" + \
+            f"policy update freq {self._policy_freq}\n" + \
+            f"target networks freq {self._trgt_net_freq}\n" + \
+            f"episode timeout max steps {self._episode_timeout_ub}\n" + \
+            f"episode timeout min steps {self._episode_timeout_lb}\n" + \
+            f"task rand. max n steps {self._task_rand_timeout_ub}\n" + \
+            f"task rand. min n steps {self._task_rand_timeout_lb}\n" + \
+            f"number of action reps {self._env_n_action_reps}\n" + \
+            f"total policy updates to be performed: {self._n_policy_updates_to_be_done}\n" + \
+            f"total q fun updates to be performed: {self._n_qf_updates_to_be_done}\n" + \
+            f"total trgt q fun updates to be performed: {self._n_tqf_updates_to_be_done}\n" + \
+            f"experience to policy grad ratio: {self._exp_to_policy_grad_ratio}\n" + \
+            f"experience to q fun grad ratio: {self._exp_to_qf_grad_ratio}\n" + \
+            f"experience to trgt q fun grad ratio: {self._exp_to_qft_grad_ratio}\n" + \
+            f"amount of noisy transitions in replay buffer: {self._noise_buff_freq*100}% \n"
+        db_env_idxs=", ".join(map(str, self._db_env_selector.tolist()))
+        n_db_envs_str=f"db envs {self._num_db_envs}/{self._num_envs} \n" 
+        info=info + n_db_envs_str + "Debug env. indexes are [" + db_env_idxs+"]\n"
+        if self._env.demo_env_idxs() is not None:
+            demo_idxs_str=", ".join(map(str, self._env.demo_env_idxs().tolist()))
+            n_demo_envs_str=f"demo envs {self._env.n_demo_envs()}/{self._num_envs} \n" 
+            info=info + n_demo_envs_str + "Demo env. indexes are [" + demo_idxs_str+"]\n"
+        if self._expl_env_selector is not None:
+            random_expl_idxs=", ".join(map(str, self._expl_env_selector.tolist()))
+            n_expl_envs_str=f"expl envs {self._n_expl_envs}/{self._num_envs} \n" 
+            info=info + n_expl_envs_str + "Random exploration env. indexes are [" + random_expl_idxs+"]\n"
+        
+        Journal.log(self.__class__.__name__,
+            "_init_params",
+            info,
+            LogType.INFO,
+            throw_when_excep = True)
+        
+        self._step_counter = 0
+        self._vec_transition_counter = 0
+        self._update_counter = 0
+        self._log_it_counter = 0
+
+    def _init_dbdata(self):
+
+        # initalize some debug data
+        self._collection_dt = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._collection_t = -1.0
+        self._env_step_fps = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._policy_update_t = -1.0
+        self._policy_update_dt = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        self._policy_update_fps = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._n_of_played_episodes = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
+        self._n_timesteps_done = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
+        self._n_policy_updates = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
+        self._n_qfun_updates = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
+        self._n_tqfun_updates = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
+        self._elapsed_min = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0, device="cpu")        
+
+        self._ep_tsteps_env_distribution = torch.full((self._db_data_size, self._num_db_envs, 1), 
+                    dtype=torch.int32, fill_value=-1, device="cpu")
+
+        self._reward_names = self._episodic_reward_metrics.reward_names()
+        self._reward_names_str = "[" + ', '.join(self._reward_names) + "]"
+        self._n_rewards = self._episodic_reward_metrics.n_rewards()
+
+        # db environments
+        self._tot_rew_max = torch.full((self._db_data_size, self._num_db_envs, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_avrg = torch.full((self._db_data_size, self._num_db_envs, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_min = torch.full((self._db_data_size, self._num_db_envs, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_max_over_envs = torch.full((self._db_data_size, 1, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_avrg_over_envs = torch.full((self._db_data_size, 1, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        
+        self._sub_rew_max = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_avrg = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_min = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_max_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_avrg_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        
+        # custom data from env # (log data just from db envs for simplicity)
+        self._custom_env_data = {}
+        db_data_names = list(self._env.custom_db_data.keys())
+        for dbdatan in db_data_names: # loop thorugh custom data
+            
+            self._custom_env_data[dbdatan] = {}
+
+            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
+            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+
+            self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
+                max.shape[0], 
+                max.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["avrg"] =torch.full((self._db_data_size, 
+                avrg.shape[0], 
+                avrg.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["min"] =torch.full((self._db_data_size, 
+                min.shape[0], 
+                min.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["max_over_envs"] =torch.full((self._db_data_size, 
+                max_over_envs.shape[0], 
+                max_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
+                avrg_over_envs.shape[0], 
+                avrg_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["min_over_envs"] =torch.full((self._db_data_size, 
+                min_over_envs.shape[0], 
+                min_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+
+        # exploration envs
+        if self._n_expl_envs > 0:
+            self._ep_tsteps_expl_env_distribution = torch.full((self._db_data_size, self._n_expl_envs, 1), 
+                    dtype=torch.int32, fill_value=-1, device="cpu")
+
+            # also log sub rewards metrics for exploration envs
+            self._sub_rew_max_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_avrg_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_max_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_avrg_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        
+        # demo environments
+        self._demo_envs_active = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._demo_perf_metric = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        if self._env.demo_env_idxs() is not None:
+            n_demo_envs=self._env.demo_env_idxs().shape[0]
+
+            self._ep_tsteps_demo_env_distribution = torch.full((self._db_data_size, n_demo_envs, 1), 
+                    dtype=torch.int32, fill_value=-1, device="cpu")
+
+            # also log sub rewards metrics for exploration envs
+            self._sub_rew_max_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_avrg_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_max_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_avrg_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
+        # algorithm-specific db info
+        self._qf1_vals_mean = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf2_vals_mean = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf1_vals_std = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf2_vals_std = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf1_vals_max = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf1_vals_min = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf2_vals_max = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf2_vals_min = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf1_loss = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._qf2_loss = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+    
+        self._actor_loss= torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        
+        self._alphas = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._alpha_loss = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+
+        self._policy_entropy_mean=torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._policy_entropy_std=torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._policy_entropy_max=torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._policy_entropy_min=torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")            
+
+    def _init_replay_buffers(self):
+        
+        self._bpos = 0
+
+        self._obs = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._obs_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False) 
+        self._actions = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._actions_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+        self._rewards = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, 1),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+        self._next_obs = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._obs_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False) 
+        self._next_terminal = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, 1),
+                        fill_value=False,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+
     def _save_model(self,
             is_checkpoint: bool = False):
 
@@ -957,454 +1405,6 @@ class SActorCriticAlgoBase(ABC):
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-
-    def _init_dbdata(self):
-
-        # initalize some debug data
-        self._collection_dt = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        
-        self._collection_t = -1.0
-        self._env_step_fps = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        
-        self._policy_update_t = -1.0
-        self._policy_update_dt = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        self._policy_update_fps = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        
-        self._n_of_played_episodes = torch.full((self._db_data_size, 1), 
-                    dtype=torch.int32, fill_value=0, device="cpu")
-        self._n_timesteps_done = torch.full((self._db_data_size, 1), 
-                    dtype=torch.int32, fill_value=0, device="cpu")
-        self._n_policy_updates = torch.full((self._db_data_size, 1), 
-                    dtype=torch.int32, fill_value=0, device="cpu")
-        self._n_qfun_updates = torch.full((self._db_data_size, 1), 
-                    dtype=torch.int32, fill_value=0, device="cpu")
-        self._n_tqfun_updates = torch.full((self._db_data_size, 1), 
-                    dtype=torch.int32, fill_value=0, device="cpu")
-        self._elapsed_min = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=0, device="cpu")        
-
-        self._ep_tsteps_env_distribution = torch.full((self._db_data_size, self._num_db_envs, 1), 
-                    dtype=torch.int32, fill_value=-1, device="cpu")
-
-        self._reward_names = self._episodic_reward_metrics.reward_names()
-        self._reward_names_str = "[" + ', '.join(self._reward_names) + "]"
-        self._n_rewards = self._episodic_reward_metrics.n_rewards()
-
-        # db environments
-        self._tot_rew_max = torch.full((self._db_data_size, self._num_db_envs, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_avrg = torch.full((self._db_data_size, self._num_db_envs, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_min = torch.full((self._db_data_size, self._num_db_envs, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_max_over_envs = torch.full((self._db_data_size, 1, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_avrg_over_envs = torch.full((self._db_data_size, 1, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        
-        self._sub_rew_max = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_avrg = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_min = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_max_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_avrg_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
-            dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        
-        # custom data from env # (log data just from db envs for simplicity)
-        self._custom_env_data = {}
-        db_data_names = list(self._env.custom_db_data.keys())
-        for dbdatan in db_data_names: # loop thorugh custom data
-            
-            self._custom_env_data[dbdatan] = {}
-
-            max = self._env.custom_db_data[dbdatan].get_max(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
-            max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
-            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
-            min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
-
-            self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
-                max.shape[0], 
-                max.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["avrg"] =torch.full((self._db_data_size, 
-                avrg.shape[0], 
-                avrg.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["min"] =torch.full((self._db_data_size, 
-                min.shape[0], 
-                min.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["max_over_envs"] =torch.full((self._db_data_size, 
-                max_over_envs.shape[0], 
-                max_over_envs.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
-                avrg_over_envs.shape[0], 
-                avrg_over_envs.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["min_over_envs"] =torch.full((self._db_data_size, 
-                min_over_envs.shape[0], 
-                min_over_envs.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-
-        # exploration envs
-        if self._n_expl_envs > 0:
-            self._ep_tsteps_expl_env_distribution = torch.full((self._db_data_size, self._n_expl_envs, 1), 
-                    dtype=torch.int32, fill_value=-1, device="cpu")
-
-            # also log sub rewards metrics for exploration envs
-            self._sub_rew_max_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_avrg_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_expl = torch.full((self._db_data_size, self._n_expl_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_max_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_avrg_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        
-        # demo environments
-        self._demo_envs_active = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._demo_perf_metric = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        if self._env.demo_env_idxs() is not None:
-            n_demo_envs=self._env.demo_env_idxs().shape[0]
-
-            self._ep_tsteps_demo_env_distribution = torch.full((self._db_data_size, n_demo_envs, 1), 
-                    dtype=torch.int32, fill_value=-1, device="cpu")
-
-            # also log sub rewards metrics for exploration envs
-            self._sub_rew_max_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_avrg_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_demo = torch.full((self._db_data_size, n_demo_envs, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_max_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_avrg_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            
-        # algorithm-specific db info
-        self._qf1_vals_mean = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf2_vals_mean = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf1_vals_std = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf2_vals_std = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf1_vals_max = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf1_vals_min = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf2_vals_max = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf2_vals_min = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf1_loss = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._qf2_loss = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-    
-        self._actor_loss= torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        
-        self._alphas = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._alpha_loss = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-
-        self._policy_entropy_mean=torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._policy_entropy_std=torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._policy_entropy_max=torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._policy_entropy_min=torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")            
-
-    def _init_params(self,
-            tot_tsteps: int,
-            run_name: str = "SACDefaultRunName"):
-
-        self._dtype = self._env.dtype()
-
-        self._num_envs = self._env.n_envs()
-        self._obs_dim = self._env.obs_dim()
-        self._actions_dim = self._env.actions_dim()
-
-        self._run_name = run_name # default
-        self._env_name = self._env.name()
-        self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
-        self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
-        self._env_n_action_reps = self._env.n_action_reps()
-        
-        self._use_gpu = self._env.using_gpu()
-        self._torch_device = torch.device("cpu") # defaults to cpu
-        self._torch_deterministic = True
-
-        # main algo settings
-
-        self._collection_freq=1
-        self._update_freq=1
-
-        self._replay_bf_full = False
-
-        self._replay_buffer_size_nominal = int(2e6) # 32768
-        self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
-        self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 8192
-        self._total_timesteps = int(tot_tsteps)
-        self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
-        self._total_timesteps_vec = self._total_timesteps // self._num_envs
-        self._total_steps = self._total_timesteps_vec//self._collection_freq
-        self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
-        self._total_timesteps = self._total_timesteps_vec*self._num_envs # actual n transitions
-
-        self._warmstart_timesteps = int(5e3)
-        self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
-        self._warmstart_steps=self._warmstart_vectimesteps//self._collection_freq
-        self._warmstart_vectimesteps=self._collection_freq*self._warmstart_steps
-        self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
-
-        self._lr_policy = 1e-3
-        self._lr_q = 5e-4
-
-        self._discount_factor = 0.999
-        self._smoothing_coeff = 0.005
-
-        self._policy_freq = 2
-        self._trgt_net_freq = 1
-
-        self._autotune = True
-        self._min_entropy_per_action=1.0
-        self._target_entropy = -self._min_entropy_per_action*self._env.actions_dim()
-        self._log_alpha = None
-        self._alpha = 0.2
-        
-        self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
-        self._allow_expl_during_eval=False
-        self._noise_freq = 50
-        self._noise_duration = 5 # should be less than _noise_freq
-
-        self._is_continuous_actions_bool=self._env.is_action_continuous()
-        self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
-        self._is_discrete_actions_bool=~self._is_continuous_actions
-        self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
-        
-        self._continuous_act_expl_noise_std=0.01
-        self._discrete_act_expl_noise_std=0.5
-
-        self._a_optimizer = None
-        
-        # debug
-        self._m_checkpoint_freq_nom = 1e6 # n totoal timesteps after which a checkpoint model is dumped
-        self._m_checkpoint_freq= self._m_checkpoint_freq_nom//self._num_envs
-
-        # default to all debug envs
-        self._db_env_selector=torch.tensor(list(range(0, self._num_envs)), dtype=torch.int)
-        self._db_env_selector_bool=torch.full((self._num_envs, ), 
-                dtype=torch.bool, device="cpu",
-                fill_value=True)
-
-        self._expl_env_selector=None
-        self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
-                fill_value=False)
-        self._pert_counter=0.0
-
-        if self._n_expl_envs>0 and ((self._num_envs-self._n_expl_envs)>0): # log data only from envs which are not altered (e.g. by exploration noise)
-            # computing expl env selector
-            self._expl_env_selector = torch.randperm(self._num_envs, device="cpu")[:self._n_expl_envs]
-            self._expl_env_selector_bool[self._expl_env_selector]=True
-            
-        # and db env. selector
-        self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
-        # (can be overridden thorugh the provided options)
-        self._demo_env_selector=self._env.demo_env_idxs()
-        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
-        if self._demo_env_selector_bool is None:
-            self._db_env_selector_bool[:]=~self._expl_env_selector_bool
-        else: # we log db data separately for env which are neither for demo nor for random exploration
-            self._demo_env_selector_bool=self._demo_env_selector_bool.cpu()
-            self._demo_env_selector=self._demo_env_selector.cpu()
-            self._db_env_selector_bool[:]=torch.logical_and(~self._expl_env_selector_bool, ~self._demo_env_selector_bool)
-                
-        self._n_expl_envs = self._expl_env_selector_bool.count_nonzero()
-        self._num_db_envs = self._db_env_selector_bool.count_nonzero()
-
-        if not self._num_db_envs>0:
-            Journal.log(self.__class__.__name__,
-                "_init_params",
-                "No indipendent db env can be computed (check your demo and expl settings)! Will use all envs.",
-                LogType.EXCEP,
-                throw_when_excep = False)
-            self._num_db_envs=self._num_envs
-            self._db_env_selector_bool[:]=True
-        self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
-        
-        self._transition_noise_freq=float(self._noise_duration)/float(self._noise_freq)
-        self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
-        self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
-
-        self._db_vecstep_frequency = 128 # log db data every n (vectorized) SUB timesteps
-        self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
-        # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
-        self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
-        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq #TD3 delayed update
-        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq # qf updated at each vec timesteps
-        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq//self._trgt_net_freq
-
-        self._exp_to_policy_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_policy_updates_to_be_done)
-        self._exp_to_qf_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_qf_updates_to_be_done)
-        self._exp_to_qft_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_tqf_updates_to_be_done)
-
-        self._db_data_size = round(self._total_timesteps_vec/self._db_vecstep_frequency)+self._db_vecstep_frequency
-        # write them to hyperparam dictionary for debugging
-        self._hyperparameters["n_envs"] = self._num_envs
-        self._hyperparameters["obs_dim"] = self._obs_dim
-        self._hyperparameters["actions_dim"] = self._actions_dim
-
-        self._hyperparameters["seed"] = self._seed
-        self._hyperparameters["using_gpu"] = self._use_gpu
-        self._hyperparameters["total_timesteps_vec"] = self._total_timesteps_vec
-
-        self._hyperparameters["collection_freq"]=self._collection_freq
-        self._hyperparameters["update_freq"]=self._update_freq
-        self._hyperparameters["total_steps"]=self._total_steps
-        
-        self._hyperparameters["n_policy_updates_when_done"] = self._n_policy_updates_to_be_done
-        self._hyperparameters["n_qf_updates_when_done"] = self._n_qf_updates_to_be_done
-        self._hyperparameters["n_tqf_updates_when_done"] = self._n_tqf_updates_to_be_done
-        self._hyperparameters["experience_to_policy_grad_steps_ratio"] = self._exp_to_policy_grad_ratio
-        self._hyperparameters["experience_to_quality_fun_grad_steps_ratio"] = self._exp_to_qf_grad_ratio
-        self._hyperparameters["experience_to_trgt_quality_fun_grad_steps_ratio"] = self._exp_to_qft_grad_ratio
-
-        self._hyperparameters["episodes timeout lb"] = self._episode_timeout_lb
-        self._hyperparameters["episodes timeout ub"] = self._episode_timeout_ub
-        self._hyperparameters["task rand timeout lb"] = self._task_rand_timeout_lb
-        self._hyperparameters["task rand timeout ub"] = self._task_rand_timeout_ub
-        
-        self._hyperparameters["warmstart_timesteps"] = self._warmstart_timesteps
-        self._hyperparameters["warmstart_vectimesteps"] = self._warmstart_vectimesteps
-        self._hyperparameters["replay_buffer_size_nominal"] = self._replay_buffer_size_nominal
-        self._hyperparameters["batch_size"] = self._batch_size
-        self._hyperparameters["total_timesteps"] = self._total_timesteps
-        self._hyperparameters["lr_policy"] = self._lr_policy
-        self._hyperparameters["lr_q"] = self._lr_q
-        self._hyperparameters["discount_factor"] = self._discount_factor
-        self._hyperparameters["smoothing_coeff"] = self._smoothing_coeff
-        self._hyperparameters["policy_freq"] = self._policy_freq
-        self._hyperparameters["trgt_net_freq"] = self._trgt_net_freq
-        self._hyperparameters["autotune"] = self._autotune
-        self._hyperparameters["target_entropy"] = self._target_entropy
-        self._hyperparameters["log_alpha"] = self._log_alpha
-        self._hyperparameters["alpha"] = self._alpha
-        self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
-        self._hyperparameters["db_vecstep_frequency"] = self._db_vecstep_frequency
-        self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
-        
-        self._hyperparameters["n_db_envs"] = self._num_db_envs
-        self._hyperparameters["n_expl_envs"] = self._n_expl_envs
-        self._hyperparameters["noise_freq"] = self._noise_freq
-        self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
-        self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
-        
-        # small debug log
-        info = f"\nUsing \n" + \
-            f"total (vectorized) timesteps to be simulated {self._total_timesteps_vec}\n" + \
-            f"total timesteps to be simulated {self._total_timesteps}\n" + \
-            f"warmstart timesteps {self._warmstart_timesteps}\n" + \
-            f"replay buffer nominal size {self._replay_buffer_size_nominal}\n" + \
-            f"replay buffer size {self._replay_buffer_size}\n" + \
-            f"batch size {self._batch_size}\n" + \
-            f"policy update freq {self._policy_freq}\n" + \
-            f"target networks freq {self._trgt_net_freq}\n" + \
-            f"episode timeout max steps {self._episode_timeout_ub}\n" + \
-            f"episode timeout min steps {self._episode_timeout_lb}\n" + \
-            f"task rand. max n steps {self._task_rand_timeout_ub}\n" + \
-            f"task rand. min n steps {self._task_rand_timeout_lb}\n" + \
-            f"number of action reps {self._env_n_action_reps}\n" + \
-            f"total policy updates to be performed: {self._n_policy_updates_to_be_done}\n" + \
-            f"total q fun updates to be performed: {self._n_qf_updates_to_be_done}\n" + \
-            f"total trgt q fun updates to be performed: {self._n_tqf_updates_to_be_done}\n" + \
-            f"experience to policy grad ratio: {self._exp_to_policy_grad_ratio}\n" + \
-            f"experience to q fun grad ratio: {self._exp_to_qf_grad_ratio}\n" + \
-            f"experience to trgt q fun grad ratio: {self._exp_to_qft_grad_ratio}\n" + \
-            f"amount of noisy transitions in replay buffer: {self._noise_buff_freq*100}% \n"
-        db_env_idxs=", ".join(map(str, self._db_env_selector.tolist()))
-        n_db_envs_str=f"db envs {self._num_db_envs}/{self._num_envs} \n" 
-        info=info + n_db_envs_str + "Debug env. indexes are [" + db_env_idxs+"]\n"
-        if self._env.demo_env_idxs() is not None:
-            demo_idxs_str=", ".join(map(str, self._env.demo_env_idxs().tolist()))
-            n_demo_envs_str=f"demo envs {self._env.n_demo_envs()}/{self._num_envs} \n" 
-            info=info + n_demo_envs_str + "Demo env. indexes are [" + demo_idxs_str+"]\n"
-        if self._expl_env_selector is not None:
-            random_expl_idxs=", ".join(map(str, self._expl_env_selector.tolist()))
-            n_expl_envs_str=f"expl envs {self._n_expl_envs}/{self._num_envs} \n" 
-            info=info + n_expl_envs_str + "Random exploration env. indexes are [" + random_expl_idxs+"]\n"
-        
-        Journal.log(self.__class__.__name__,
-            "_init_params",
-            info,
-            LogType.INFO,
-            throw_when_excep = True)
-        
-        self._step_counter = 0
-        self._vec_transition_counter = 0
-        self._update_counter = 0
-        self._log_it_counter = 0
-
-    def _init_replay_buffers(self):
-        
-        self._bpos = 0
-
-        self._obs = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._obs_dim),
-                        fill_value=torch.nan,
-                        dtype=self._dtype,
-                        device=self._torch_device,
-                        requires_grad=False) 
-        self._actions = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._actions_dim),
-                        fill_value=torch.nan,
-                        dtype=self._dtype,
-                        device=self._torch_device,
-                        requires_grad=False)
-        self._rewards = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, 1),
-                        fill_value=torch.nan,
-                        dtype=self._dtype,
-                        device=self._torch_device,
-                        requires_grad=False)
-        self._next_obs = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, self._obs_dim),
-                        fill_value=torch.nan,
-                        dtype=self._dtype,
-                        device=self._torch_device,
-                        requires_grad=False) 
-        self._next_terminal = torch.full(size=(self._replay_buffer_size_vec, self._num_envs, 1),
-                        fill_value=False,
-                        dtype=self._dtype,
-                        device=self._torch_device,
-                        requires_grad=False)
 
     def _add_experience(self, 
             obs: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, 
