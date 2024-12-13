@@ -89,7 +89,9 @@ class HybridQuadRhc(RHController):
             "closed_partial": False, # closed loop with partial feedback
             "adaptive_is": True, # closed loop with adaptation
             "alpha_from_outside": False, # alpha set ext. from shared memory
-            "alpha_half": 1.0}
+            "alpha_half": 1.0, 
+            "only_vel_wheels": True # whether wheels (if present) are just vel controlled
+            }
         
         self._custom_opts.update(custom_opts)
         
@@ -158,6 +160,7 @@ class HybridQuadRhc(RHController):
 
     def _init_problem(self,
             fixed_jnt_patterns: List[str] = None,
+            wheels_patterns: List[str] = None,
             foot_linkname: str = None,
             flight_duration: int = 10,
             post_flight_stance: int = 3,
@@ -292,6 +295,10 @@ class HybridQuadRhc(RHController):
                 LogType.INFO,
                 throw_when_excep=True)
 
+        # retrieve wheels indexes (not considering continuous joints, 
+        # ok just for v, eff, etc..)
+        self._wheel_patterns=wheels_patterns
+        self._wheels_idxs_v=self._get_wheels_jnt_v_idxs(wheel_patterns=self._wheel_patterns)
         self._f0 = [0, 0, self._kin_dyn.mass()/4*9.81]
         
         # we can create an init for the base
@@ -476,6 +483,17 @@ class HybridQuadRhc(RHController):
                 continuous_joints.append(joint_name)
         return continuous_joints
     
+    def _get_wheels_jnt_v_idxs(self, wheel_patterns: List[str]):
+        jnt_names=self._get_robot_jnt_names()
+        wheels_idxs=[]
+        for i in range(len(jnt_names)):
+            jnt_name=jnt_names[i]
+            for wheel_pattern in wheel_patterns:
+                if wheel_pattern in jnt_name:
+                    wheels_idxs.append(i)
+                    break
+        return wheels_idxs
+    
     def _get_jnt_id(self, jnt_name):
         return self._kin_dyn.joint_iq(jnt_name)
     
@@ -614,7 +632,14 @@ class HybridQuadRhc(RHController):
         
         efforts_on_node = self._ti.eval_efforts_on_node(node_idx=node_idx)
         
-        return efforts_on_node[6:, 0].reshape(1,  
+        # if self._custom_opts["only_vel_wheels"]:
+
+        jnt_efforts=efforts_on_node[6:, 0]
+        
+        if self._custom_opts["only_vel_wheels"] and self._wheels_idxs_v:
+            jnt_efforts[self._wheels_idxs_v]=0.0
+
+        return jnt_efforts.reshape(1,  
                 self._nv_jnts).astype(self._dtype)
     
     def _get_rhc_cost(self):
