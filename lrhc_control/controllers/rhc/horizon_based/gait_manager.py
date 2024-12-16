@@ -59,6 +59,8 @@ class GaitManager:
         self._tg = trajectoryGenerator.TrajectoryGenerator()
         self._traj_der= [None, 0, 0]
         self._traj_second_der=[None, 0, 0]
+        self._third_traj_der=[None, None, 0]
+
         self._ref_trjs = {}
         self._ref_vtrjs = {}
 
@@ -222,7 +224,9 @@ class GaitManager:
                                                                             starting_pos+self._dh, 
                                                                             self._step_height,
                         derivatives=self._traj_der,
-                        second_der=self._traj_second_der))
+                        second_der=self._traj_second_der,
+                        third_der=self._third_traj_der)
+                        )
                     for i in range(self._flight_duration):
                         res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
                             pos=self._injection_node+i, 
@@ -235,7 +239,8 @@ class GaitManager:
                                                                             0.0+self._dh, 
                                                                             self._step_height,
                         derivatives=self._traj_der,
-                        second_der=self._traj_second_der))
+                        second_der=self._traj_second_der,
+                        third_der=self._third_traj_der))
                     for i in range(self._flight_duration):
                         res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
                             pos=self._injection_node+i, 
