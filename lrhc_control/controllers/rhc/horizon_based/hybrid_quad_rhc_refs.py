@@ -80,7 +80,7 @@ class HybridQuadRhcRefs(RhcRefs):
                 exception,
                 LogType.EXCEP,
                 throw_when_excep = True)
-        contact_names = self.gait_manager.task_interface.model.cmap.keys()
+        contact_names = list(self.gait_manager.task_interface.model.cmap.keys())
         if not (self.n_contacts() == len(contact_names)):
             exception = f"N of contacts within problem {len(contact_names)} does not match n of contacts {self.n_contacts()}"
             Journal.log(self.__class__.__name__,
@@ -88,7 +88,28 @@ class HybridQuadRhcRefs(RhcRefs):
                 exception,
                 LogType.EXCEP,
                 throw_when_excep = True)
-                        
+        
+        # set some defaults from gait manager
+        for i in range(self.n_contacts()):
+            self.flight_settings.set(data=self.gait_manager.get_flight_duration(contact_name=contact_names[i]),
+                data_type="len",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+            self.flight_settings.set(data=self.gait_manager.get_step_apexdh(contact_name=contact_names[i]),
+                data_type="apex_dpos",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+            self.flight_settings.set(data=self.gait_manager.get_step_enddh(contact_name=contact_names[i]),
+                data_type="end_dpos",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+        
+        self.flight_settings.synch_retry(row_index=self.robot_index,
+            col_index=0,
+            n_rows=1,
+            n_cols=self.flight_settings.n_cols,
+            read=False)
+
     def step(self, q_full: np.ndarray = None,
         force_norm: np.ndarray = None):
 
