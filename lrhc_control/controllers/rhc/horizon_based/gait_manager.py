@@ -103,7 +103,7 @@ class GaitManager:
             # stances
             self._contact_phases[contact] = self._contact_timelines[contact].createPhase(short_stance_duration, 
                                     f'stance_{contact}_short')
-            
+                
             if self.task_interface.getTask(f'{contact}') is not None:
                 self._contact_phases[contact].addItem(self.task_interface.getTask(f'{contact}'))
             else:
@@ -186,6 +186,14 @@ class GaitManager:
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
             
+            if self._is_open_loop: #we add a pos ref also for the contact
+                self._ref_trjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()])
+                init_z_foot = self._fk_contacts[contact](q=self._q0)['ee_pos'].elements()[2]
+                self._ref_trjs[contact][2, :] = np.atleast_2d(init_z_foot)
+                self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'z_{contact}'), 
+                    self._ref_trjs[contact][2, 0:1], 
+                    nodes=list(range(0, flight_phase_short_duration)))
+                
             self._flight_durations[contact]=self._flight_duration_default
             self._step_heights[contact]=self._step_height_default
             self._dhs[contact]=self._dh_default
@@ -215,20 +223,20 @@ class GaitManager:
             ref=self._total_weight/(scale*len(f_refs))
             force.assign(ref)
     
-    def set_flight_duration(self, contact_name, duration: float):
-        self._flight_durations[contact_name]=duration
+    def set_flight_duration(self, contact_name, val: float):
+        self._flight_durations[contact_name]=val
     
     def get_flight_duration(self, contact_name):
         return self._flight_durations[contact_name]
 
-    def set_step_apexdh(self, contact_name, duration: float):
-        self._step_heights[contact_name]=duration
+    def set_step_apexdh(self, contact_name, val: float):
+        self._step_heights[contact_name]=val
     
     def get_step_apexdh(self, contact_name):
         return self._step_heights[contact_name]
     
-    def set_step_enddh(self, contact_name, duration: float):
-        self._dhs[contact_name]=duration
+    def set_step_enddh(self, contact_name, val: float):
+        self._dhs[contact_name]=val
     
     def get_step_enddh(self, contact_name):
         return self._dhs[contact_name]
@@ -244,13 +252,31 @@ class GaitManager:
 
         if self._flight_durations[contact_name]>1:
             timeline = self._contact_timelines[contact_name]
-        
+
             flights_on_horizon=self._contact_timelines[contact_name].getPhaseIdx(self._flight_phases[contact_name]) 
             
             last_flight_idx=self._injection_node-1 # default to make things work
             if not len(flights_on_horizon)==0: # some flight phases are there
                 last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
             if last_flight_idx<self._injection_node: # allow injecting
+
+                # sanity checks on flight params
+                if self._flight_durations[contact_name]<self._flight_duration_min:
+                    self._flight_durations[contact_name]=self._flight_duration_min
+                if self._flight_durations[contact_name]>self._flight_duration_max:
+                    self._flight_durations[contact_name]=self._flight_duration_max
+                
+                if self._dhs[contact_name]<self._dh_min:
+                    self._dhs[contact_name]=self._dh_min
+                if self._dhs[contact_name]>self._dh_max:
+                    self._dhs[contact_name]=self._dh_max
+
+                if self._step_heights[contact_name]<self._step_height_min:
+                    self._step_heights[contact_name]=self._step_height_min
+                if self._step_heights[contact_name]>self._step_height_max:
+                    self._step_heights[contact_name]=self._step_height_max
+
+                # inject pos traj if pos mode
                 if self._ref_trjs[contact_name] is not None:
                     # recompute trajectory online (just needed if using pos traj)
                     starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
@@ -268,6 +294,8 @@ class GaitManager:
                             absolute_position=True)
                         phase_token.setItemReference(f'z_{contact_name}',
                             self._ref_trjs[contact_name][:, i])
+                
+                # inject vel traj if vel mode
                 if self._ref_vtrjs[contact_name] is not None:
                     self._ref_vtrjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_durations[contact_name], 
                                                                             0.0, 
