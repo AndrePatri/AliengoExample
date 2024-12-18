@@ -80,7 +80,7 @@ class HybridQuadRhcRefs(RhcRefs):
                 exception,
                 LogType.EXCEP,
                 throw_when_excep = True)
-        contact_names = self.gait_manager.task_interface.model.cmap.keys()
+        contact_names = list(self.gait_manager.task_interface.model.cmap.keys())
         if not (self.n_contacts() == len(contact_names)):
             exception = f"N of contacts within problem {len(contact_names)} does not match n of contacts {self.n_contacts()}"
             Journal.log(self.__class__.__name__,
@@ -88,7 +88,28 @@ class HybridQuadRhcRefs(RhcRefs):
                 exception,
                 LogType.EXCEP,
                 throw_when_excep = True)
-                        
+        
+        # set some defaults from gait manager
+        for i in range(self.n_contacts()):
+            self.flight_settings.set(data=self.gait_manager.get_flight_duration(contact_name=contact_names[i]),
+                data_type="len",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+            self.flight_settings.set(data=self.gait_manager.get_step_apexdh(contact_name=contact_names[i]),
+                data_type="apex_dpos",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+            self.flight_settings.set(data=self.gait_manager.get_step_enddh(contact_name=contact_names[i]),
+                data_type="end_dpos",
+                robot_idxs=self.robot_index,
+                contact_idx=i)
+        
+        self.flight_settings.synch_retry(row_index=self.robot_index,
+            col_index=0,
+            n_rows=1,
+            n_cols=self.flight_settings.n_cols,
+            read=False)
+
     def step(self, q_full: np.ndarray = None,
         force_norm: np.ndarray = None):
 
@@ -98,7 +119,8 @@ class HybridQuadRhcRefs(RhcRefs):
             self.rob_refs.synch_from_shared_mem()
             self.phase_id.synch_all(read=True, retry=True)
             self.contact_flags.synch_all(read=True, retry=True)
-            
+            self.flight_settings.synch_all(read=True, retry=True)
+
             self._set_contact_phases(q_full=q_full)
 
             # updated internal references with latest available ones
@@ -130,6 +152,7 @@ class HybridQuadRhcRefs(RhcRefs):
             target_n_limbs_in_contact=4
 
         is_contact = contact_flags_refs.flatten().tolist() 
+        
         for i in range(len(is_contact)): # loop through contact timelines
             timeline_name = self.timeline_names[i]
             
@@ -137,8 +160,28 @@ class HybridQuadRhcRefs(RhcRefs):
                 scale=target_n_limbs_in_contact)
 
             if is_contact[i]==False: # flight phase
+                
+                len_now=int(self.flight_settings.get(data_type="len",
+                    robot_idxs=self.robot_index,
+                    contact_idx=i).item())
+                apex_now=self.flight_settings.get(data_type="apex_dpos",
+                    robot_idxs=self.robot_index,
+                    contact_idx=i).item()
+                end_now=self.flight_settings.get(data_type="end_dpos",
+                    robot_idxs=self.robot_index,
+                    contact_idx=i).item()
+                # set flight phase property depending on last value
+                self.gait_manager.set_flight_duration(contact_name=timeline_name,
+                    val=len_now)
+                self.gait_manager.set_step_apexdh(contact_name=timeline_name,
+                    val=apex_now)
+                self.gait_manager.set_step_enddh(contact_name=timeline_name,
+                    val=end_now)
+                
+                # add flight phase
                 self.gait_manager.add_flight(contact_name=timeline_name,
                     robot_q=q_full)
+                                
             else: # contact phase
                 self.gait_manager.add_stand(contact_name=timeline_name)
 

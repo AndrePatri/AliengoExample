@@ -197,7 +197,7 @@ class LRhcEnvBase(ABC):
         # db data
         self.debug_data = {}
         self.debug_data["time_to_step_world"] = np.nan
-        self.debug_data["time_to_get_states_from_sim"] = np.nan
+        self.debug_data["time_to_get_states_from_env"] = np.nan
         self.debug_data["cluster_sol_time"] = {}
         self.debug_data["cluster_state_update_dt"] = {}
         self.debug_data["sim_time"] = {}
@@ -407,7 +407,7 @@ class LRhcEnvBase(ABC):
                 randomize=True)
 
             control_cluster=self.cluster_servers[robot_name]
-            self._write_state_to_cluster(robot_name=robot_name)
+            self._set_state_to_cluster(robot_name=robot_name)
             control_cluster.write_robot_state()
             control_cluster.pre_trigger()
             to_be_activated=control_cluster.get_inactive_controllers()
@@ -420,7 +420,6 @@ class LRhcEnvBase(ABC):
             
             self._set_startup_jnt_imp_gains(robot_name=robot_name) # set gains to
             # startup config (usually lower)
-
             control_cluster.trigger_solution()
             
         self._setup_done=True
@@ -434,11 +433,11 @@ class LRhcEnvBase(ABC):
             self._step_world()
             self.debug_data["time_to_step_world"] = \
                 time.perf_counter() - self._env_timer
-            self._post_sim_step_db()
+            self._post_world_step_db()
         else:
             self._pre_step()
             self._step_world()
-            self._post_sim_step()
+            self._post_world_step()
 
         return success
     
@@ -474,14 +473,14 @@ class LRhcEnvBase(ABC):
 
         control_cluster.reset_controllers(idxs=env_indxs)
 
-        self._write_state_to_cluster(robot_name=robot_name,
+        self._set_state_to_cluster(robot_name=robot_name,
             env_indxs=env_indxs)
         control_cluster.write_robot_state() # writes to shared memory
 
         if reset_cluster_counter:
             self.cluster_sim_step_counters[robot_name] = 0 
 
-    def _write_state_to_cluster(self, 
+    def _set_state_to_cluster(self, 
         robot_name: str, 
         env_indxs: torch.Tensor = None,
         base_loc: bool = True):
@@ -569,7 +568,7 @@ class LRhcEnvBase(ABC):
                 # freq possible
                 start=time.perf_counter()
                 self._read_jnts_state_from_robot(robot_name=robot_name)
-                self.debug_data["time_to_get_states_from_sim"]= time.perf_counter()-start
+                self.debug_data["time_to_get_states_from_env"]= time.perf_counter()-start
                 self._write_state_to_jnt_imp(robot_name=robot_name)
                 self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
 
@@ -578,19 +577,19 @@ class LRhcEnvBase(ABC):
                 control_cluster.wait_for_solution() # this is blocking
                 failed = control_cluster.get_failed_controllers(gpu=self._use_gpu)
                 self._set_cluster_actions(robot_name=robot_name) # write last cmds to low level control
-                # read state necessary for cluster
-                start=time.perf_counter()
+                if not self._override_low_lev_controller:
+                    self._apply_cmds_to_jnt_imp_control(robot_name=robot_name) # apply to robot
+                    # we can update the jnt state just at the rate at which the cluster needs it
+                    start=time.perf_counter()
+                    self._read_jnts_state_from_robot(robot_name=robot_name, env_indxs=None)
+                else:
+                    # read state necessary for cluster
+                    start=time.perf_counter()
                 self._read_root_state_from_robot(robot_name=robot_name, 
                     env_indxs=None)
-                if not self._override_low_lev_controller:
-                    # we can update the jnt state just at the rate at which the cluster needs it
-                    self._read_jnts_state_from_robot(robot_name=robot_name, env_indxs=None)
-                    self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
-                # write last robot state to the cluster of controllers
-                self.debug_data["time_to_get_states_from_sim"]= time.perf_counter()-start
-
+                self.debug_data["time_to_get_states_from_env"]= time.perf_counter()-start
                 start=time.perf_counter()
-                self._write_state_to_cluster(robot_name=robot_name, 
+                self._set_state_to_cluster(robot_name=robot_name, 
                     env_indxs=None)
                 control_cluster.write_robot_state()
                 self.debug_data["cluster_state_update_dt"][robot_name] = time.perf_counter()-start
@@ -637,18 +636,18 @@ class LRhcEnvBase(ABC):
             if control_cluster.is_cluster_instant(self.cluster_sim_step_counters[robot_name]):
                 control_cluster.wait_for_solution() # this is blocking
                 failed = control_cluster.get_failed_controllers(gpu=self._use_gpu)
-                self._set_cluster_actions(robot_name=robot_name) # write last cmds to low level control
+                self._set_cluster_actions(robot_name=robot_name) # set last cmds to low level control
+                if not self._override_low_lev_controller:
+                    self._apply_cmds_to_jnt_imp_control(robot_name=robot_name) # apply to robot
+                    # we can update the jnt state just at the rate at which the cluster needs it
+                    self._read_jnts_state_from_robot(robot_name=robot_name, env_indxs=None)
                 # read state necessary for cluster
                 self._read_root_state_from_robot(robot_name=robot_name, 
                     env_indxs=None)
-                if not self._override_low_lev_controller:
-                    # we can update the jnt state just at the rate at which the cluster needs it
-                    self._read_jnts_state_from_robot(robot_name=robot_name, env_indxs=None)
-                    self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
                 # write last robot state to the cluster of controllers
-                self._write_state_to_cluster(robot_name=robot_name, 
+                self._set_state_to_cluster(robot_name=robot_name, 
                     env_indxs=None)
-                control_cluster.write_robot_state()
+                control_cluster.write_robot_state() # write on shared mem
 
                 if self._use_remote_stepping[i]:
                     self._remote_steppers[robot_name].ack() # signal cluster stepping is finished
@@ -672,14 +671,14 @@ class LRhcEnvBase(ABC):
                 # values of some rhc flags on shared memory
                 control_cluster.trigger_solution() # trigger only active controllers
                     
-    def _post_sim_step_db(self) -> bool:
+    def _post_world_step_db(self) -> bool:
 
         for i in range(len(self._robot_names)):
             robot_name = self._robot_names[i]
             control_cluster = self.cluster_servers[robot_name]
             self.cluster_sim_step_counters[robot_name]+=1 # this has to be update with sim freq
             if self._debug:
-                self.debug_data["sim_time"][robot_name]=self._get_world_time()
+                self.debug_data["sim_time"][robot_name]=self._get_world_time(robot_name=robot_name)
                 self.debug_data["cluster_sol_time"][robot_name] = \
                     control_cluster.solution_time()
                 
@@ -688,7 +687,7 @@ class LRhcEnvBase(ABC):
     def _get_world_time(self, robot_name: str):
         return self.cluster_sim_step_counters[robot_name]*self.physics_dt()
     
-    def _post_sim_step(self) -> bool:
+    def _post_world_step(self) -> bool:
 
         for i in range(len(self._robot_names)):
             robot_name = self._robot_names[i]

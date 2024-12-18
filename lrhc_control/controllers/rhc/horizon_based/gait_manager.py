@@ -31,6 +31,8 @@ class GaitManager:
             self._is_open_loop=self._custom_opts["is_open_loop"]
 
         self.task_interface = task_interface
+        self._n_nodes_prb=self.task_interface.prb.getNNodes()
+        
         self._phase_manager = phase_manager
         self._model=self.task_interface.model
         self._q0=self._model.q0
@@ -41,11 +43,22 @@ class GaitManager:
         self._phase_force_reg=phase_force_reg
         self._total_weight = np.atleast_2d(np.array([0, 0, self._kin_dyn.mass() * 9.81])).T 
         
-        self._flight_duration=flight_duration
-        self._post_flight_stance=post_flight_stance
+        self._flight_duration_max=self._n_nodes_prb-(injection_node+1)
+        self._flight_duration_min=3
+        self._flight_duration_default=flight_duration 
+        self._flight_durations={}
         
-        self._step_height=step_height
-        self._dh=dh
+        self._post_flight_stance=post_flight_stance
+
+        self._step_height_default=step_height
+        self._step_height_min=0.0
+        self._step_height_max=0.5
+        self._step_heights={}
+        self._dh_default=dh
+        self._dh_min=0.0
+        self._dh_max=0.5
+        self._dhs={}
+
         self._f_reg_ref={}
 
         self._contact_timelines = dict()
@@ -59,6 +72,8 @@ class GaitManager:
         self._tg = trajectoryGenerator.TrajectoryGenerator()
         self._traj_der= [None, 0, 0]
         self._traj_second_der=[None, 0, 0]
+        self._third_traj_der=[None, None, 0]
+
         self._ref_trjs = {}
         self._ref_vtrjs = {}
 
@@ -88,7 +103,7 @@ class GaitManager:
             # stances
             self._contact_phases[contact] = self._contact_timelines[contact].createPhase(short_stance_duration, 
                                     f'stance_{contact}_short')
-            
+                
             if self.task_interface.getTask(f'{contact}') is not None:
                 self._contact_phases[contact].addItem(self.task_interface.getTask(f'{contact}'))
             else:
@@ -170,6 +185,10 @@ class GaitManager:
                 c_ori = self._model.kd.fk(contact)(q=self._model.q)['ee_rot'][2, :]
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
+                
+            self._flight_durations[contact]=self._flight_duration_default
+            self._step_heights[contact]=self._step_height_default
+            self._dhs[contact]=self._dh_default
 
         self.update()
 
@@ -187,7 +206,7 @@ class GaitManager:
         # self.phase_manager.clear()
         self.task_interface.reset()
         self._reset_contact_timelines()
-
+    
     def set_f_reg(self, 
         contact_name,
         scale: float = 4.0):
@@ -195,7 +214,25 @@ class GaitManager:
         for force in f_refs:
             ref=self._total_weight/(scale*len(f_refs))
             force.assign(ref)
+    
+    def set_flight_duration(self, contact_name, val: float):
+        self._flight_durations[contact_name]=val
+    
+    def get_flight_duration(self, contact_name):
+        return self._flight_durations[contact_name]
 
+    def set_step_apexdh(self, contact_name, val: float):
+        self._step_heights[contact_name]=val
+    
+    def get_step_apexdh(self, contact_name):
+        return self._step_heights[contact_name]
+    
+    def set_step_enddh(self, contact_name, val: float):
+        self._dhs[contact_name]=val
+    
+    def get_step_enddh(self, contact_name):
+        return self._dhs[contact_name]
+    
     def add_stand(self, contact_name):
         # always add stand at the end of the horizon
         timeline = self._contact_timelines[contact_name]
@@ -205,38 +242,61 @@ class GaitManager:
     def add_flight(self, contact_name,
         robot_q: np.ndarray):
 
-        if self._flight_duration>1:
+        if self._flight_durations[contact_name]>1:
             timeline = self._contact_timelines[contact_name]
-        
+
             flights_on_horizon=self._contact_timelines[contact_name].getPhaseIdx(self._flight_phases[contact_name]) 
             
             last_flight_idx=self._injection_node-1 # default to make things work
             if not len(flights_on_horizon)==0: # some flight phases are there
                 last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
             if last_flight_idx<self._injection_node: # allow injecting
+
+                # sanity checks on flight params
+                if self._flight_durations[contact_name]<self._flight_duration_min:
+                    self._flight_durations[contact_name]=self._flight_duration_min
+                if self._flight_durations[contact_name]>self._flight_duration_max:
+                    self._flight_durations[contact_name]=self._flight_duration_max
+                
+                if self._dhs[contact_name]<self._dh_min:
+                    self._dhs[contact_name]=self._dh_min
+                if self._dhs[contact_name]>self._dh_max:
+                    self._dhs[contact_name]=self._dh_max
+
+                if self._step_heights[contact_name]<self._step_height_min:
+                    self._step_heights[contact_name]=self._step_height_min
+                if self._step_heights[contact_name]>self._step_height_max:
+                    self._step_heights[contact_name]=self._step_height_max
+
+                # inject pos traj if pos mode
                 if self._ref_trjs[contact_name] is not None:
                     # recompute trajectory online (just needed if using pos traj)
                     starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
-                    self._ref_trjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.from_derivatives(self._flight_duration, 
+                    self._ref_trjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.from_derivatives(self._flight_durations[contact_name], 
                                                                             starting_pos, 
-                                                                            starting_pos+self._dh, 
-                                                                            self._step_height,
+                                                                            starting_pos+self._dhs[contact_name], 
+                                                                            self._step_heights[contact_name],
                         derivatives=self._traj_der,
-                        second_der=self._traj_second_der))
-                    for i in range(self._flight_duration):
+                        second_der=self._traj_second_der,
+                        third_der=self._third_traj_der)
+                        )
+                    for i in range(self._flight_durations[contact_name]):
                         res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
                             pos=self._injection_node+i, 
                             absolute_position=True)
                         phase_token.setItemReference(f'z_{contact_name}',
                             self._ref_trjs[contact_name][:, i])
+                
+                # inject vel traj if vel mode
                 if self._ref_vtrjs[contact_name] is not None:
-                    self._ref_vtrjs[contact_name][2, 0:self._flight_duration]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_duration, 
+                    self._ref_vtrjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_durations[contact_name], 
                                                                             0.0, 
-                                                                            0.0+self._dh, 
-                                                                            self._step_height,
+                                                                            0.0+self._dhs[contact_name], 
+                                                                            self._step_heights[contact_name],
                         derivatives=self._traj_der,
-                        second_der=self._traj_second_der))
-                    for i in range(self._flight_duration):
+                        second_der=self._traj_second_der,
+                        third_der=self._third_traj_der))
+                    for i in range(self._flight_durations[contact_name]):
                         res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
                             pos=self._injection_node+i, 
                             absolute_position=True)
