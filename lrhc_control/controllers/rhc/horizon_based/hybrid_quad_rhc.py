@@ -167,6 +167,8 @@ class HybridQuadRhc(RHController):
             step_height: float = 0.12,
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = 2.0,
+            vertical_landing: bool = False,
+            vertical_land_weight: float = 1.0,
             phase_force_reg: float = 1e-2,
             vel_bounds_weight: float = 1.0):
         
@@ -183,7 +185,7 @@ class HybridQuadRhc(RHController):
         self._vel_bounds_weight=vel_bounds_weight
         self._phase_force_reg=phase_force_reg
         self._yaw_vertical_weight=yaw_vertical_weight
-
+        self._vertical_land_weight=vertical_land_weight
         # overrides parent
         self._prb = Problem(self._n_intervals, 
                         receding=True, 
@@ -334,6 +336,8 @@ class HybridQuadRhc(RHController):
             self._injection_node,
             keep_yaw_vert=keep_yaw_vert,
             yaw_vertical_weight=self._yaw_vertical_weight,
+            vertical_landing=vertical_landing,
+            landing_vert_weight=self._vertical_land_weight,
             phase_force_reg=self._phase_force_reg,
             custom_opts=self._custom_opts,
             flight_duration=flight_duration,
