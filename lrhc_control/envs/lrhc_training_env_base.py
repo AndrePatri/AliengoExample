@@ -1389,6 +1389,7 @@ class LRhcTrainingEnvBase(ABC):
         self._rhc_refs.rob_refs.root_state.synch_all(read = True, retry = True)
         self._rhc_refs.contact_flags.synch_all(read = True, retry = True)
         self._rhc_refs.flight_info.synch_all(read = True, retry = True)
+        self._rhc_refs.flight_settings.synch_all(read = True, retry = True)
         self._rhc_refs.rob_refs.contact_pos.synch_all(read = True, retry = True)
         # rhc cost
         self._rhc_status.rhc_cost.synch_all(read = True, retry = True)
@@ -1416,6 +1417,7 @@ class LRhcTrainingEnvBase(ABC):
             self._rhc_refs.contact_flags.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_refs.rob_refs.contact_pos.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_refs.flight_info.synch_mirror(from_gpu=False,non_blocking=True)
+            self._rhc_refs.flight_settings.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.rhc_cost.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.rhc_constr_viol.synch_mirror(from_gpu=False,non_blocking=True)
             self._rhc_status.fails.synch_mirror(from_gpu=False,non_blocking=True)

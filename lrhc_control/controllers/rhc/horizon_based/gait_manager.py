@@ -185,14 +185,6 @@ class GaitManager:
                 c_ori = self._model.kd.fk(contact)(q=self._model.q)['ee_rot'][2, :]
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
-            
-            if self._is_open_loop: #we add a pos ref also for the contact
-                self._ref_trjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()])
-                init_z_foot = self._fk_contacts[contact](q=self._q0)['ee_pos'].elements()[2]
-                self._ref_trjs[contact][2, :] = np.atleast_2d(init_z_foot)
-                self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'z_{contact}'), 
-                    self._ref_trjs[contact][2, 0:1], 
-                    nodes=list(range(0, flight_phase_short_duration)))
                 
             self._flight_durations[contact]=self._flight_duration_default
             self._step_heights[contact]=self._step_height_default
