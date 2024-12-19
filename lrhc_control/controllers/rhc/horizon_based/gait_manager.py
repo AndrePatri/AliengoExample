@@ -197,8 +197,8 @@ class GaitManager:
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
             
-            if self._vertical_landing:
-                v_xy=self._fkd_contacts[contact](q=self._model.q, qdot=self._model.v)['ee_vel_linear']
+            if self._vertical_landing and self._touchdown_phases[contact] is not None:
+                v_xy=self._fkd_contacts[contact](q=self._model.q, qdot=self._model.v)['ee_vel_linear'][0:2]
                 vertical_landing=self.task_interface.prb.createResidual(f'{contact}_only_vert_v', 
                     self._landing_vert_weight * v_xy, 
                     nodes=[])
