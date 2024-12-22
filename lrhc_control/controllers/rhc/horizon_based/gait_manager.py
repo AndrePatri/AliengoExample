@@ -1,7 +1,6 @@
 import numpy as np
 
-from horizon_import import import_horizon_dependencies
-import_horizon_dependencies()
+from lrhc_control.controllers.rhc.horizon_based.horizon_imports import *
 
 from phase_manager import pymanager
 

@@ -2,8 +2,7 @@ from control_cluster_bridge.controllers.rhc import RHController
 # from perf_sleep.pyperfsleep import PerfSleep
 # from control_cluster_bridge.utilities.cpu_utils.core_utils import get_memory_usage
 
-from horizon_import import import_horizon_dependencies
-import_horizon_dependencies()
+from lrhc_control.controllers.rhc.horizon_based.horizon_imports import *
 from lrhc_control.controllers.rhc.horizon_based.hybrid_quad_rhc_refs import HybridQuadRhcRefs
 from lrhc_control.controllers.rhc.horizon_based.gait_manager import GaitManager
 
@@ -22,8 +21,6 @@ from typing import Dict, List
 import re
 
 class HybridQuadRhc(RHController):
-
-    def _import_aux_lib(self):
 
     def __init__(self, 
             srdf_path: str,
