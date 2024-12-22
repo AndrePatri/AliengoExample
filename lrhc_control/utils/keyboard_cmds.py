@@ -564,19 +564,19 @@ class AgentActionsFromKeyboard:
                 lin_v_cmd[2] = lin_v_cmd[2] + self.dvxyz
             if type=="twist_roll" and increment:
                 # rotate counter-clockwise
-                omega_cmd[0] = omega_cmd[0] + self._domega 
+                omega_cmd[0] = omega_cmd[0] + self.domega 
             if type=="twist_roll" and not increment:
-                omega_cmd[0] = omega_cmd[0] - self._domega 
+                omega_cmd[0] = omega_cmd[0] - self.domega 
             if type=="twist_pitch" and increment:
                 # rotate counter-clockwise
-                omega_cmd[1] = omega_cmd[1] + self._domega 
+                omega_cmd[1] = omega_cmd[1] + self.domega 
             if type=="twist_pitch" and not increment:
-                omega_cmd[1] = omega_cmd[1] - self._domega 
+                omega_cmd[1] = omega_cmd[1] - self.domega 
             if type=="twist_yaw" and increment:
                 # rotate counter-omega_cmd
-                omega_cmd[2] = omega_cmd[2] + self._domega 
+                omega_cmd[2] = omega_cmd[2] + self.domega 
             if type=="twist_yaw" and not increment:
-                omega_cmd[2] = omega_cmd[2] - self._domega 
+                omega_cmd[2] = omega_cmd[2] - self.domega 
         else:
             if "twist" in type:
                 omega_cmd[:]=0
