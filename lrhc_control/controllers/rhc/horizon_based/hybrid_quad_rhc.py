@@ -88,7 +88,7 @@ class HybridQuadRhc(RHController):
             "fully_closed": False, # closed loop with full feedback (just for db)
             "closed_partial": False, # closed loop with partial feedback
             "adaptive_is": True, # closed loop with adaptation
-            "estimate_v_root": True, # when adaptive_is or closed_partial, estimate vbase
+            "estimate_v_root": False, # when adaptive_is or closed_partial, estimate vbase
             "alpha_from_outside": False, # alpha set ext. from shared memory
             "alpha_half": 1.0, 
             "only_vel_wheels": True # whether wheels (if present) are just vel controlled
