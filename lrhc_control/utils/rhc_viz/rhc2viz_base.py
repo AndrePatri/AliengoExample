@@ -518,7 +518,7 @@ class RhcToVizBridgeBase(ABC):
             rhc_ref_twist_h = rhc_ref_twist.copy().reshape(-1, 1)
             # using orientaton q (remapped to horizon's and rviz convetions) internal to the controller
             # (this HAS to match inside the controller!)
-            rhc_q_cmd=self.rhc_cmds.root_state.get(data_type="q",robot_idxs=self._current_index).reshape(-1, 1)
+            rhc_q_cmd=self.robot_state.root_state.get(data_type="q",robot_idxs=self._current_index).reshape(-1, 1)
             hor2w_frame(t_h=rhc_ref_twist.reshape(-1, 1), 
                         q_b=rhc_q_cmd, 
                         t_out=rhc_ref_twist_h)

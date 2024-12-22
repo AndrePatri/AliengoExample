@@ -67,6 +67,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_flight_info=True
         self._use_pos_control=False
         self._add_rhc_cmds_to_obs=True
+
+        self._add_CoT_reward=False
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -230,7 +232,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     n_demo_envs_perc=n_demo_envs_perc)
 
         self._is_substep_rew[0]=False
-        # self._is_substep_rew[1]=True
+        if self._add_CoT_reward:
+            self._is_substep_rew[1]=True
 
         # custom db info 
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=False)
@@ -739,17 +742,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # sub_rewards[:, 0:1] = self._task_offset-self._task_scale*task_error
 
     def _compute_substep_rewards(self):
+        
+        if self._add_CoT_reward:
+            jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
+            jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
+            agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
+            ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
+            CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=False)
+            self._substep_rewards[:, 1:2] = self._power_offset*torch.exp(-self._power_scale*CoT)
 
-        task_error_fun = self._task_err_lin
-        if self._use_perc_error:
-            task_error_fun = self._task_perc_err_lin
-            
-        # jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
-        # jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
-        # agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
-        # ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
         # # weighted_mech_power=self._drained_mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort)
-        # CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=False)
+        
         # # fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
         # # if self._use_rhc_avrg_vel_pred:
         # #     agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
@@ -762,7 +765,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # #     self._substep_rewards[:, 1:2] = self._task_pred_offset*torch.exp(-self._task_pred_scale*task_pred_error)
 
         # # self._substep_rewards[:, 1:2] =self._power_offset-self._power_scale*CoT
-        # self._substep_rewards[:, 1:2] = self._power_offset*torch.exp(-self._power_scale*CoT)
+        
         # # self._substep_rewards[:, 3:4] = self._jnt_vel_offset - self._jnt_vel_scale * weighted_jnt_vel
         # # self._substep_rewards[:, 4:5] = self._rhc_fail_idx_offset - self._rhc_fail_idx_rew_scale* self._rhc_fail_idx(gpu=self._use_gpu)
         # # self._substep_rewards[:, 1:2] = -fail_idx # health reward
@@ -905,10 +908,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def _get_rewards_names(self):
 
-        n_rewards = 1
-        reward_names = [""] * n_rewards
-
-        reward_names[0] = "task_error"
+        reward_names = []
+        reward_names.append("task_error")
+        if self._add_CoT_reward:
+            reward_names.append("CoT")
         # reward_names[1] = "health"
         # reward_names[1] = "task_pred_error"
 

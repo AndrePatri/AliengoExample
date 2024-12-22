@@ -88,6 +88,7 @@ class HybridQuadRhc(RHController):
             "fully_closed": False, # closed loop with full feedback (just for db)
             "closed_partial": False, # closed loop with partial feedback
             "adaptive_is": True, # closed loop with adaptation
+            "estimate_v_root": False, # when adaptive_is or closed_partial, estimate vbase
             "alpha_from_outside": False, # alpha set ext. from shared memory
             "alpha_half": 1.0, 
             "only_vel_wheels": True # whether wheels (if present) are just vel controlled
@@ -149,12 +150,12 @@ class HybridQuadRhc(RHController):
 
         self._alphas_q_root=np.zeros((7, 1), dtype=self._dtype)
         self._alphas_q_jnts=np.zeros((self._nq_jnts, 1), dtype=self._dtype)
-        self._alphas_v_root=np.zeros((6, 1), dtype=self._dtype)
+        self._alphas_twist_root=np.zeros((6, 1), dtype=self._dtype)
         self._alphas_v_jnts=np.zeros((self._nv_jnts, 1), dtype=self._dtype)
         self._alphas_a=np.zeros((self._nv, 1), dtype=self._dtype)
         self._alphas_q_root[:, :]=1.0 # default to all open
         self._alphas_q_jnts[:, :]=1.0 
-        self._alphas_v_root[:, :]=1.0 
+        self._alphas_twist_root[:, :]=1.0 
         self._alphas_v_jnts[:, :]=1.0 
         self._alphas_a[:, :]=1.0
 
@@ -167,6 +168,8 @@ class HybridQuadRhc(RHController):
             step_height: float = 0.12,
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = 2.0,
+            vertical_landing: bool = False,
+            vertical_land_weight: float = 1.0,
             phase_force_reg: float = 1e-2,
             vel_bounds_weight: float = 1.0):
         
@@ -183,7 +186,7 @@ class HybridQuadRhc(RHController):
         self._vel_bounds_weight=vel_bounds_weight
         self._phase_force_reg=phase_force_reg
         self._yaw_vertical_weight=yaw_vertical_weight
-
+        self._vertical_land_weight=vertical_land_weight
         # overrides parent
         self._prb = Problem(self._n_intervals, 
                         receding=True, 
@@ -334,6 +337,8 @@ class HybridQuadRhc(RHController):
             self._injection_node,
             keep_yaw_vert=keep_yaw_vert,
             yaw_vertical_weight=self._yaw_vertical_weight,
+            vertical_landing=vertical_landing,
+            landing_vert_weight=self._vertical_land_weight,
             phase_force_reg=self._phase_force_reg,
             custom_opts=self._custom_opts,
             flight_duration=flight_duration,
@@ -842,7 +847,10 @@ class HybridQuadRhc(RHController):
         root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
         root_p_from_rhc=root_q_full_from_rhc[0:3, :]
         p_root[:, :]=root_p_from_rhc # position is always open loop
-
+        if not self._custom_opts["estimate_v_root"]:
+            v_root[:, :]=self._get_root_twist_from_sol(node_idx=1)[:, 0:3].reshape(-1, 1)
+            # override v jnts with the ones from controller
+            v_jnts[:, :]=self._get_jnt_v_from_sol(node_idx=1).reshape(-1, 1)
         # root_twist_from_rhc=self._get_root_twist_from_sol(node_idx=1)
         # root_v_from_rhc=root_twist_from_rhc[:, 0:3].reshape(-1, 1)
         # root_omega_from_rhc=root_twist_from_rhc[:, 3:6].reshape(-1, 1)
@@ -869,8 +877,12 @@ class HybridQuadRhc(RHController):
             ub=q_root, nodes=0)
         jnts_q_rhc.setBounds(lb=q_jnts, 
             ub=q_jnts, nodes=0)
-        root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
-            ub=self._v_inf[0:3], nodes=0) # leaving lin v of the base free (estimated from constraints)
+        if self._custom_opts["estimate_v_root"]:
+            root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
+                ub=self._v_inf[0:3], nodes=0) # leaving lin v of the base free (estimated from constraints)
+        else: # get it from controller 
+            root_v_rhc.setBounds(lb=v_root, 
+                ub=v_root, nodes=0)
         root_omega_rhc.setBounds(lb=omega, 
             ub=omega, nodes=0)
         jnts_v_rhc.setBounds(lb=v_jnts, 
@@ -918,6 +930,7 @@ class HybridQuadRhc(RHController):
         root_q_delta=self.rhc_pred_delta.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
         jnt_q_delta=self.rhc_pred_delta.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
         jnt_v_delta=self.rhc_pred_delta.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
+        v_root_delta = self.rhc_pred_delta.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
         omega_root_delta = self.rhc_pred_delta.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
         a_root_delta = self.rhc_pred_delta.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
 
@@ -928,7 +941,10 @@ class HybridQuadRhc(RHController):
         if self._custom_opts["alpha_from_outside"]:
             alpha_now=self.rhc_refs.get_alpha()
         else: # "autotuned" alpha
-            delta=np.max(np.abs(jnt_v_delta))
+            if self._custom_opts["estimate_v_root"]: # we copmute delta based on jnt v (since we use meas.)
+                delta=np.max(np.abs(jnt_v_delta))
+            else:
+                delta=np.max(np.abs(omega_root_delta))
             # fail_idx=self._get_failure_index()
             # fail_idx=self._get_explosion_idx()/self._fail_idx_thresh
             alpha_now=(np.tanh(2*self._alpha_half*(delta-self._alpha_half))+1)/2.0
@@ -939,15 +955,18 @@ class HybridQuadRhc(RHController):
 
         self._alphas_q_root[:]=alpha_now # for now single alpha for everything
         self._alphas_q_jnts[:]=alpha_now
-        self._alphas_v_root[:]=alpha_now
+        self._alphas_twist_root[:]=alpha_now
         self._alphas_v_jnts[:]=alpha_now
         self._alphas_a[:]=alpha_now
+        if not self._custom_opts["estimate_v_root"]:
+            self._alphas_twist_root[0:3]=1.0 # open
+            self._alphas_v_jnts[:]=1.0 # open
 
         # position is always open loop
         root_q_full_from_rhc=self._get_root_full_q_from_sol(node_idx=1).reshape(-1, 1)
         root_p_from_rhc=root_q_full_from_rhc[0:3, :]
         p_root[:, :]=root_p_from_rhc 
-
+    
         # expaning meas q if continuous joints
         if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
             self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
@@ -980,10 +999,14 @@ class HybridQuadRhc(RHController):
             ub=q_root+self._alphas_q_root[3:7]*root_q_delta, nodes=0)
         jnts_q_rhc.setBounds(lb=q_jnts+self._alphas_q_jnts*jnt_q_delta, 
             ub=q_jnts+self._alphas_q_jnts*jnt_q_delta, nodes=0)
-        root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
-            ub=self._v_inf[0:3], nodes=0)
-        root_omega_rhc.setBounds(lb=omega+self._alphas_v_root[3:6, :]*omega_root_delta, 
-            ub=omega+self._alphas_v_root[3:6, :]*omega_root_delta, nodes=0)
+        if self._custom_opts["estimate_v_root"]:
+            root_v_rhc.setBounds(lb=-self._v_inf[0:3], 
+                ub=self._v_inf[0:3], nodes=0)
+        else:
+            root_v_rhc.setBounds(lb=v_root+self._alphas_twist_root[0:3, :]*v_root_delta, 
+                ub=v_root+self._alphas_twist_root[0:3, :]*v_root_delta, nodes=0)
+        root_omega_rhc.setBounds(lb=omega+self._alphas_twist_root[3:6, :]*omega_root_delta, 
+            ub=omega+self._alphas_twist_root[3:6, :]*omega_root_delta, nodes=0)
         jnts_v_rhc.setBounds(lb=v_jnts+self._alphas_v_jnts*jnt_v_delta, 
             ub=v_jnts+self._alphas_v_jnts*jnt_v_delta, nodes=0)
         if self._custom_opts["lin_a_feedback"]:

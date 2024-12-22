@@ -17,6 +17,8 @@ class GaitManager:
             injection_node: int = None,
             keep_yaw_vert: bool = False,
             yaw_vertical_weight: float = None,
+            vertical_landing: bool = False,
+            landing_vert_weight: float = None,
             phase_force_reg: float = None,
             flight_duration: int = 15,
             post_flight_stance: int = 3,
@@ -40,6 +42,8 @@ class GaitManager:
 
         self._keep_yaw_vert=keep_yaw_vert
         self._yaw_vertical_weight=yaw_vertical_weight
+        self._vertical_landing=vertical_landing
+        self._landing_vert_weight=landing_vert_weight
         self._phase_force_reg=phase_force_reg
         self._total_weight = np.atleast_2d(np.array([0, 0, self._kin_dyn.mass() * 9.81])).T 
         
@@ -65,6 +69,7 @@ class GaitManager:
         self.timeline_names=[]
 
         self._flight_phases = {}
+        self._touchdown_phases = {}
         self._contact_phases = {}
         self._fk_contacts = {}
         self._fkd_contacts = {}
@@ -127,7 +132,7 @@ class GaitManager:
             # flights
             self._flight_phases[contact]=self._contact_timelines[contact].createPhase(flight_phase_short_duration, 
                                     f'flight_{contact}_short')
-            
+
             # ref traj for contacts
             self._ref_trjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()]) # allocate traj
             # of max length eual to number of nodes
@@ -167,6 +172,7 @@ class GaitManager:
                 self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'z_{contact}'), 
                     self._ref_trjs[contact][2, 0:1], 
                     nodes=list(range(0, flight_phase_short_duration)))
+                self._touchdown_phases[contact]=None
             else: # foot traj in velocity
                 # ref vel traj
                 self._ref_vtrjs[contact]=np.zeros(shape=[7, self.task_interface.prb.getNNodes()]) # allocate traj
@@ -175,6 +181,11 @@ class GaitManager:
                 self._flight_phases[contact].addItemReference(self.task_interface.getTask(f'vz_{contact}'), 
                     self._ref_vtrjs[contact][2, 0:1], 
                     nodes=list(range(0, flight_phase_short_duration)))
+                self._touchdown_phases[contact]=self._contact_timelines[contact].createPhase(flight_phase_short_duration, 
+                                    f'touchdown_{contact}_short')
+                # self._touchdown_phases[contact].addItemReference(self.task_interface.getTask(f'vz_{contact}'), 
+                #     self._ref_vtrjs[contact][2, 0:1], 
+                #     nodes=list(range(0, flight_phase_short_duration)))
             
             # ee_vel=self._fkd_contacts[contact](q=self._model.q, 
             #             qdot=self._model.v)['ee_vel_linear']
@@ -185,7 +196,14 @@ class GaitManager:
                 c_ori = self._model.kd.fk(contact)(q=self._model.q)['ee_rot'][2, :]
                 cost_ori = self.task_interface.prb.createResidual(f'{contact}_ori', self._yaw_vertical_weight * (c_ori.T - np.array([0, 0, 1])))
                 # flight_phase.addCost(cost_ori, nodes=list(range(0, flight_duration+post_landing_stance)))
-                
+            
+            if self._vertical_landing and self._touchdown_phases[contact] is not None:
+                v_xy=self._fkd_contacts[contact](q=self._model.q, qdot=self._model.v)['ee_vel_linear'][0:2]
+                vertical_landing=self.task_interface.prb.createResidual(f'{contact}_only_vert_v', 
+                    self._landing_vert_weight * v_xy, 
+                    nodes=[])
+                self._touchdown_phases[contact].addCost(vertical_landing, nodes=list(range(0, short_stance_duration)))
+
             self._flight_durations[contact]=self._flight_duration_default
             self._step_heights[contact]=self._step_height_default
             self._dhs[contact]=self._dh_default
@@ -273,9 +291,9 @@ class GaitManager:
                     # recompute trajectory online (just needed if using pos traj)
                     starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
                     self._ref_trjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.from_derivatives(self._flight_durations[contact_name], 
-                                                                            starting_pos, 
-                                                                            starting_pos+self._dhs[contact_name], 
-                                                                            self._step_heights[contact_name],
+                                                                            p_start=starting_pos, 
+                                                                            p_goal=starting_pos+self._dhs[contact_name], 
+                                                                            clearance=self._step_heights[contact_name],
                         derivatives=self._traj_der,
                         second_der=self._traj_second_der,
                         third_der=self._third_traj_der)
@@ -286,13 +304,18 @@ class GaitManager:
                             absolute_position=True)
                         phase_token.setItemReference(f'z_{contact_name}',
                             self._ref_trjs[contact_name][:, i])
-                
+                    if self._touchdown_phases[contact_name] is not None:
+                        # add touchdown phase for forcing vertical landing
+                        res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
+                                pos=self._injection_node+self._flight_durations[contact_name], 
+                                absolute_position=True)                
+                        
                 # inject vel traj if vel mode
                 if self._ref_vtrjs[contact_name] is not None:
                     self._ref_vtrjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_durations[contact_name], 
-                                                                            0.0, 
-                                                                            0.0+self._dhs[contact_name], 
-                                                                            self._step_heights[contact_name],
+                                                                            p_start=0.0, 
+                                                                            p_goal=0.0+self._dhs[contact_name], 
+                                                                            clearance=self._step_heights[contact_name],
                         derivatives=self._traj_der,
                         second_der=self._traj_second_der,
                         third_der=self._third_traj_der))
@@ -302,7 +325,11 @@ class GaitManager:
                             absolute_position=True)
                         phase_token.setItemReference(f'vz_{contact_name}',
                             self._ref_vtrjs[contact_name][2:3, i:i+1])
-                
+                    if self._touchdown_phases[contact_name] is not None:
+                        # add touchdown phase for forcing vertical landing
+                        res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
+                                pos=self._injection_node+self._flight_durations[contact_name], 
+                                absolute_position=True)                
         else:
             Journal.log(self.__class__.__name__,
                 "add_flight",
