@@ -13,6 +13,9 @@ from abc import abstractmethod
 
 class LRhcClusterClient(ControlClusterClient):
     
+    def _import_aux_libs(self):
+        super()._import_aux_libs()
+        
     def __init__(self, 
             namespace: str, 
             urdf_xacro_path: str,
