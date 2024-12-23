@@ -1,13 +1,3 @@
-"""
-Dynamically import all necessary Horizon and related dependencies.
-This function is intended to be used within the import_child_lib method
-of a class, enabling the parent process to load all required libraries.
-"""
-# Global imports to make modules accessible in child processes
-global casadi_kin_dyn, cs, kd, Problem, FullModelInverseDynamics
-global TaskInterface, VertexContact, ContactTask, trajectoryGenerator, utils
-global pymanager, pyphase, pytimeline
-
 # robot modeling and automatic differentiation
 import casadi_kin_dyn.py3casadi_kin_dyn as casadi_kin_dyn
 import casadi as cs

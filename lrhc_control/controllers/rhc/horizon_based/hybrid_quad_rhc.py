@@ -3,6 +3,7 @@ from control_cluster_bridge.controllers.rhc import RHController
 # from control_cluster_bridge.utilities.cpu_utils.core_utils import get_memory_usage
 
 from lrhc_control.controllers.rhc.horizon_based.horizon_imports import *
+
 from lrhc_control.controllers.rhc.horizon_based.hybrid_quad_rhc_refs import HybridQuadRhcRefs
 from lrhc_control.controllers.rhc.horizon_based.gait_manager import GaitManager
 

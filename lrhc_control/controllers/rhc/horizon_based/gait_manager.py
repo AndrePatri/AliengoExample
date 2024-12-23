@@ -2,8 +2,6 @@ import numpy as np
 
 from lrhc_control.controllers.rhc.horizon_based.horizon_imports import *
 
-from phase_manager import pymanager
-
 from EigenIPC.PyEigenIPC import VLevel
 from EigenIPC.PyEigenIPC import Journal, LogType
 
