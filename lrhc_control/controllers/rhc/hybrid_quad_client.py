@@ -8,6 +8,12 @@ from typing import List, Dict
 
 class HybridQuadrupedClusterClient(LRhcClusterClient):
     
+    def _import_aux_libs(self):
+        super()._import_aux_libs()
+        # Import Horizon and related dependencies as global libs
+        from lrhc_control.controllers.rhc.horizon_based.horizon_imports_glob import import_horizon_global
+        import_horizon_global()
+        
     def __init__(self, 
             namespace: str, 
             urdf_xacro_path: str,

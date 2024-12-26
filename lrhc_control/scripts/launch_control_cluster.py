@@ -61,8 +61,8 @@ if __name__ == "__main__":
     if args.no_mp_fork: # this needs to be in the main
         mp.set_start_method('spawn')
     else:
-        mp.set_start_method('forkserver')
-        # mp.set_start_method('fork')
+        # mp.set_start_method('forkserver')
+        mp.set_start_method('fork')
         
     cluster_module=importlib.import_module(args.cluster_client_fname)
     # Get all classes defined in the module
