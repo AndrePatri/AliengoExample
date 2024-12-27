@@ -203,9 +203,12 @@ class SActorCriticAlgoBase(ABC):
             pass
 
         use_torch_compile=False
-        if "use_torch_compile" in self._hyperparameters["use_torch_compile"] and \
-            self._hyperparameters["use_torch_compile"]:
-            use_torch_compile=True
+        try:
+            if self._hyperparameters["use_torch_compile"]:
+                use_torch_compile=True
+        except:
+            pass
+        
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     obs_ub=self._env.get_obs_ub().flatten().tolist(),
                     obs_lb=self._env.get_obs_lb().flatten().tolist(),
