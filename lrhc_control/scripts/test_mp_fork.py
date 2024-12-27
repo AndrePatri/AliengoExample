@@ -29,16 +29,16 @@ if __name__ == "__main__":
     n = 100  # Number of child processes
     
     class Prova():
-	    def __init__(self):
-	    	a=1
-	    def import_aux(self):
-	    	before=get_memory_usage()
-	    	global np
-	    	import numpy as np
-	    	time.sleep(1)
-	    	after=get_memory_usage()
-	    	print(f"np weights {after-before}")
-    
+        def __init__(self):
+            a=1
+        def import_aux(self):
+            before=get_memory_usage()
+            global np
+            import numpy as np
+            time.sleep(1)
+            after=get_memory_usage()
+            print(f"np weights {after-before}")
+
     pr=Prova()
     pr.import_aux()
     a=np.zeros((2, 1))
