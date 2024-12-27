@@ -32,7 +32,10 @@ class SACAgent(nn.Module):
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,
-            n_hidden_layers_critic:int=4):
+            n_hidden_layers_critic:int=4,
+            torch_compile: bool = False):
+
+        self._use_torch_compile=torch_compile
 
         super().__init__()
 
@@ -144,6 +147,14 @@ class SACAgent(nn.Module):
                                     freeze_stats=is_eval,
                                     debug=self._debug)
             self.running_norm.type(dtype) # ensuring correct dtype for whole module
+
+        if self._use_torch_compile:
+            self.actor = th.compile(self.actor)
+            self.qf1 = th.compile(self.qf1)
+            self.qf2 = th.compile(self.qf2)
+            self.qf1_target = th.compile(self.qf1_target)
+            self.qf2_target = th.compile(self.qf2_target)
+            self.running_norm=th.compile(self.running_norm)
 
         msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}]\
         and critic [{layer_width_critic}, {n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
@@ -281,6 +292,7 @@ class CriticQ(nn.Module):
         self._q_net = nn.Sequential(*layers)
         self._q_net.to(self._torch_device).type(self._torch_dtype)
 
+    @torch.compiler.disable(recursive=False)
     def get_n_params(self):
         return sum(p.numel() for p in self.parameters())
 
@@ -390,6 +402,7 @@ class Actor(nn.Module):
         self.fc_mean.to(device=self._torch_device, dtype=self._torch_dtype)
         self.fc_logstd.to(device=self._torch_device, dtype=self._torch_dtype)
 
+    @torch.compiler.disable(recursive=False)
     def get_n_params(self):
         return sum(p.numel() for p in self.parameters())
     
