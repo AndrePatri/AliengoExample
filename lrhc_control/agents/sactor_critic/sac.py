@@ -381,7 +381,9 @@ class Actor(nn.Module):
         self.fc_logstd = llayer_init(nn.Linear(layer_width, self._actions_dim), 
                         init_type="uniform",
                         device=self._torch_device, 
-                        dtype=self._torch_dtype)
+                        dtype=self._torch_dtype,
+                        bias_const=-1.0 # for encouraging exploration
+                        )
 
         # Move all components to the specified device and dtype
         self._fc12.to(device=self._torch_device, dtype=self._torch_dtype)
