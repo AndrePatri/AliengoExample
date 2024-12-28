@@ -1,6 +1,6 @@
 import torch
 import math
-from torch.nn.utils.parametrizations import weight_norm                    
+from torch.nn.utils import weight_norm                    
 
 def llayer_init(layer, 
     init_type=None,

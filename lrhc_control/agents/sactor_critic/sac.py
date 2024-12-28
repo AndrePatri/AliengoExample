@@ -379,8 +379,8 @@ class Actor(nn.Module):
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
                     device=self._torch_device, 
-                    dtype=self._torch_dtype),
-                    add_weight_norm=add_weight_norm,
+                    dtype=self._torch_dtype,
+                    add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
         for _ in range(n_hidden_layers - 1):
             layers.extend([
@@ -389,8 +389,8 @@ class Actor(nn.Module):
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
                     device=self._torch_device,
-                    dtype=self._torch_dtype),
-                    add_weight_norm=add_weight_norm,
+                    dtype=self._torch_dtype,
+                    add_weight_norm=add_weight_norm),
                 nn.LeakyReLU(negative_slope=self._lrelu_slope)
             ])
         
