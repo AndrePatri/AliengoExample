@@ -828,15 +828,15 @@ class HybridQuadRhc(RHController):
     def _set_is_partial(self):
         
         # measurements
-        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
-        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
+        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index_np).reshape(-1, 1)
         
-        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
+        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index_np).reshape(-1, 1)
 
         if (not len(self._continuous_joints)==0): # we need do expand some meas. rev jnts to So2
             self._jnts_q_expanded[self._rev_joints_idxs, :]=q_jnts[self._rev_joints_idxs_red ,:]
@@ -905,15 +905,15 @@ class HybridQuadRhc(RHController):
     def _set_is_adaptive(self):
         
         # measurements
-        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index).reshape(-1, 1)
-        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
+        p_root = self.robot_state.root_state.get(data_type="p", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        q_root = self.robot_state.root_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        v_root = self.robot_state.root_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        omega = self.robot_state.root_state.get(data_type="omega", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        a_root = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index_np).reshape(-1, 1)
         
-        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index).reshape(-1, 1)
+        q_jnts = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        v_jnts = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        a_jnts = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index_np).reshape(-1, 1)
             
         # rhc variables to be set
         q=self._prb.getVariables("q") # .setBounds()
@@ -928,12 +928,12 @@ class HybridQuadRhc(RHController):
         lin_a_prb=acc[0:3] # lin acc
         
         # getting prediction defects
-        root_q_delta=self.rhc_pred_delta.root_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        jnt_q_delta=self.rhc_pred_delta.jnts_state.get(data_type="q", robot_idxs=self.controller_index).reshape(-1, 1)
-        jnt_v_delta=self.rhc_pred_delta.jnts_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        v_root_delta = self.rhc_pred_delta.root_state.get(data_type="v", robot_idxs=self.controller_index).reshape(-1, 1)
-        omega_root_delta = self.rhc_pred_delta.root_state.get(data_type="omega", robot_idxs=self.controller_index).reshape(-1, 1)
-        a_root_delta = self.rhc_pred_delta.root_state.get(data_type="a_full", robot_idxs=self.controller_index).reshape(-1, 1)
+        root_q_delta=self.rhc_pred_delta.root_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        jnt_q_delta=self.rhc_pred_delta.jnts_state.get(data_type="q", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        jnt_v_delta=self.rhc_pred_delta.jnts_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        v_root_delta = self.rhc_pred_delta.root_state.get(data_type="v", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        omega_root_delta = self.rhc_pred_delta.root_state.get(data_type="omega", robot_idxs=self.controller_index_np).reshape(-1, 1)
+        a_root_delta = self.rhc_pred_delta.root_state.get(data_type="a_full", robot_idxs=self.controller_index_np).reshape(-1, 1)
 
         # close state on known quantities, estimate some (e.g. lin vel) and
         # open loop if thing start to explode
@@ -1026,15 +1026,15 @@ class HybridQuadRhc(RHController):
     def _compute_pred_delta(self):
         
         # measurements
-        q_full_root_meas = self.robot_state.root_state.get(data_type="q_full", robot_idxs=self.controller_index)
-        twist_root_meas = self.robot_state.root_state.get(data_type="twist", robot_idxs=self.controller_index)
-        a_root_meas = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index)
-        g_vec_root_meas = self.robot_state.root_state.get(data_type="gn", robot_idxs=self.controller_index)
+        q_full_root_meas = self.robot_state.root_state.get(data_type="q_full", robot_idxs=self.controller_index_np)
+        twist_root_meas = self.robot_state.root_state.get(data_type="twist", robot_idxs=self.controller_index_np)
+        a_root_meas = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index_np)
+        g_vec_root_meas = self.robot_state.root_state.get(data_type="gn", robot_idxs=self.controller_index_np)
 
-        q_jnts_meas = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index)
-        v_jnts_meas = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index)
-        a_jnts_meas = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index)
-        eff_jnts_meas = self.robot_state.jnts_state.get(data_type="eff", robot_idxs=self.controller_index)
+        q_jnts_meas = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index_np)
+        v_jnts_meas = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index_np)
+        a_jnts_meas = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index_np)
+        eff_jnts_meas = self.robot_state.jnts_state.get(data_type="eff", robot_idxs=self.controller_index_np)
 
         # prediction from rhc 
         delta_root_q_full=self._get_root_full_q_from_sol(node_idx=1)-q_full_root_meas

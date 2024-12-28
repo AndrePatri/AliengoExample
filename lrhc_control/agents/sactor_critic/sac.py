@@ -431,10 +431,8 @@ if __name__ == "__main__":
     dummy_obs = torch.full(size=(2, 5),dtype=torch.float32,device=device,fill_value=0) 
 
     sofqn = CriticQ(obs_dim=5,actions_dim=3,
-            norm_obs=True,
             device=device,
-            dtype=torch.float32,
-            is_eval=False)
+            dtype=torch.float32)
     
     print("Db prints Q")
     print(f"N. params: {sofqn.get_n_params()}")
@@ -445,11 +443,13 @@ if __name__ == "__main__":
 
     actor = Actor(obs_dim=5,actions_dim=3,
             actions_lb=[-1.0, -1.0, -1.0],actions_ub=[1.0, 1.0, 1.0],
-            norm_obs=True,
             device=device,
-            dtype=torch.float32,
-            is_eval=False)
+            dtype=torch.float32)
     
+    # Print the biases of the log_std layer
+    print("Log_std Biases:")
+    print(actor.fc_logstd.bias)  # Access the biases of the log_std layer
+
     print("Db prints Actor")
     print(f"N. params: {actor.get_n_params()}")
     output=actor.forward(x=dummy_obs)
