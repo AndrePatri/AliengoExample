@@ -1,5 +1,6 @@
 import torch
 import math
+from torch.nn.utils.parametrizations import weight_norm                    
 
 def llayer_init(layer, 
     init_type=None,
@@ -8,7 +9,8 @@ def llayer_init(layer,
     bias_const=0.0,
     device: str = "cuda",
     dtype = torch.float32,
-    uniform_biases: bool = False):
+    uniform_biases: bool = False,
+    add_weight_norm: bool = False):
 
         # Move to device and set dtype
         layer.to(device).type(dtype)
@@ -32,7 +34,12 @@ def llayer_init(layer,
             elif init_type == "kaiming_uniform":
                 torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity=nonlinearity, a=a_leaky_relu, mode='fan_in')
                 torch.nn.init.constant_(layer.bias, bias_const)
+            elif init_type == "default":
+                pass
             else:
                 raise ValueError(f"Unsupported init_type: {init_type}")
+
+        if add_weight_norm:
+            layer = weight_norm(layer)
 
         return layer

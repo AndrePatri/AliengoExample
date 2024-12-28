@@ -203,12 +203,13 @@ class SActorCriticAlgoBase(ABC):
             pass
 
         use_torch_compile=False
-        try:
-            if self._hyperparameters["use_torch_compile"]:
-                use_torch_compile=True
-        except:
-            pass
-        
+        add_weight_norm=False
+        if "use_torch_compile" in self._hyperparameters and \
+            self._hyperparameters["use_torch_compile"]:
+            use_torch_compile=True
+        if "add_weight_norm" in self._hyperparameters and \
+            self._hyperparameters["add_weight_norm"]:
+            add_weight_norm=True
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     obs_ub=self._env.get_obs_ub().flatten().tolist(),
                     obs_lb=self._env.get_obs_lb().flatten().tolist(),
@@ -226,7 +227,8 @@ class SActorCriticAlgoBase(ABC):
                     layer_width_critic=layer_width_critic,
                     n_hidden_layers_actor=n_hidden_layers_actor,
                     n_hidden_layers_critic=n_hidden_layers_critic,
-                    torch_compile=use_torch_compile)
+                    torch_compile=use_torch_compile,
+                    add_weight_norm=)
 
         if self._agent.running_norm is not None:
             # some db data for the agent
