@@ -37,6 +37,7 @@ if __name__ == "__main__":
         help='Performance hreshold above which demonstration envs should be deactivated.')
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
     parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
+    parser.add_argument('--add_weight_norm',action='store_true', help='Whether to add weight normalization to agent llayers')
     parser.add_argument('--use_cer',action='store_true', help='Whether to use combined experience replay (not tested)')
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
