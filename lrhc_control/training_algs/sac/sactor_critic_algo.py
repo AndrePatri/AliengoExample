@@ -228,7 +228,7 @@ class SActorCriticAlgoBase(ABC):
                     n_hidden_layers_actor=n_hidden_layers_actor,
                     n_hidden_layers_critic=n_hidden_layers_critic,
                     torch_compile=use_torch_compile,
-                    add_weight_norm=)
+                    add_weight_norm=add_weight_norm)
 
         if self._agent.running_norm is not None:
             # some db data for the agent
@@ -390,7 +390,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 8192
+        self._batch_size = 16392
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
@@ -405,7 +405,7 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
 
         self._lr_policy = 1e-3
-        self._lr_q = 5e-4
+        self._lr_q = 1e-3
 
         self._discount_factor = 0.995
         self._smoothing_coeff = 0.005
