@@ -15,16 +15,19 @@ class HybridQuadRhcRefs(RhcRefs):
 
     def __init__(self, 
             gait_manager: GaitManager, 
-            robot_index: int,
+            robot_index_shm: int,
+            robot_index_view: int,
             namespace: str, # namespace used for shared mem
             verbose: bool = True,
             vlevel: bool = VLevel.V2,
             safe: bool = True,
             use_force_feedback: bool = False,
-            use_fixed_flights: bool = False):
+            use_fixed_flights: bool = False,
+            optimize_mem: bool = False):
         
-        self.robot_index = robot_index
-        self.robot_index_np = np.array(self.robot_index)
+        self.robot_index = robot_index_shm
+        self.robot_index_view = robot_index_view
+        self.robot_index_np_view = np.array(self.robot_index_view)
 
         self._step_idx = 0
         self._print_frequency = 100
@@ -34,14 +37,28 @@ class HybridQuadRhcRefs(RhcRefs):
         self._use_force_feedback=use_force_feedback
         self._use_fixed_flights=use_fixed_flights
 
-        super().__init__( 
+        if optimize_mem:
+            super().__init__( 
+                    is_server=False,
+                    with_gpu_mirror=False,
+                    namespace=namespace,
+                    safe=safe,
+                    verbose=verbose,
+                    vlevel=vlevel,
+                    optimize_mem=optimize_mem,
+                    n_robots=1, # we just need the row corresponding to this controller
+                    n_jnts=None, # got from server
+                    n_contacts=None # got from server
+                    )
+        else:
+            super().__init__( 
                 is_server=False,
                 with_gpu_mirror=False,
                 namespace=namespace,
                 safe=safe,
                 verbose=verbose,
                 vlevel=vlevel)
-
+            
         if not isinstance(gait_manager, GaitManager):
             exception = f"Provided gait_manager argument should be of GaitManager type!"
             Journal.log(self.__class__.__name__,
@@ -93,19 +110,20 @@ class HybridQuadRhcRefs(RhcRefs):
         for i in range(self.n_contacts()):
             self.flight_settings.set(data=self.gait_manager.get_flight_duration(contact_name=contact_names[i]),
                 data_type="len",
-                robot_idxs=self.robot_index,
+                robot_idxs=self.robot_index_np_view,
                 contact_idx=i)
             self.flight_settings.set(data=self.gait_manager.get_step_apexdh(contact_name=contact_names[i]),
                 data_type="apex_dpos",
-                robot_idxs=self.robot_index,
+                robot_idxs=self.robot_index_np_view,
                 contact_idx=i)
             self.flight_settings.set(data=self.gait_manager.get_step_enddh(contact_name=contact_names[i]),
                 data_type="end_dpos",
-                robot_idxs=self.robot_index,
+                robot_idxs=self.robot_index_np_view,
                 contact_idx=i)
         
         self.flight_settings.synch_retry(row_index=self.robot_index,
             col_index=0,
+            row_index_view=self.robot_index_view,
             n_rows=1,
             n_cols=self.flight_settings.n_cols,
             read=False)
@@ -116,11 +134,16 @@ class HybridQuadRhcRefs(RhcRefs):
         if self.is_running():
             
             # updates robot refs from shared mem
-            self.rob_refs.synch_from_shared_mem()
-            self.phase_id.synch_all(read=True, retry=True)
-            self.contact_flags.synch_all(read=True, retry=True)
-            self.flight_settings.synch_all(read=True, retry=True)
-
+            self.rob_refs.synch_from_shared_mem(robot_idx=self.robot_index_view)
+            self.phase_id.synch_all(read=True, retry=True,
+                        row_index=self.robot_index,
+                        row_index_view=self.robot_index_view)
+            self.contact_flags.synch_all(read=True, retry=True,
+                        row_index=self.robot_index,
+                        row_index_view=self.robot_index_view)
+            self.flight_settings.synch_all(read=True, retry=True,
+                        row_index=self.robot_index,
+                        row_index_view=self.robot_index_view)
             self._set_contact_phases(q_full=q_full)
 
             # updated internal references with latest available ones
@@ -146,7 +169,7 @@ class HybridQuadRhcRefs(RhcRefs):
         # phase_id = self.phase_id.read_retry(row_index=self.robot_index,
         #                         col_index=0)[0]
         
-        contact_flags_refs = self.contact_flags.get_numpy_mirror()[self.robot_index, :]
+        contact_flags_refs = self.contact_flags.get_numpy_mirror()[self.robot_index_np_view, :]
         target_n_limbs_in_contact=np.sum(contact_flags_refs).item()
         if target_n_limbs_in_contact==0:
             target_n_limbs_in_contact=4
@@ -162,13 +185,13 @@ class HybridQuadRhcRefs(RhcRefs):
             if is_contact[i]==False: # flight phase
                 
                 len_now=int(self.flight_settings.get(data_type="len",
-                    robot_idxs=self.robot_index,
+                    robot_idxs=self.robot_index_np_view,
                     contact_idx=i).item())
                 apex_now=self.flight_settings.get(data_type="apex_dpos",
-                    robot_idxs=self.robot_index,
+                    robot_idxs=self.robot_index_np_view,
                     contact_idx=i).item()
                 end_now=self.flight_settings.get(data_type="end_dpos",
-                    robot_idxs=self.robot_index,
+                    robot_idxs=self.robot_index_np_view,
                     contact_idx=i).item()
                 # set flight phase property depending on last value
                 self.gait_manager.set_flight_duration(contact_name=timeline_name,
@@ -192,14 +215,16 @@ class HybridQuadRhcRefs(RhcRefs):
                 length=len(flight_info[1])
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
-                    col_index=i # contact i
+                    col_index=i, # contact i
+                    row_index_view=self.robot_index_np_view,
                     )
             else:
                 length=0
 
             self.flight_info.write_retry(length, 
                 row_index=self.robot_index,
-                col_index=len(is_contact)+i)
+                col_index=len(is_contact)+i,
+                row_index_view=self.robot_index_np_view)
                 # self._flight_info[2] # n nodes
             
             self.gait_manager.check_horizon_full(timeline_name=timeline_name)
@@ -209,7 +234,7 @@ class HybridQuadRhcRefs(RhcRefs):
     def _handle_contact_phases_free(self):
 
         pz_ref=self.rob_refs.contact_pos.get(data_type = "p_z", 
-                robot_idxs=self.robot_index_np).reshape(-1, 1)
+                robot_idxs=self.robot_index_np_view).reshape(-1, 1)
         
         thresh=0.01
         is_contact=~(pz_ref>thresh)
@@ -240,12 +265,14 @@ class HybridQuadRhcRefs(RhcRefs):
                 length=len(self._flight_info[1])
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
-                    col_index=i)
+                    col_index=i,
+                    row_index_view=self.robot_index_np_view)
             else:
                 length=0
             self.flight_info.write_retry(length, 
                 row_index=self.robot_index,
-                col_index=len(is_contact)+i)
+                col_index=len(is_contact)+i,
+                row_index_view=self.robot_index_np_view)
                 # self._flight_info[2] # n nodes
 
             if timeline.getEmptyNodes() > 0: # if there's space, always add a stance
@@ -265,11 +292,11 @@ class HybridQuadRhcRefs(RhcRefs):
             # frame, i.e. a vertical frame, with the x axis aligned with the projection of the base x axis
             # onto the plane
             root_pose = self.rob_refs.root_state.get(data_type = "q_full", 
-                                robot_idxs=self.robot_index_np).reshape(-1, 1) # this should also be
+                                robot_idxs=self.robot_index_np_view).reshape(-1, 1) # this should also be
             # rotated into the horizontal frame (however, for now only the z componet is used, so it's ok)
             
             root_twist_ref = self.rob_refs.root_state.get(data_type="twist", 
-                                robot_idxs=self.robot_index_np).reshape(-1, 1)
+                                robot_idxs=self.robot_index_np_view).reshape(-1, 1)
             root_twist_ref_h = root_twist_ref.copy() 
 
             hor2w_frame(root_twist_ref, q_base, root_twist_ref_h)
@@ -284,9 +311,9 @@ class HybridQuadRhcRefs(RhcRefs):
                 self.base_height.setRef(root_pose) 
         else:
             root_pose = self.rob_refs.root_state.get(data_type = "q_full", 
-                                robot_idxs=self.robot_index_np).reshape(-1, 1)
+                                robot_idxs=self.robot_index_np_view).reshape(-1, 1)
             root_twist_ref = self.rob_refs.root_state.get(data_type="twist", 
-                                robot_idxs=self.robot_index_np).reshape(-1, 1)
+                                robot_idxs=self.robot_index_np_view).reshape(-1, 1)
 
             if self.base_lin_velxy is not None:
                 self.base_lin_velxy.setRef(root_twist_ref[0:2, :])
@@ -320,21 +347,27 @@ class HybridQuadRhcRefs(RhcRefs):
     def set_alpha(self, alpha:float):
         # set provided value
         alpha_shared=self.alpha.get_numpy_mirror()
-        alpha_shared[self.robot_index, :] = alpha
-        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+        alpha_shared[self.robot_index_np_view, :] = alpha
+        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, 
+                row_index_view=self.robot_index_view,
+                n_rows=1, n_cols=self.alpha.n_cols,
                 read=False)
             
     def get_alpha(self):
-        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+        self.alpha.synch_retry(row_index=self.robot_index, col_index=0, 
+                    row_index_view=self.robot_index_view,
+                    n_rows=1, n_cols=self.alpha.n_cols,
                     read=True)
-        alpha=self.alpha.get_numpy_mirror()[self.robot_index, :].item()
+        alpha=self.alpha.get_numpy_mirror()[self.robot_index_np_view, :].item()
         return alpha
 
     def set_bound_relax(self, bound_relax:float):
         # set provided value
         bound_rel_shared=self.bound_rel.get_numpy_mirror()
-        bound_rel_shared[self.robot_index, :] = bound_relax
-        self.bound_rel.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.alpha.n_cols,
+        bound_rel_shared[self.robot_index_np_view, :] = bound_relax
+        self.bound_rel.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, 
+            row_index_view=self.robot_index_view,
+            n_cols=self.alpha.n_cols,
             read=False)
 
     def reset(self):
@@ -344,34 +377,44 @@ class HybridQuadRhcRefs(RhcRefs):
             # resets shared mem
             contact_flags_current = self.contact_flags.get_numpy_mirror()
             phase_id_current = self.phase_id.get_numpy_mirror()
-            contact_flags_current[self.robot_index, :] = np.full((1, self.n_contacts()), dtype=np.bool_, fill_value=True)
-            phase_id_current[self.robot_index, :] = -1 # defaults to custom phase id
+            contact_flags_current[self.robot_index_np_view, :] = np.full((1, self.n_contacts()), dtype=np.bool_, fill_value=True)
+            phase_id_current[self.robot_index_np_view, :] = -1 # defaults to custom phase id
 
             contact_pos_current=self.rob_refs.contact_pos.get_numpy_mirror()
-            contact_pos_current[self.robot_index, :] = 0.0
+            contact_pos_current[self.robot_index_np_view, :] = 0.0
 
             flight_info_current=self.flight_info.get_numpy_mirror()
-            flight_info_current[self.robot_index, :] = 0.0
+            flight_info_current[self.robot_index_np_view, :] = 0.0
 
             alpha=self.alpha.get_numpy_mirror()
-            alpha[self.robot_index, :] = 0.0
+            alpha[self.robot_index_np_view, :] = 0.0
 
-            self.rob_refs.root_state.set(data_type="p", data=self._p_ref_default, robot_idxs=self.robot_index_np)
-            self.rob_refs.root_state.set(data_type="q", data=self._q_ref_default, robot_idxs=self.robot_index_np)
+            self.rob_refs.root_state.set(data_type="p", data=self._p_ref_default, robot_idxs=self.robot_index_np_view)
+            self.rob_refs.root_state.set(data_type="q", data=self._q_ref_default, robot_idxs=self.robot_index_np_view)
             
-            self.rob_refs.root_state.set(data_type="twist", data=np.zeros((1, 6)), robot_idxs=self.robot_index_np)
+            self.rob_refs.root_state.set(data_type="twist", data=np.zeros((1, 6)), robot_idxs=self.robot_index_np_view)
                                            
-            self.contact_flags.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.contact_flags.n_cols,
+            self.contact_flags.synch_retry(row_index=self.robot_index, col_index=0, 
+                                    row_index_view=self.robot_index_view,
+                                    n_rows=1, n_cols=self.contact_flags.n_cols,
                                     read=False)
-            self.phase_id.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.phase_id.n_cols,
+            self.phase_id.synch_retry(row_index=self.robot_index, col_index=0, 
+                                    row_index_view=self.robot_index_view,
+                                    n_rows=1, n_cols=self.phase_id.n_cols,
                                     read=False)
-            self.rob_refs.root_state.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.rob_refs.root_state.n_cols,
+            self.rob_refs.root_state.synch_retry(row_index=self.robot_index, col_index=0, 
+                                    row_index_view=self.robot_index_view,
+                                    n_rows=1, n_cols=self.rob_refs.root_state.n_cols,
                                     read=False)
 
-            self.rob_refs.contact_pos.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.rob_refs.contact_pos.n_cols,
+            self.rob_refs.contact_pos.synch_retry(row_index=self.robot_index, col_index=0, 
+                                    row_index_view=self.robot_index_view,
+                                    n_rows=1, n_cols=self.rob_refs.contact_pos.n_cols,
                                     read=False)
             
-            self.flight_info.synch_retry(row_index=self.robot_index, col_index=0, n_rows=1, n_cols=self.flight_info.n_cols,
+            self.flight_info.synch_retry(row_index=self.robot_index, col_index=0, 
+                                row_index_view=self.robot_index_view,
+                                n_rows=1, n_cols=self.flight_info.n_cols,
                                 read=False)
             
             

@@ -506,13 +506,15 @@ class HybridQuadRhc(RHController):
     def _init_rhc_task_cmds(self):
         
         rhc_refs = HybridQuadRhcRefs(gait_manager=self._gm,
-            robot_index=self.controller_index,
+            robot_index_shm=self.controller_index,
+            robot_index_view=0, # when using optimize_mem the view if always of shape 1x...
             namespace=self.namespace,
             safe=False, 
             verbose=self._verbose,
             vlevel=VLevel.V2,
             use_force_feedback=self._custom_opts["use_force_feedback"],
-            use_fixed_flights=self._custom_opts["fixed_flights"])
+            use_fixed_flights=self._custom_opts["fixed_flights"],
+            optimize_mem=True)
         
         rhc_refs.run()
 
@@ -1022,53 +1024,6 @@ class HybridQuadRhc(RHController):
                 axis=0)
         
         return (qv_state, a_state)
-    
-    def _compute_pred_delta(self):
-        
-        # measurements
-        q_full_root_meas = self.robot_state.root_state.get(data_type="q_full", robot_idxs=self.controller_index_np)
-        twist_root_meas = self.robot_state.root_state.get(data_type="twist", robot_idxs=self.controller_index_np)
-        a_root_meas = self.robot_state.root_state.get(data_type="a_full", robot_idxs=self.controller_index_np)
-        g_vec_root_meas = self.robot_state.root_state.get(data_type="gn", robot_idxs=self.controller_index_np)
-
-        q_jnts_meas = self.robot_state.jnts_state.get(data_type="q", robot_idxs=self.controller_index_np)
-        v_jnts_meas = self.robot_state.jnts_state.get(data_type="v", robot_idxs=self.controller_index_np)
-        a_jnts_meas = self.robot_state.jnts_state.get(data_type="a", robot_idxs=self.controller_index_np)
-        eff_jnts_meas = self.robot_state.jnts_state.get(data_type="eff", robot_idxs=self.controller_index_np)
-
-        # prediction from rhc 
-        delta_root_q_full=self._get_root_full_q_from_sol(node_idx=1)-q_full_root_meas
-        delta_root_twist=self._get_root_twist_from_sol(node_idx=1)-twist_root_meas
-        delta_root_a=self._get_root_a_from_sol(node_idx=0)-a_root_meas
-        delta_g_vec=self._get_norm_grav_vector_from_sol(node_idx=0)-g_vec_root_meas
-
-        delta_jnts_q=self._get_jnt_q_from_sol(node_idx=1)-q_jnts_meas
-        delta_jnts_v=self._get_jnt_v_from_sol(node_idx=1)-v_jnts_meas
-        delta_jnts_a=self._get_jnt_a_from_sol(node_idx=0)-a_jnts_meas
-        delta_jnts_eff=self._get_jnt_eff_from_sol(node_idx=0)-eff_jnts_meas
-
-        # writing pred. errors
-        self.rhc_pred_delta.root_state.set(data=delta_root_q_full, data_type="q_full", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.root_state.set(data=delta_root_twist,data_type="twist", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.root_state.set(data=delta_root_a,data_type="a_full", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.root_state.set(data=delta_g_vec, data_type="gn", robot_idxs=self.controller_index_np)
-
-        self.rhc_pred_delta.jnts_state.set(data=delta_jnts_q,data_type="q", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.jnts_state.set(data=delta_jnts_v,data_type="v", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.jnts_state.set(data=delta_jnts_a,data_type="a", robot_idxs=self.controller_index_np)
-        self.rhc_pred_delta.jnts_state.set(data=delta_jnts_eff, data_type="eff", robot_idxs=self.controller_index_np)
-
-        # write on shared memory
-        self.rhc_pred_delta.jnts_state.synch_retry(row_index=self.controller_index, 
-                                                   col_index=0, 
-                                                   n_rows=1, 
-                                                   n_cols=self.robot_cmds.jnts_state.n_cols,
-                                read=False) # jnt state
-        self.rhc_pred_delta.root_state.synch_retry(row_index=self.controller_index, 
-                                                    col_index=0,
-                                                    n_rows=1, 
-                                                    n_cols=self.robot_cmds.root_state.n_cols,
-                                read=False) # root state
 
     def _solve(self):
         
