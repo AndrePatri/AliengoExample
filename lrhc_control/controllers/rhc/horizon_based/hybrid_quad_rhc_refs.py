@@ -134,7 +134,7 @@ class HybridQuadRhcRefs(RhcRefs):
         if self.is_running():
             
             # updates robot refs from shared mem
-            self.rob_refs.synch_from_shared_mem(robot_idx=self.robot_index_view)
+            self.rob_refs.synch_from_shared_mem(robot_idx=self.robot_index, robot_idx_view=self.robot_index_view)
             self.phase_id.synch_all(read=True, retry=True,
                         row_index=self.robot_index,
                         row_index_view=self.robot_index_view)
@@ -297,6 +297,7 @@ class HybridQuadRhcRefs(RhcRefs):
             
             root_twist_ref = self.rob_refs.root_state.get(data_type="twist", 
                                 robot_idxs=self.robot_index_np_view).reshape(-1, 1)
+
             root_twist_ref_h = root_twist_ref.copy() 
 
             hor2w_frame(root_twist_ref, q_base, root_twist_ref_h)
