@@ -38,6 +38,12 @@ class SACAgent(nn.Module):
 
         self._use_torch_compile=torch_compile
 
+        if add_weight_norm:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                f"Will use weight normalization reparametrization\n",
+                LogType.INFO)
+        
         super().__init__()
 
         self._normalize_obs = norm_obs
