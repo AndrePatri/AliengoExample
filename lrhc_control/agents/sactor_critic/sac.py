@@ -32,8 +32,18 @@ class SACAgent(nn.Module):
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,
-            n_hidden_layers_critic:int=4):
+            n_hidden_layers_critic:int=4,
+            torch_compile: bool = False,
+            add_weight_norm: bool = False):
 
+        self._use_torch_compile=torch_compile
+
+        if add_weight_norm:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                f"Will use weight normalization reparametrization\n",
+                LogType.INFO)
+        
         super().__init__()
 
         self._normalize_obs = norm_obs
@@ -103,7 +113,8 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_actor,
-                    n_hidden_layers=n_hidden_layers_actor
+                    n_hidden_layers=n_hidden_layers_actor,
+                    add_weight_norm=add_weight_norm
                     )
 
         if (not is_eval) or load_qf: # just needed for training or during eval
@@ -113,26 +124,30 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic)
+                    n_hidden_layers=n_hidden_layers_critic,
+                    add_weight_norm=add_weight_norm)
             self.qf1_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic)
+                    n_hidden_layers=n_hidden_layers_critic,
+                    add_weight_norm=add_weight_norm)
             
             self.qf2 = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic)
+                    n_hidden_layers=n_hidden_layers_critic,
+                    add_weight_norm=add_weight_norm)
             self.qf2_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic)
+                    n_hidden_layers=n_hidden_layers_critic,
+                    add_weight_norm=add_weight_norm)
         
             self.qf1_target.load_state_dict(self.qf1.state_dict())
             self.qf2_target.load_state_dict(self.qf2.state_dict())
@@ -144,6 +159,14 @@ class SACAgent(nn.Module):
                                     freeze_stats=is_eval,
                                     debug=self._debug)
             self.running_norm.type(dtype) # ensuring correct dtype for whole module
+
+        if self._use_torch_compile:
+            self.actor = torch.compile(self.actor)
+            self.qf1 = torch.compile(self.qf1)
+            self.qf2 = torch.compile(self.qf2)
+            self.qf1_target = torch.compile(self.qf1_target)
+            self.qf2_target = torch.compile(self.qf2_target)
+            self.running_norm=torch.compile(self.running_norm)
 
         msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}]\
         and critic [{layer_width_critic}, {n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
@@ -230,7 +253,8 @@ class CriticQ(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 512,
-        n_hidden_layers: int = 4):
+        n_hidden_layers: int = 4,
+        add_weight_norm: bool = False):
 
         super().__init__()
 
@@ -250,7 +274,8 @@ class CriticQ(nn.Module):
             nonlinearity="leaky_relu",
             a_leaky_relu=self._lrelu_slope,
             device=self._torch_device,
-            dtype=self._torch_dtype
+            dtype=self._torch_dtype,
+            add_weight_norm=add_weight_norm
         ), nn.LeakyReLU(negative_slope=self._lrelu_slope)]
 
         # Hidden layers
@@ -262,7 +287,8 @@ class CriticQ(nn.Module):
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
                     device=self._torch_device,
-                    dtype=self._torch_dtype
+                    dtype=self._torch_dtype,
+                    add_weight_norm=add_weight_norm
                 ),
                 nn.LeakyReLU(negative_slope=self._lrelu_slope)
             ])
@@ -273,7 +299,8 @@ class CriticQ(nn.Module):
                 layer=nn.Linear(layer_width, 1),
                 init_type="uniform",
                 device=self._torch_device,
-                dtype=self._torch_dtype
+                dtype=self._torch_dtype,
+                add_weight_norm=add_weight_norm
             )
         )
 
@@ -297,7 +324,8 @@ class Actor(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 256,
-        n_hidden_layers: int = 2):
+        n_hidden_layers: int = 2,
+        add_weight_norm: bool = False):
         
         super().__init__()
 
@@ -357,7 +385,8 @@ class Actor(nn.Module):
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
                     device=self._torch_device, 
-                    dtype=self._torch_dtype), 
+                    dtype=self._torch_dtype,
+                    add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
         for _ in range(n_hidden_layers - 1):
             layers.extend([
@@ -366,7 +395,8 @@ class Actor(nn.Module):
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
                     device=self._torch_device,
-                    dtype=self._torch_dtype),
+                    dtype=self._torch_dtype,
+                    add_weight_norm=add_weight_norm),
                 nn.LeakyReLU(negative_slope=self._lrelu_slope)
             ])
         
@@ -377,11 +407,15 @@ class Actor(nn.Module):
         self.fc_mean = llayer_init(nn.Linear(layer_width, self._actions_dim), 
                         init_type="uniform",
                         device=self._torch_device, 
-                        dtype=self._torch_dtype)
+                        dtype=self._torch_dtype,
+                        add_weight_norm=add_weight_norm)
         self.fc_logstd = llayer_init(nn.Linear(layer_width, self._actions_dim), 
                         init_type="uniform",
                         device=self._torch_device, 
-                        dtype=self._torch_dtype)
+                        dtype=self._torch_dtype,
+                        bias_const=-1.0, # for encouraging exploration
+                        add_weight_norm=add_weight_norm
+                        )
 
         # Move all components to the specified device and dtype
         self._fc12.to(device=self._torch_device, dtype=self._torch_dtype)
@@ -418,10 +452,8 @@ if __name__ == "__main__":
     dummy_obs = torch.full(size=(2, 5),dtype=torch.float32,device=device,fill_value=0) 
 
     sofqn = CriticQ(obs_dim=5,actions_dim=3,
-            norm_obs=True,
             device=device,
-            dtype=torch.float32,
-            is_eval=False)
+            dtype=torch.float32)
     
     print("Db prints Q")
     print(f"N. params: {sofqn.get_n_params()}")
@@ -432,11 +464,13 @@ if __name__ == "__main__":
 
     actor = Actor(obs_dim=5,actions_dim=3,
             actions_lb=[-1.0, -1.0, -1.0],actions_ub=[1.0, 1.0, 1.0],
-            norm_obs=True,
             device=device,
-            dtype=torch.float32,
-            is_eval=False)
+            dtype=torch.float32)
     
+    # Print the biases of the log_std layer
+    print("Log_std Biases:")
+    print(actor.fc_logstd.bias)  # Access the biases of the log_std layer
+
     print("Db prints Actor")
     print(f"N. params: {actor.get_n_params()}")
     output=actor.forward(x=dummy_obs)

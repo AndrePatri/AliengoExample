@@ -201,6 +201,15 @@ class SActorCriticAlgoBase(ABC):
             n_hidden_layers_actor=2
             n_hidden_layers_critic=4
             pass
+
+        use_torch_compile=False
+        add_weight_norm=False
+        if "use_torch_compile" in self._hyperparameters and \
+            self._hyperparameters["use_torch_compile"]:
+            use_torch_compile=True
+        if "add_weight_norm" in self._hyperparameters and \
+            self._hyperparameters["add_weight_norm"]:
+            add_weight_norm=True
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     obs_ub=self._env.get_obs_ub().flatten().tolist(),
                     obs_lb=self._env.get_obs_lb().flatten().tolist(),
@@ -217,7 +226,9 @@ class SActorCriticAlgoBase(ABC):
                     layer_width_actor=layer_width_actor,
                     layer_width_critic=layer_width_critic,
                     n_hidden_layers_actor=n_hidden_layers_actor,
-                    n_hidden_layers_critic=n_hidden_layers_critic)
+                    n_hidden_layers_critic=n_hidden_layers_critic,
+                    torch_compile=use_torch_compile,
+                    add_weight_norm=add_weight_norm)
 
         if self._agent.running_norm is not None:
             # some db data for the agent
@@ -376,10 +387,10 @@ class SActorCriticAlgoBase(ABC):
 
         self._replay_bf_full = False
 
-        self._replay_buffer_size_nominal = int(2e6) # 32768
+        self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 8192
+        self._batch_size = 16392
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
@@ -394,9 +405,9 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
 
         self._lr_policy = 1e-3
-        self._lr_q = 5e-4
+        self._lr_q = 1e-3
 
-        self._discount_factor = 0.999
+        self._discount_factor = 0.995
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
@@ -1430,45 +1441,16 @@ class SActorCriticAlgoBase(ABC):
         batched_rewards = self._rewards.view(-1)
         batched_terminal = self._next_terminal.view(-1)
 
-        if self._use_combined_exp_replay:
-            # we always add the latest vec transition to 
-            # the sampled batch
-            last_transition_idx=self._bpos-1 if not self._bpos==0 else self._replay_buffer_size_vec-1
-            obs_last=self._obs[last_transition_idx].view((-1, self._env.obs_dim()))
-            next_obs_last=self._next_obs[last_transition_idx].view((-1, self._env.obs_dim()))
-            next_actions_last=self._actions[last_transition_idx].view((-1, self._env.actions_dim()))
-            next_rewards_last=self._rewards[last_transition_idx].view(-1)
-            next_terminal_last=self._next_terminal[last_transition_idx].view(-1)
-
-            n_uncorrelated_samples=self._batch_size-self._num_envs
-
-            if n_uncorrelated_samples>0:
-                up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
-                shuffled_buffer_idxs = torch.randint(0, up_to,
-                                            (n_uncorrelated_samples,)) 
-
-                sampled_obs =torch.cat((batched_obs[shuffled_buffer_idxs], obs_last), dim=0)
-                sampled_next_obs = torch.cat((batched_next_obs[shuffled_buffer_idxs], next_obs_last), dim=0)
-                sampled_actions = torch.cat((batched_actions[shuffled_buffer_idxs], next_actions_last), dim=0)
-                sampled_rewards =torch.cat((batched_rewards[shuffled_buffer_idxs], next_rewards_last), dim=0)
-                sampled_terminal =torch.cat((batched_terminal[shuffled_buffer_idxs], next_terminal_last), dim=0)
-            else:
-                sampled_obs = obs_last.clone()
-                sampled_next_obs = next_obs_last.clone()
-                sampled_actions = next_actions_last.clone()
-                sampled_rewards =next_rewards_last.clone()
-                sampled_terminal =next_terminal_last.clone()
-        else:
-            # sampling from the batched buffer
-            up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
-            shuffled_buffer_idxs = torch.randint(0, up_to,
-                                            (self._batch_size,)) 
-            
-            sampled_obs = batched_obs[shuffled_buffer_idxs]
-            sampled_next_obs = batched_next_obs[shuffled_buffer_idxs]
-            sampled_actions = batched_actions[shuffled_buffer_idxs]
-            sampled_rewards = batched_rewards[shuffled_buffer_idxs]
-            sampled_terminal = batched_terminal[shuffled_buffer_idxs]
+        # sampling from the batched buffer
+        up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
+        shuffled_buffer_idxs = torch.randint(0, up_to,
+                                        (self._batch_size,)) 
+        
+        sampled_obs = batched_obs[shuffled_buffer_idxs]
+        sampled_next_obs = batched_next_obs[shuffled_buffer_idxs]
+        sampled_actions = batched_actions[shuffled_buffer_idxs]
+        sampled_rewards = batched_rewards[shuffled_buffer_idxs]
+        sampled_terminal = batched_terminal[shuffled_buffer_idxs]
 
         return sampled_obs, sampled_actions,\
             sampled_next_obs,\
