@@ -14,6 +14,18 @@ from perf_sleep.pyperfsleep import PerfSleep
 
 import importlib.util
 import torch
+import signal
+
+algo = None  # global to make it accessible by signal handler
+
+def handle_sigint(signum, frame):
+    Journal.log("launch_train_env.py",
+        "",
+        f"Received sigint. Will stop training.",
+        LogType.WARN)
+    if algo:
+        algo.done()
+    
 
 # Function to dynamically import a module from a specific file path
 def import_env_module(env_path):
@@ -23,6 +35,8 @@ def import_env_module(env_path):
     return env_module
 
 if __name__ == "__main__":  
+
+    signal.signal(signal.SIGINT, handle_sigint)
 
     # Parse command line arguments for CPU affinity
     parser = argparse.ArgumentParser(description="Set CPU affinity for the script.")
@@ -63,7 +77,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
     parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
-    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=2)
+    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=4)
     parser.add_argument('--critic_n_hlayers', type=int, help='Critic network size', default=4)
 
     parser.add_argument('--env_fname', type=str, default="linvel_env_baseline", help='Training env file name (without extension)')
