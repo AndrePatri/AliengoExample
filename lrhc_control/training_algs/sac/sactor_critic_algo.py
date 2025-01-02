@@ -1429,6 +1429,7 @@ class SActorCriticAlgoBase(ABC):
                 f"Current env. step sps: {self._env_step_fps[self._log_it_counter].item()}, time for experience collection {self._collection_dt[self._log_it_counter].item()} s\n" + \
                 f"Current env (sub-stepping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n" + \
                 f"Current policy update fps: {self._policy_update_fps[self._log_it_counter].item()}, time for policy updates {self._policy_update_dt[self._log_it_counter].item()} s\n" + \
+                f"Time spent updating running stats {self._running_stats_update_dt[self._log_it_counter].item()} s\n" + \
                 f"Demo envs are active: {self._demo_envs_active[self._log_it_counter].item()}. N  demo envs if active {self._env.n_demo_envs()}\n" + \
                 f"Performance metric now: {self._demo_perf_metric[self._log_it_counter].item()}/{self._demo_stop_thresh}\n"
             
