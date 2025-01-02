@@ -127,8 +127,8 @@ if __name__ == "__main__":
     
     device = "cuda"
     obs_dim = 4  # Number of observation dimensions
-    n_envs = 20  # Number of environments
-    n_samples = 10000  # Number of iterations to update running stats
+    n_envs = 1000  # Number of environments
+    n_samples = 1  # Number of iterations to update running stats
 
     # Set a known mean and variance for the synthetic data
     true_mean = torch.tensor([10.0, -5.0, 3.0, 7.0], dtype=torch.float32, device=device)
