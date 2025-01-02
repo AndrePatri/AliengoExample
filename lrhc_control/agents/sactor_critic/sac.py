@@ -184,39 +184,31 @@ class SACAgent(nn.Module):
         x=x/(self.obs_scale+self._rescaling_epsi)
         return x
     
-    def get_action(self, x):
+    def _preprocess_obs(self, x):
         if self._rescale_obs:
-            x=self._obs_scaling_layer(x)
+            x = self._obs_scaling_layer(x)
         if self.running_norm is not None:
             x = self.running_norm(x)
+        return x
+
+    def get_action(self, x):
+        x = self._preprocess_obs(x)
         return self.actor.get_action(x)
     
     def get_qf1_val(self, x, a):
-        if self._rescale_obs:
-            x=self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        x = self._preprocess_obs(x)
         return self.qf1(x, a)
 
     def get_qf2_val(self, x, a):
-        if self._rescale_obs:
-            x=self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        x = self._preprocess_obs(x)
         return self.qf2(x, a)
     
     def get_qf1t_val(self, x, a):
-        if self._rescale_obs:
-            x=self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        x = self._preprocess_obs(x)
         return self.qf1_target(x, a)
     
     def get_qf2t_val(self, x, a):
-        if self._rescale_obs:
-            x=self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        x = self._preprocess_obs(x)
         return self.qf2_target(x, a)
 
     def load_state_dict(self, param_dict):
