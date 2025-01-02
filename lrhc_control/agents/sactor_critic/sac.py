@@ -156,7 +156,7 @@ class SACAgent(nn.Module):
         if self._normalize_obs:
             self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
                                     device=device, dtype=dtype, 
-                                    freeze_stats=is_eval,
+                                    freeze_stats=True, # always start with freezed stats
                                     debug=self._debug)
             self.running_norm.type(dtype) # ensuring correct dtype for whole module
 
@@ -179,6 +179,11 @@ class SACAgent(nn.Module):
         import os 
         return os.path.abspath(__file__)
     
+    def update_obs_stats(self, x):
+        self.running_norm.unfreeze()
+        self.running_norm.manual_stat_update(x)
+        self.running_norm.freeze()
+
     def _obs_scaling_layer(self, x):
         x=(x-self.obs_bias)
         x=x/(self.obs_scale+self._rescaling_epsi)

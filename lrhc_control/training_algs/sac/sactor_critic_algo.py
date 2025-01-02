@@ -83,13 +83,13 @@ class SActorCriticAlgoBase(ABC):
         self.done()
 
     def learn(self):
-
+  
         if not self._setup_done:
             self._should_have_called_setup()
 
         self._start_time = time.perf_counter()
 
-        with torch.no_grad(): # don't want grad computation here
+        with torch.no_grad(): # don't need grad computation here
             for i in range(self._collection_freq):
                 if not self._collect_transition():
                     return False
@@ -97,6 +97,11 @@ class SActorCriticAlgoBase(ABC):
         
         self._collection_t = time.perf_counter()
         
+        if self._vec_transition_counter % self._running_stats_vecfreq == 0:
+            with torch.no_grad(): # don't need grad computation here
+                self._update_running_stats(bsize=self._running_stats_bsize)
+
+        self._policy_update_t_start = time.perf_counter()
         for i in range(self._update_freq):
             self._update_policy()
             self._update_counter+=1
@@ -391,6 +396,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 16392
+        
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
@@ -419,6 +425,9 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
         
+        self._running_stats_bsize = self._batch_size
+        self._running_stats_vecfreq = 50 # update running stats (e.g. obs) frequency
+
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 50
@@ -603,6 +612,10 @@ class SActorCriticAlgoBase(ABC):
         self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         
+        self._running_stats_update_dt = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._policy_update_t_start = -1.0
         self._policy_update_t = -1.0
         self._policy_update_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
@@ -920,6 +933,8 @@ class SActorCriticAlgoBase(ABC):
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
             hf.create_dataset('env_step_rt_factor', data=self._env_step_rt_factor.numpy())
+            hf.create_dataset('collection_dt', data=self._collection_dt.numpy())
+            hf.create_dataset('running_stats_update_dt', data=self._running_stats_update_dt.numpy())
             hf.create_dataset('policy_update_dt', data=self._policy_update_dt.numpy())
             hf.create_dataset('policy_update_fps', data=self._policy_update_fps.numpy())
             hf.create_dataset('n_of_played_episodes', data=self._n_of_played_episodes.numpy())
@@ -929,6 +944,8 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('n_tqfun_updates', data=self._n_tqfun_updates.numpy())
             
             hf.create_dataset('elapsed_min', data=self._elapsed_min.numpy())
+
+            hf.create_dataset('elapsed_min', data=self._policy_update_dt.numpy())
 
             # algo data 
             hf.create_dataset('qf1_vals_mean', data=self._qf1_vals_mean.numpy())
@@ -1098,8 +1115,11 @@ class SActorCriticAlgoBase(ABC):
         # these have to always be updated
         self._collection_dt[self._log_it_counter] += \
             (self._collection_t-self._start_time)
+        self._running_stats_update_dt[self._log_it_counter] += \
+            (self._policy_update_t_start-self._collection_t)
+        
         self._policy_update_dt[self._log_it_counter] += \
-            (self._policy_update_t - self._collection_t)
+            (self._policy_update_t - self._policy_update_t_start)
         
         self._step_counter+=1 # counts algo steps
         
@@ -1252,7 +1272,8 @@ class SActorCriticAlgoBase(ABC):
                     self._policy_update_fps[self._log_it_counter].item(),
                     self._policy_update_dt[self._log_it_counter].item(),
                     is_done,
-                    self._n_of_played_episodes[self._log_it_counter].item()
+                    self._n_of_played_episodes[self._log_it_counter].item(),
+                    self._running_stats_update_dt[self._log_it_counter].item(),
                     ]
                 self._shared_algo_data.write(dyn_info_name=info_names,
                                         val=info_data)
@@ -1433,8 +1454,29 @@ class SActorCriticAlgoBase(ABC):
             self._replay_bf_full = True
             self._bpos = 0
 
-    def _sample(self):
+    def _update_running_stats(self, bsize: int = None):
+
+        if bsize is None:
+            bsize=self._batch_size # same used for training
+
+        # update obs stats        
+        # (we should sample also next obs, but if most of the transitions are not terminal, 
+        # this is not an issue and is more efficient)
+
+        if (self._agent.running_norm is not None) and \
+            (not self._eval):
+            batched_obs = self._obs.view((-1, self._env.obs_dim()))
+            up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
+            shuffled_buffer_idxs = torch.randint(0, up_to,
+                                            (bsize,)) 
+            sampled_obs = batched_obs[shuffled_buffer_idxs]
+            self._agent.update_obs_stats(x=sampled_obs)
+
+    def _sample(self, size: int = None):
         
+        if size is None:
+            size=self._batch_size
+
         batched_obs = self._obs.view((-1, self._env.obs_dim()))
         batched_next_obs = self._next_obs.view((-1, self._env.obs_dim()))
         batched_actions = self._actions.view((-1, self._env.actions_dim()))
@@ -1444,7 +1486,7 @@ class SActorCriticAlgoBase(ABC):
         # sampling from the batched buffer
         up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
         shuffled_buffer_idxs = torch.randint(0, up_to,
-                                        (self._batch_size,)) 
+                                        (size,)) 
         
         sampled_obs = batched_obs[shuffled_buffer_idxs]
         sampled_next_obs = batched_next_obs[shuffled_buffer_idxs]

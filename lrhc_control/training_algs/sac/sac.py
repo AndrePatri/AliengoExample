@@ -30,7 +30,7 @@ class SAC(SActorCriticAlgoBase):
 
         obs = self._env.get_obs(clone=True) # also accounts for resets when envs are 
         # either terminated or truncated. CRUCIAL: we need to clone, 
-        # otherwise obs is be a view and will be overridden in the call to step
+        # otherwise obs is a view and will be overridden in the call to step
         # with next_obs!!!
         if self._vec_transition_counter > (self._warmstart_vectimesteps-1):
             actions, _, _ = self._agent.get_action(x=obs)
