@@ -17,16 +17,16 @@ import torch
 import signal
 
 algo = None  # global to make it accessible by signal handler
+exit_request=False
 
 def handle_sigint(signum, frame):
+    global exit_request
     Journal.log("launch_train_env.py",
         "",
         f"Received sigint. Will stop training.",
         LogType.WARN)
-    if algo:
-        algo.done()
+    exit_request=True
     
-
 # Function to dynamically import a module from a specific file path
 def import_env_module(env_path):
     spec = importlib.util.spec_from_file_location("env_module", env_path)
@@ -214,17 +214,13 @@ if __name__ == "__main__":
             break
     
     if not args.eval:
-        try:
-            while not algo.is_done():
-                if not algo.learn():
-                    algo.done()
-        except KeyboardInterrupt:
-            algo.done() # in case it's interrupted by user
+        while not exit_request:
+            if not algo.learn():
+                break
     else: # eval phase
         with torch.no_grad(): # no need for grad computation
-            try:
-                while not algo.is_done():
-                    if not algo.eval():
-                        algo.done()
-            except KeyboardInterrupt:
-                algo.done() # in case it's interrupted by user
+            while not exit_request:
+                if not algo.eval():
+                    break
+    
+    algo.done() # make sure to terminate training properly
