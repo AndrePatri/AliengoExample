@@ -62,12 +62,14 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
 
     def _update_loc_twist_refs(self):
         # this is called at each env substep
+        
         self._compute_twist_ref_w()
-        
-        agent_p_ref_current=self._agent_refs.rob_refs.root_state.get(data_type="p",
+    
+        if not self._override_agent_refs:
+            agent_p_ref_current=self._agent_refs.rob_refs.root_state.get(data_type="p",
             gpu=self._use_gpu)
-        agent_p_ref_current[:, 0:2]=self._p_delta_w
-        
+            agent_p_ref_current[:, 0:2]=self._p_delta_w
+
         # then convert it to base ref local for the agent
         robot_q = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
         # rotate agent ref from world to robot base
@@ -84,16 +86,39 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             self._p_delta_w[:, :]=self._p_trgt_w-\
                 self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2]
                 
-            self._dp_norm[:, :]=self._p_delta_w.norm(dim=1,keepdim=True)
+            self._dp_norm[:, :]=self._p_delta_w.norm(dim=1,keepdim=True)+1e-6
             self._dp_versor[:, :]=self._p_delta_w/self._dp_norm
+
             # we compute the twist refs for the agent depending of the position error
             self._agent_twist_ref_current_w[:, 0:2]=self._dp_norm*self._dp_versor/self._max_dt
         else:
             self._p_delta_w[env_indxs, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[env_indxs, 0:2] -\
                 self._p_trgt_w[env_indxs, :]
-            self._dp_norm[env_indxs, :]=self._p_delta_w[env_indxs, :].norm(dim=1,keepdim=True)
+            
+            self._dp_norm[env_indxs, :]=self._p_delta_w[env_indxs, :].norm(dim=1,keepdim=True)+1e-6
             self._dp_versor[env_indxs, :]=self._p_delta_w[env_indxs, :]/self._dp_norm[env_indxs, :]
+
             self._agent_twist_ref_current_w[env_indxs, 0:2]=self._dp_norm[env_indxs, :]*self._dp_versor[env_indxs, :]/self._max_dt
+
+    def _override_refs(self,
+            env_indxs: torch.Tensor = None):
+        
+        # runs at every post_step
+        self._agent_refs.rob_refs.root_state.synch_all(read=True,retry=True) # first read from mem
+        if self._use_gpu:
+            # copies latest refs to GPU 
+            self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=False,non_blocking=False) 
+
+        agent_p_ref_current=self._agent_refs.rob_refs.root_state.get(data_type="p",
+                gpu=self._use_gpu)
+        
+        self._p_trgt_w[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2] + \
+            agent_p_ref_current[:, 0:2]
+    
+    def _debug_agent_refs(self):
+        if self._use_gpu:
+            self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=False)
+        self._agent_refs.rob_refs.root_state.synch_all(read=False, retry = True)
 
     def _randomize_task_refs(self,
         env_indxs: torch.Tensor = None):

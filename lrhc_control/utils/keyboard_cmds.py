@@ -38,7 +38,7 @@ class AgentRefsFromKeyboard:
 
         self.enable_pos = False
 
-        self.dpos = 0.05 # [m]
+        self.dpos = 0.1 # [m]
         self.dxy = 0.05 # [m/s]
         self.dvxyz = 0.05 # [m/s]
         self.dheading=0.05
@@ -71,7 +71,6 @@ class AgentRefsFromKeyboard:
         
         self._init_rhc_ref_subscriber()
         
-        self._robot_state=None
         self._current_twist_ref_world = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="twist", robot_idxs=self.cluster_idx_np), 
                 fill_value=0.0).reshape(-1)
         self._current_twist_ref_base=np.full_like(self._current_twist_ref_world, fill_value=0.0).reshape(1, -1)
@@ -79,13 +78,12 @@ class AgentRefsFromKeyboard:
         self._current_dpos_ref = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="p", robot_idxs=self.cluster_idx_np), 
                 fill_value=0.0).reshape(-1)
         
-        if self._agent_refs_world:
-            self._robot_state = RobotState(namespace=self.namespace,
-                                is_server=False, 
-                                safe=False,
-                                verbose=True,
-                                vlevel=VLevel.V2)
-            self._robot_state.run()            
+        self._robot_state = RobotState(namespace=self.namespace,
+                            is_server=False, 
+                            safe=False,
+                            verbose=True,
+                            vlevel=VLevel.V2)
+        self._robot_state.run()            
 
     def _init_rhc_ref_subscriber(self):
 
@@ -256,30 +254,35 @@ class AgentRefsFromKeyboard:
     def _write_to_shared_mem(self):
 
         self.agent_refs.rob_refs.root_state.synch_all(read=True)
-
-        if self._agent_refs_world:
-            # ref was set in world frame -> we need to move it in base frame before setting it to the agent
-            self._robot_state.root_state.synch_all(read = True, retry = True) # read robot orientation
-            robot_q = self._robot_state.root_state.get(data_type="q")[self.cluster_idx_np, :].reshape(1, -1)
-            world2base_frame_twist(t_w=self._current_twist_ref_world.reshape(1, -1), 
-                q_b=robot_q, 
-                t_out=self._current_twist_ref_base)
-                
+        self._robot_state.root_state.synch_all(read = True, retry = True) # read robot state        
+        
+        if self.enable_pos:
+            robot_p = self._robot_state.root_state.get(data_type="p")[self.cluster_idx_np, :].reshape(-1)
+            self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_dpos_ref-robot_p,
+                                            robot_idxs=self.cluster_idx_np)
+            self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
+                                        n_rows=1, n_cols=3,
+                                        read=False)
+            
+        if self.enable_navigation: # twist
+            if self._agent_refs_world:
+                # ref was set in world frame -> we need to move it in base frame before setting it to the agent
+                robot_q = self._robot_state.root_state.get(data_type="q")[self.cluster_idx_np, :].reshape(1, -1)
+                world2base_frame_twist(t_w=self._current_twist_ref_world.reshape(1, -1), 
+                    q_b=robot_q, 
+                    t_out=self._current_twist_ref_base)
+                    
+                self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
+                                                robot_idxs=self.cluster_idx_np)
+            else:
+                self._current_twist_ref_base[:, :]=self._current_twist_ref_world.reshape(1, -1)
             self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
                                             robot_idxs=self.cluster_idx_np)
-        else:
-            self._current_twist_ref_base[:, :]=self._current_twist_ref_world.reshape(1, -1)
-            self.agent_refs.rob_refs.root_state.set(data_type="twist",data=self._current_twist_ref_base,
-                                            robot_idxs=self.cluster_idx_np)
-        
-        # update also pos ref 
-        self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_dpos_ref,
-                                            robot_idxs=self.cluster_idx_np)
-        
+            self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=7, 
+                                        n_rows=1, n_cols=6,
+                                        read=False)
         # write to shared mem
-        self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
-                                        n_rows=1, n_cols=self.agent_refs.rob_refs.root_state.n_cols,
-                                        read=False)   
+           
    
     def _set_omega(self, 
                 key):

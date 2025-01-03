@@ -365,8 +365,6 @@ class LRhcTrainingEnvBase(ABC):
             self._sub_terminations.synch_mirror(from_gpu=True,non_blocking=True)
             self._tot_rewards.synch_mirror(from_gpu=True,non_blocking=True)
             self._sub_rewards.synch_mirror(from_gpu=True,non_blocking=True)
-            if not self._override_agent_refs:
-                self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=True) 
             # if we want reliable db data then we should synchronize data streams
             torch.cuda.synchronize()
 
@@ -380,6 +378,13 @@ class LRhcTrainingEnvBase(ABC):
         self._sub_truncations.synch_all(read=False, retry = True)
         self._terminations.synch_all(read=False, retry = True) 
         self._sub_terminations.synch_all(read=False, retry = True)
+        
+        self._debug_agent_refs()
+        
+    def _debug_agent_refs(self):
+        if self._use_gpu:
+            if not self._override_agent_refs:
+                self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=False)
         if not self._override_agent_refs:
             self._agent_refs.rob_refs.root_state.synch_all(read=False, retry = True)
 
@@ -641,7 +646,7 @@ class LRhcTrainingEnvBase(ABC):
                 env_indxs: torch.Tensor = None):
                     
         if self._override_agent_refs:
-            self._override_refs(gpu=self._use_gpu)
+            self._override_refs(env_indxs=env_indxs)
         else:
             self._randomize_task_refs(env_indxs=env_indxs)
             
@@ -1429,11 +1434,11 @@ class LRhcTrainingEnvBase(ABC):
             # before the CPU continues execution
     
     def _override_refs(self,
-            gpu=True):
+            env_indxs: torch.Tensor = None):
 
         # just used for setting agent refs externally (i.e. from shared mem on CPU)
         self._agent_refs.rob_refs.root_state.synch_all(read=True,retry=True) # first read from mem
-        if gpu:
+        if self._use_gpu:
             # copies latest refs to GPU 
             self._agent_refs.rob_refs.root_state.synch_mirror(from_gpu=False,non_blocking=False) 
 
