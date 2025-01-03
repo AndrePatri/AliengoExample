@@ -30,6 +30,7 @@ if __name__ == '__main__':
         help='if true use the shared drop dir to drop the data where all the other training data is dropeer')
     parser.add_argument('--pub_stime', action='store_true', help='Whether to publish sim time for ros')
     parser.add_argument('--xbot', action='store_true', help='Whether to add xbot topics to bag')
+    parser.add_argument('--no_rhc_internal',action='store_true', help='if set, no data over the mpcs horizons will be bridged')
 
     args = parser.parse_args()
     if args.is_training:
@@ -54,7 +55,8 @@ if __name__ == '__main__':
             rhc_refs_in_h_frame=args.rhc_refs_in_h_frame,
             agent_refs_in_h_frame=args.agent_refs_in_h_frame,
             pub_stime=args.pub_stime,
-            add_xbot_topics=args.xbot)
+            add_xbot_topics=args.xbot,
+            with_rhc_internal_data=not args.no_rhc_internal)
     bag_dumper.run()
     bag_dumper.close()
 

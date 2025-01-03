@@ -29,7 +29,10 @@ class RosBagDumper():
             agent_refs_in_h_frame:bool=False,
             use_static_idx: bool = True,
             pub_stime: bool = True,
-            add_xbot_topics: bool = False):
+            add_xbot_topics: bool = False,
+            with_rhc_internal_data: bool = True):
+        
+        self._with_rhc_internal_data=with_rhc_internal_data
 
         self._closed=False
         
@@ -116,7 +119,8 @@ class RosBagDumper():
                 abort_wallmin=self._abort_wallmin,
                 use_static_idx=self._use_static_idx,
                 pub_stime=self._pub_stime,
-                install_sighandler=True)
+                install_sighandler=True,
+                with_rhc_internal_data=self._with_rhc_internal_data)
         else:
             from lrhc_control.utils.rhc_viz.rhc2viz2 import RhcToViz2Bridge
             self._bridge = RhcToViz2Bridge(namespace=self._ns, 
@@ -133,7 +137,8 @@ class RosBagDumper():
                 abort_wallmin=self._abort_wallmin,
                 use_static_idx=self._use_static_idx,
                 pub_stime=self._pub_stime,
-                install_sighandler=False)
+                install_sighandler=False,
+                with_rhc_internal_data=self._with_rhc_internal_data)
 
         # actual process recording bag
         from control_cluster_bridge.utilities.remote_triggering import RemoteTriggererSrvr
