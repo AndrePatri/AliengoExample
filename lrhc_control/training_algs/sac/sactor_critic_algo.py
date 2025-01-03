@@ -425,7 +425,7 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
         
-        self._running_stats_bsize = self._batch_size
+        self._running_stats_bsize = 16392
         self._running_stats_vecfreq = 50 # update running stats (e.g. obs) frequency
 
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
