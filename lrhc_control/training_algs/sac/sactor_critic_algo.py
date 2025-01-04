@@ -379,6 +379,7 @@ class SActorCriticAlgoBase(ABC):
         self._env_name = self._env.name()
         self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
         self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
+        
         self._env_n_action_reps = self._env.n_action_reps()
         
         self._use_gpu = self._env.using_gpu()
@@ -395,7 +396,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 16392
+        self._batch_size = 4096
         
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
@@ -404,16 +405,19 @@ class SActorCriticAlgoBase(ABC):
         self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
         self._total_timesteps = self._total_timesteps_vec*self._num_envs # actual n transitions
 
-        self._warmstart_timesteps = int(5e3)
+        # self._warmstart_timesteps = int(5e3)
+        warmstart_length_single_env=min(self._episode_timeout_lb, self._episode_timeout_ub, 
+            self._task_rand_timeout_lb, self._task_rand_timeout_ub)
+        self._warmstart_timesteps=warmstart_length_single_env*self._num_envs
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         self._warmstart_steps=self._warmstart_vectimesteps//self._collection_freq
         self._warmstart_vectimesteps=self._collection_freq*self._warmstart_steps
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
 
         self._lr_policy = 1e-3
-        self._lr_q = 1e-3
+        self._lr_q = 5e-4
 
-        self._discount_factor = 0.995
+        self._discount_factor = 0.99
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
@@ -425,8 +429,8 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
         
-        self._running_stats_bsize = 16392
-        self._running_stats_vecfreq = 50 # update running stats (e.g. obs) frequency
+        self._running_stats_bsize = 4096
+        self._running_stats_vecfreq = 5 # update running stats (e.g. obs) frequency
 
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
