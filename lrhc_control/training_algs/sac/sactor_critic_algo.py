@@ -1524,7 +1524,7 @@ class SActorCriticAlgoBase(ABC):
                 f"experience to policy grad ratio: {experience_to_policy_grad_ratio}\n" + \
                 f"experience to q fun grad ratio: {experience_to_qfun_grad_ratio}\n" + \
                 f"experience to trgt q fun grad ratio: {experience_to_tqfun_grad_ratio}\n"+ \
-                f"Warmstart completed: {self._vec_transition_counter > self._warmstart_vectimesteps or self._eval} ; (self._vec_transition_counter/{self._warmstart_vectimesteps})\n" +\
+                f"Warmstart completed: {self._vec_transition_counter > self._warmstart_vectimesteps or self._eval} ; ({self._vec_transition_counter}/{self._warmstart_vectimesteps})\n" +\
                 f"Replay buffer full: {self._replay_bf_full}; current position {self._bpos}/{self._replay_buffer_size_vec}\n" +\
                 f"Validation buffer full: {self._validation_bf_full}; current position {self._bpos_val}/{self._validation_buffer_size_vec}\n" +\
                 f"Elapsed time: {self._elapsed_min[self._log_it_counter].item()/60.0} h\n" + \
