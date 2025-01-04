@@ -162,6 +162,18 @@ class SAC(SActorCriticAlgoBase):
                         self._a_optimizer.step()
                         self._alpha = self._log_alpha.exp().item()
                     self._n_policy_updates[self._log_it_counter]+=1
+                
+                # just log last policy update info
+                self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
+                policy_entropy=-log_pi
+                self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
+                self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
+                self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
+                self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
+
+                self._alphas[self._log_it_counter, 0] = self._alpha
+                if self._autotune:
+                    self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
 
             # update the target networks
             if self._update_counter % self._trgt_net_freq == 0:
@@ -188,19 +200,7 @@ class SAC(SActorCriticAlgoBase):
                 # q losses (~bellman error)
                 self._qf1_loss[self._log_it_counter, 0] = qf1_loss.item()
                 self._qf2_loss[self._log_it_counter, 0] = qf2_loss.item()
-    
-                if self._update_counter % self._policy_freq == 0:
-                    # just log last policy update info
-                    self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
-                    policy_entropy=-log_pi
-                    self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
-                    self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
-                    self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
-                    self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
-
-                    self._alphas[self._log_it_counter, 0] = self._alpha
-                    if self._autotune:
-                        self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
+                    
 
     def _update_validation_losses(self):
         
