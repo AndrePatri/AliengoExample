@@ -204,7 +204,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         self._this_child_path = os.path.abspath(__file__)
 
-        super().__init__(namespace=namespace,
+        LRhcTrainingEnvBase.__init__(self,
+                    namespace=namespace,
                     obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     episode_timeout_lb=episode_timeout_lb,
@@ -394,7 +395,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 use_gpu=self._use_gpu)
 
     def get_file_paths(self):
-        paths=super().get_file_paths()
+        paths=LRhcTrainingEnvBase.get_file_paths(self)
         paths.append(self._this_child_path)        
         return paths
 
@@ -443,7 +444,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
     
     def reset(self):
-        super().reset()
+        LRhcTrainingEnvBase.reset(self)
 
     def _pre_step(self): 
         pass

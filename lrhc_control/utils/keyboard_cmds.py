@@ -258,6 +258,7 @@ class AgentRefsFromKeyboard:
         
         if self.enable_pos:
             robot_p = self._robot_state.root_state.get(data_type="p")[self.cluster_idx_np, :].reshape(-1)
+            robot_p[2]=0.0
             self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_dpos_ref-robot_p,
                                             robot_idxs=self.cluster_idx_np)
             self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 

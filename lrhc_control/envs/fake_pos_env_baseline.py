@@ -33,7 +33,8 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
         self._min_distance=0.0 
         self._max_vref=0.5 # [m/s]
         self._max_dt=self._max_distance/ self._max_vref
-        super().__init__(namespace=namespace,
+        LinVelTrackBaseline.__init__(self, 
+            namespace=namespace,
             actions_dim=10, # twist + contact flags
             verbose=verbose,
             vlevel=vlevel,
@@ -44,12 +45,12 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             timeout_ms=timeout_ms)
     
     def get_file_paths(self):
-        paths=super().get_file_paths()
+        paths=LinVelTrackBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
         return paths
     
     def _custom_post_init(self):
-        super()._custom_post_init()
+        LinVelTrackBaseline._custom_post_init(self)
         
         # position targets to be reached (wrt robot's pos at ep start)
         self._p_trgt_w=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2].detach().clone()
