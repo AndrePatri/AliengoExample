@@ -179,7 +179,7 @@ class SACAgent(nn.Module):
         import os 
         return os.path.abspath(__file__)
     
-    def update_obs_stats(self, x):
+    def update_obs_bnorm(self, x):
         self.running_norm.unfreeze()
         self.running_norm.manual_stat_update(x)
         self.running_norm.freeze()
