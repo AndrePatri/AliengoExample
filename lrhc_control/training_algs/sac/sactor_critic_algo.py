@@ -97,9 +97,9 @@ class SActorCriticAlgoBase(ABC):
         
         self._collection_t = time.perf_counter()
         
-        if self._vec_transition_counter % self._running_stats_vecfreq == 0:
+        if self._vec_transition_counter % self._bnorm_vecfreq == 0:
             with torch.no_grad(): # don't need grad computation here
-                self._update_running_stats(bsize=self._running_stats_bsize)
+                self._update_batch_norm(bsize=self._bnorm_bsize)
 
         self._policy_update_t_start = time.perf_counter()
         for i in range(self._update_freq):
@@ -320,7 +320,7 @@ class SActorCriticAlgoBase(ABC):
                     save_code=True,
                     dir=self._drop_dir
                 )
-                wandb.watch(self._agent, log="all")
+                wandb.watch((self._agent), log="all", log_freq=1000, log_graph=False)
         
         if "demo_stop_thresh" in self._hyperparameters:
             self._demo_stop_thresh=self._hyperparameters["demo_stop_thresh"]
@@ -429,8 +429,8 @@ class SActorCriticAlgoBase(ABC):
         self._log_alpha = None
         self._alpha = 0.2
         
-        self._running_stats_bsize = 4096
-        self._running_stats_vecfreq = 5 # update running stats (e.g. obs) frequency
+        self._bnorm_bsize = 4096
+        self._bnorm_vecfreq = 5 # update freq for batch normalizations (e.g. observations)
 
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
@@ -558,6 +558,9 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["noise_freq"] = self._noise_freq
         self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
         self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
+        
+        self._hyperparameters["bnorm_bsize"] = self._bnorm_bsize
+        self._hyperparameters["bnorm_vecfreq"] = self._bnorm_vecfreq
         
         # small debug log
         info = f"\nUsing \n" + \
@@ -1459,15 +1462,14 @@ class SActorCriticAlgoBase(ABC):
             self._replay_bf_full = True
             self._bpos = 0
 
-    def _update_running_stats(self, bsize: int = None):
+    def _update_batch_norm(self, bsize: int = None):
 
         if bsize is None:
             bsize=self._batch_size # same used for training
 
-        # update obs stats        
+        # update obs normalization        
         # (we should sample also next obs, but if most of the transitions are not terminal, 
         # this is not an issue and is more efficient)
-
         if (self._agent.running_norm is not None) and \
             (not self._eval):
             batched_obs = self._obs.view((-1, self._env.obs_dim()))
