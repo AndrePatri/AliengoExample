@@ -83,7 +83,7 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         # self._walk_to_trot_thresh=0.5 # [m/s] # kyon no wheels
         # self._walk_to_trot_thresh_omega=0.5 # [m/s]
         # phase_period_walk=2.0 # kyon no wheels
-        # phase_period_trot=1.5
+        # phase_period_trot=2.0
 
         # self._walk_to_trot_thresh=3.0 # [m/s] # kyon wheels
         # self._walk_to_trot_thresh_omega=3.0 # [m/s]
