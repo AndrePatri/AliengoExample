@@ -532,9 +532,9 @@ class SActorCriticAlgoBase(ABC):
         if self._eval: # no need for validation transitions during evaluation
             self._validate=False
 
-        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_timesteps)*self._update_freq #TD3 delayed update
-        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_timesteps)*self._update_freq # qf updated at each vec timesteps
-        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_timesteps)*self._update_freq//self._trgt_net_freq
+        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq #TD3 delayed update
+        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq # qf updated at each vec timesteps
+        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq//self._trgt_net_freq
 
         self._exp_to_policy_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_policy_updates_to_be_done)
         self._exp_to_qf_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_qf_updates_to_be_done)
