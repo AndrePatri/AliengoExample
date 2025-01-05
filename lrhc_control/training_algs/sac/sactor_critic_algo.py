@@ -1047,12 +1047,12 @@ class SActorCriticAlgoBase(ABC):
             # algo data 
             hf.create_dataset('qf1_vals_mean', data=self._qf1_vals_mean.numpy())
             hf.create_dataset('qf2_vals_mean', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_std', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_std', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_max', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_min', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_max', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_min', data=self._qf2_vals_mean.numpy())
+            hf.create_dataset('qf1_vals_std', data=self._qf1_vals_std.numpy())
+            hf.create_dataset('qf2_vals_std', data=self._qf2_vals_std.numpy())
+            hf.create_dataset('qf1_vals_max', data=self._qf1_vals_max.numpy())
+            hf.create_dataset('qf1_vals_min', data=self._qf1_vals_min.numpy())
+            hf.create_dataset('qf2_vals_max', data=self._qf2_vals_max.numpy())
+            hf.create_dataset('qf2_vals_min', data=self._qf1_vals_min.numpy())
             
             hf.create_dataset('qf1_loss', data=self._qf1_loss.numpy())
             hf.create_dataset('qf2_loss', data=self._qf2_loss.numpy())
