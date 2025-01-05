@@ -85,15 +85,15 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         # phase_period_walk=2.0 # kyon no wheels
         # phase_period_trot=1.5
 
-        self._walk_to_trot_thresh=3.0 # [m/s] # kyon wheels
-        self._walk_to_trot_thresh_omega=3.0 # [m/s]
-        phase_period_walk=2.0 # kyon wheels
-        phase_period_trot=2.0
-
-        # self._walk_to_trot_thresh=3.0 # [m/s] # centauro no wheels
+        # self._walk_to_trot_thresh=3.0 # [m/s] # kyon wheels
         # self._walk_to_trot_thresh_omega=3.0 # [m/s]
-        # phase_period_walk=3.5 # centauro
-        # phase_period_trot=1.5
+        # phase_period_walk=2.0 # kyon wheels
+        # phase_period_trot=2.0
+
+        self._walk_to_trot_thresh=3.0 # [m/s] # centauro no wheels
+        self._walk_to_trot_thresh_omega=3.0 # [m/s]
+        phase_period_walk=3.5 # centauro
+        phase_period_trot=1.5
 
         # self._walk_to_trot_thresh=3.0 # [m/s] # centauro with wheels
         # self._walk_to_trot_thresh_omega=3.0 # [m/s] 
