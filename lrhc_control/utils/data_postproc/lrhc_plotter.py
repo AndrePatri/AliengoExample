@@ -2,6 +2,17 @@ import h5py
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
+
+# Define a custom colormap (this is an example; adjust as needed)
+colors = [
+    "#0000FF",  # Blue
+    "#00FFFF",  # Cyan
+    "#00FF00",  # Green
+    "#FFFF00",  # Yellow
+    "#FF0000"   # Red
+]
+custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", colors, N=256)
 
 class LRHCPlotter:
     def __init__(self, hdf5_file_path):
@@ -59,7 +70,7 @@ class LRHCPlotter:
         except Exception as e:
             print(f"Error loading data: {e}")
 
-    def plot_data(self, dataset_name, xaxis_dataset_name="", title="Plot", xlabel="Time", ylabel="Intensity", cmap="viridis"):
+    def plot_data(self, dataset_name, xaxis_dataset_name="", title="Plot", xlabel="Time", ylabel="Intensity", cmap="Blues"):
         """
         Plot the data based on the number of environments in the dataset.
         
@@ -73,7 +84,7 @@ class LRHCPlotter:
             title (str): Title of the plot.
             xlabel (str): Label for the x-axis.
             ylabel (str): Label for the y-axis.
-            cmap (str): Colormap for the heatmap.
+            cmap (str): Colormap for the heatmap (default: "Blues").
         """
         if dataset_name not in self.data:
             print(f"Dataset '{dataset_name}' not loaded. Use 'load_data' first.")
@@ -121,7 +132,7 @@ class LRHCPlotter:
                 data = dataset[:, :, i]  # Extract data for all environments
                 
                 # Flatten and filter NaNs from data and corresponding x values
-                valid_mask = xaxis>0  # Valid (finite) mask
+                valid_mask = xaxis > 0  # Valid (finite) mask
                 
                 valid_time = xaxis[valid_mask]
                 valid_values = data[valid_mask, :]
@@ -130,28 +141,39 @@ class LRHCPlotter:
                 if valid_values.size == 0:
                     print(f"Data {i+1} contains no valid finite values. Skipping.")
                     continue
-
+                
+                tiled_values = np.zeros((valid_values.shape[0] * valid_values.shape[1],))
+                for j in range(valid_values.shape[1]):
+                    tiled_values[j * valid_values.shape[0]:(j * valid_values.shape[0] + valid_values.shape[0])] = valid_values[:, j]
+                
                 # Compute 2D histogram
                 hist_2d, y_edges, x_edges = np.histogram2d(
-                    valid_values.reshape(-1, 1).flatten(),
+                    tiled_values.flatten(),
                     np.tile(valid_time, valid_values.shape[1]),  # Filtered time axis
-                    bins=(150, round(xaxis.shape[0]/50)),  # Time bins and intensity bins
+                    bins=(50, 100),  # Time bins and intensity bins
                     density=False,
                 )
                 
-                # Plot the heatmap
-                # im = axes[i].imshow(
-                #     hist_2d.T, 
-                #     aspect="auto", 
-                #     origin="lower", 
-                #     extent=[xaxis[0], xaxis[-1], y_edges[0], y_edges[-1]], 
-                #     cmap=cmap
-                # )
-                axes[i].pcolormesh(x_edges, y_edges, hist_2d, cmap='rainbow')
+                # Plot the heatmap with white background and blue colormap
+                im = axes[i].pcolormesh(
+                    x_edges, 
+                    y_edges, 
+                    hist_2d, 
+                    norm="log", # linear , symlog
+                    cmap=cmap,
+                    alpha=0.8,
+                    shading="auto", # "nearest", "flat"
+                    edgecolors="none",
+                    # vmin=500,  # Set the minimum value for the colormap
+                    # vmax=2000  # Set the maximum value for the colormap
+                # Smooth shading for better visualization
+                )
                 axes[i].set_title(f"Data {i+1} Heatmap Histogram")
                 axes[i].set_ylabel(ylabel)
                 axes[i].grid()
-                # fig.colorbar(im, ax=axes[i], label="Frequency")
+                
+                # Add a colorbar to the plot
+                fig.colorbar(im, ax=axes[i], label="Frequency")
 
             axes[-1].set_xlabel(xlabel)
             plt.suptitle(title)
@@ -160,9 +182,11 @@ class LRHCPlotter:
        
 
 if __name__ == "__main__":  
-    path="/root/training_data/SAC/LinVelTrackBaseline/d2024_12_09_h16_m01_s21-LinVelTrackBaseline/d2024_12_09_h16_m01_s21-LinVelTrackBaselinedb_info.hdf5"
+    path="/root/training_data/d2025_01_04_h13_m45_s15-FakePosEnvBaseline/d2025_01_04_h13_m45_s15-FakePosEnvBaselinedb_info.hdf5"
     plotter=LRHCPlotter(hdf5_file_path=path)
     datasets=plotter.list_datasets()
+    print("Datasets names")
+    print(datasets)
     plotter.load_data(dataset_names=datasets)
-
+    # plotter.plot_data(dataset_name="tot_rew_avrg_over_envs", title="tot_rew_avrg", xaxis_dataset_name="n_timesteps_done")
     plotter.plot_data(dataset_name="tot_rew_avrg", title="tot_rew_avrg", xaxis_dataset_name="n_timesteps_done")
