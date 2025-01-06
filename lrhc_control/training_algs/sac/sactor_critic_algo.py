@@ -693,7 +693,7 @@ class SActorCriticAlgoBase(ABC):
                     dtype=torch.int32, fill_value=0, device="cpu")
         self._elapsed_min = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0, device="cpu")        
-
+        
         self._ep_tsteps_env_distribution = torch.full((self._db_data_size, self._num_db_envs, 1), 
                     dtype=torch.int32, fill_value=-1, device="cpu")
 
