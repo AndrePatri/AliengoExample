@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
+from typing import List, Union
+import re
+import math
+import matplotlib.lines as mlines
 
 # Define a custom colormap (this is an example; adjust as needed)
 colors = [
@@ -102,7 +106,10 @@ class LRHCPlotter:
         except Exception as e:
             print(f"Error loading data: {e}")
 
-    def plot_data(self, dataset_name, xaxis_dataset_name="", title="Plot", xlabel="Time", ylabel="Intensity", cmap="Blues"):
+    def plot_data(self, dataset_name, xaxis_dataset_name="", title="Plot", xlabel="Time", ylabel="Intensity", cmap="Blues",
+            use_markers=False,
+            data_labels = None,
+            data_idxs: List[int] = None):
         """
         Plot the data based on the number of environments in the dataset.
         
@@ -157,14 +164,28 @@ class LRHCPlotter:
             # Time series plot for single environment
             fig, ax = plt.subplots(figsize=(10, 5))
             data = dataset[:, 0, :]  # Extract single environment data
-           
-            for i in range(n_data):
-                valid_mask = np.isfinite(data[:, i])
-                ax.plot(xaxis[valid_mask], data[valid_mask, i], 'o', label=f"Data {i+1}", markersize=3)
-            ax.set_title(f"{title} - Single Environment")
+            data_indexes=list(range(0, n_data)) if data_idxs is None else data_idxs
+            labels=[]
+            for i in range(len(data_indexes)):
+                idx=data_indexes[i]
+                valid_mask = np.isfinite(data[:, idx])
+                label=f"Data {idx+1}" if data_labels is None else data_labels[i]
+                labels.append(label)
+                if use_markers:
+                    ax.plot(xaxis[valid_mask], data[valid_mask, idx], 'o', label=label, markersize=3)
+                else:
+                    ax.plot(xaxis[valid_mask], data[valid_mask, idx], label=label)
+            ax.set_title(f"{title}")
             ax.set_xlabel(xlabel)
             ax.set_ylabel("Value")
-            ax.legend()
+            # Create custom legend with lines instead of dots
+            legend_lines = [mlines.Line2D([0], [0], color=ax.get_lines()[i].get_color(), lw=4) for i in range(len(data_indexes))]
+            legend = ax.legend(legend_lines, labels, ncol=2, handlelength=2)
+
+            # legend = ax.legend(ncol=2, markerscale=2)
+
+            legend.set_draggable(True)  # Make the legend draggable
+
             ax.grid(True)
         else:
             # Heatmap histogram for multiple environments
@@ -176,7 +197,7 @@ class LRHCPlotter:
                 data = dataset[:, :, i]  # Extract data for all environments
                 
                 # Flatten and filter NaNs from data and corresponding x values
-                valid_mask = np.isfinite(xaxis)  # Valid (finite) mask
+                valid_mask = xaxis > 0  # Valid (finite) mask
                 
                 valid_time = xaxis[valid_mask]
                 valid_values = data[valid_mask, :]
@@ -186,24 +207,37 @@ class LRHCPlotter:
                     print(f"Data {i+1} contains no valid finite values. Skipping.")
                     continue
                 
+                tiled_values = np.zeros((valid_values.shape[0] * valid_values.shape[1],))
+                for j in range(valid_values.shape[1]):
+                    tiled_values[j * valid_values.shape[0]:(j * valid_values.shape[0] + valid_values.shape[0])] = valid_values[:, j]
+                
                 # Compute 2D histogram
-                hist_2d, x_edges, y_edges = np.histogram2d(
-                    valid_time,
-                    valid_values.flatten(),
+                hist_2d, y_edges, x_edges = np.histogram2d(
+                    tiled_values.flatten(),
+                    np.tile(valid_time, valid_values.shape[1]),  # Filtered time axis
                     bins=(50, 100),  # Time bins and intensity bins
                     density=False,
                 )
                 
-                # Plot the heatmap
+                # Plot the heatmap with white background and blue colormap
                 im = axes[i].pcolormesh(
                     x_edges, 
                     y_edges, 
-                    hist_2d.T, 
+                    hist_2d, 
+                    norm="log", # linear , symlog
                     cmap=cmap,
-                    shading="auto"
+                    alpha=0.5,
+                    shading="auto", # "nearest", "flat"
+                    edgecolors="none",
+                    # vmin=500,  # Set the minimum value for the colormap
+                    # vmax=2000  # Set the maximum value for the colormap
+                # Smooth shading for better visualization
                 )
-                axes[i].set_title(f"Data {i+1} Heatmap Histogram")
+                axes[i].set_title(f"Data {i+1}")
                 axes[i].set_ylabel(ylabel)
+                axes[i].grid()
+                
+                # Add a colorbar to the plot
                 fig.colorbar(im, ax=axes[i], label="Frequency")
 
             axes[-1].set_xlabel(xlabel)
@@ -223,8 +257,35 @@ class LRHCPlotter:
 
         plt.show()
 
-if __name__ == "__main__":  
-    path = "/root/training_data/d2025_01_06_h14_m25_s46-FakePosEnvBaseline/d2025_01_06_h14_m25_s46-FakePosEnvBaselinedb_info.hdf5"
+    def get_idx_matching(self,pattern_list, original_list):
+        """
+        Find the indices of strings in the original list that match any of the patterns.
+
+        Args:
+            pattern_list (list of str): List of regex patterns to match.
+            original_list (list of str): List of strings to search in.
+
+        Returns:
+            list of int: List of indices of strings in original_list that match any pattern.
+        """
+        matching_indices = []
+        matching_names = []
+        
+        for idx, string in enumerate(original_list):
+            for pattern in pattern_list:
+                if re.search(pattern, string):  # Check if pattern matches the string
+                    matching_indices.append(idx)
+                    break  # Stop checking further patterns for this string
+        
+        for i in range(len(matching_indices)):
+            matching_names.append(original_list[matching_indices[i]])
+
+        return matching_indices,matching_names
+
+if __name__ == "__main__":
+    
+    # load training data
+    path = "/root/training_data/d2025_01_05_h14_m44_s21-FakePosEnvBaselinedb_info.hdf5"
     plotter = LRHCPlotter(hdf5_file_path=path)
     datasets = plotter.list_datasets()
     attributes = plotter.list_attributes()
@@ -235,9 +296,77 @@ if __name__ == "__main__":
     plotter.load_data(dataset_names=datasets)
     plotter.load_attributes()
 
-    plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs", xaxis_dataset_name="n_timesteps_done")
-    # plotter.plot_data(dataset_name="tot_rew_avrg", title="tot_rew_avrg", xaxis_dataset_name="n_timesteps_done")
-    # plotter.plot_data(dataset_name="running_mean_obs", title="tot_rew_avrg", xaxis_dataset_name="n_timesteps_done", show=False)
+    obs_names=list(plotter.attributes["obs_names"])
 
+    # plot some data
+
+    # cmd efforts
+    patterns=["rhc_cmd_eff_hip"]
+    selected_obs_idx,selected_obs=plotter.get_idx_matching(patterns, obs_names)
+    plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc cmd effort", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True,
+        data_labels=selected_obs,
+        data_idxs=selected_obs_idx)
+    
+    # estimated contact forces
+    patterns=["fc_contact"]
+    selected_f_idx, selected_f=plotter.get_idx_matching(patterns, obs_names)
+    plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - est. contact f", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True,
+        data_labels=selected_f,
+        data_idxs=selected_f_idx)
+    
+    # mpc fail idx
+    patterns=["fail"]
+    f_idx, selected_f=plotter.get_idx_matching(patterns, obs_names)
+    plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - MPC fail index", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True,
+        data_labels=selected_f,
+        data_idxs=f_idx)
+    
+    # qfloss 
+    plotter.plot_data(dataset_name="qf1_loss", title="qf1 loss", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="qf1_loss_validation", title="qf1 loss_validation", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    
+    # total reward
+    plotter.plot_data(dataset_name="tot_rew_avrg", title="tot_rew_avrg", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done")
+    plotter.plot_data(dataset_name="tot_rew_avrg_over_envs", title="tot_rew_avrg_over_envs", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done")
+    plotter.plot_data(dataset_name="tot_rew_max", title="tot_rew_max", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done")
+    plotter.plot_data(dataset_name="tot_rew_min", title="tot_rew_min", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done")
+
+    # env data 
+    plotter.plot_data(dataset_name="env_step_rt_factor", title="env_step_rt_factor", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True)
+    
+    plotter.plot_data(dataset_name="SubTruncations_avrg_over_envs", title="SubTruncations_avrg_over_envs", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True)
+    plotter.plot_data(dataset_name="SubTerminations_avrg_over_envs", title="SubTerminations_avrg_over_envs", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True)
     plotter.show()  # Display all plots
     
