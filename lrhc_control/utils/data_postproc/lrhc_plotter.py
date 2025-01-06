@@ -106,10 +106,17 @@ class LRHCPlotter:
         except Exception as e:
             print(f"Error loading data: {e}")
 
-    def plot_data(self, dataset_name, xaxis_dataset_name="", title="Plot", xlabel="Time", ylabel="Intensity", cmap="Blues",
+    def plot_data(self, dataset_name,
+            title="Plot",
+            xaxis_dataset_name="", xlabel="Time", 
+            ylabel="Intensity", 
+            cmap="Blues",
             use_markers=False,
             data_labels = None,
-            data_idxs: List[int] = None):
+            data_idxs: List[int] = None,
+            distr_std = None, 
+            distr_max = None, 
+            distr_min = None):
         """
         Plot the data based on the number of environments in the dataset.
         
@@ -129,6 +136,19 @@ class LRHCPlotter:
         if dataset_name not in self.data:
             print(f"Dataset '{dataset_name}' not loaded. Use 'load_data' first.")
             return
+
+        data_distr_std=None
+        data_distr_min=None
+        data_distr_max=None
+        if distr_std is not None:
+            if isinstance(distr_std, str):
+                data_distr_std=self.data[distr_std]
+        if distr_min is not None:
+            if isinstance(distr_min, str):
+                data_distr_min=self.data[distr_min]
+        if distr_max is not None:
+            if isinstance(distr_max, str):
+                data_distr_max=self.data[distr_max]
 
         dataset = self.data[dataset_name]
         n_samples = 1
@@ -164,6 +184,13 @@ class LRHCPlotter:
             # Time series plot for single environment
             fig, ax = plt.subplots(figsize=(10, 5))
             data = dataset[:, 0, :]  # Extract single environment data
+            if data_distr_std is not None and data_distr_std.ndim==3:
+                data_distr_std=data_distr_std[:, 0, :]
+            if data_distr_max is not None and data_distr_max.ndim==3:
+                data_distr_max=data_distr_max[:, 0, :]
+            if data_distr_min is not None and data_distr_min.ndim==3:
+                data_distr_min=data_distr_min[:, 0, :]
+
             data_indexes=list(range(0, n_data)) if data_idxs is None else data_idxs
             labels=[]
             for i in range(len(data_indexes)):
@@ -171,10 +198,26 @@ class LRHCPlotter:
                 valid_mask = np.isfinite(data[:, idx])
                 label=f"Data {idx+1}" if data_labels is None else data_labels[i]
                 labels.append(label)
+                plt_line=None
                 if use_markers:
-                    ax.plot(xaxis[valid_mask], data[valid_mask, idx], 'o', label=label, markersize=3)
+                    plt_line, = ax.plot(xaxis[valid_mask], data[valid_mask, idx], 'o', label=label, markersize=3)
                 else:
-                    ax.plot(xaxis[valid_mask], data[valid_mask, idx], label=label)
+                    plt_line, = ax.plot(xaxis[valid_mask], data[valid_mask, idx], label=label)
+                    if data_distr_std is not None: # add data distribution std area
+                        alpha=0.2
+                        ax.fill_between(xaxis[valid_mask], 
+                                data[valid_mask, idx] - data_distr_std[valid_mask, idx], data[valid_mask, idx] + data_distr_std[valid_mask, idx],
+                                color=plt_line.get_color(), alpha=alpha, 
+                                label="± 1 std")
+                    if data_distr_min is not None and data_distr_max is not None: # add min max bounds
+                        alpha=0.2
+                        if data_distr_std is not None:
+                            alpha=0.1 # max min even more transparent
+                        ax.fill_between(xaxis[valid_mask], 
+                                data_distr_min[valid_mask, idx], data_distr_max[valid_mask, idx],
+                                color=plt_line.get_color(), alpha=alpha, 
+                                label="min/max")
+                        
             ax.set_title(f"{title}")
             ax.set_xlabel(xlabel)
             ax.set_ylabel("Value")
@@ -282,6 +325,44 @@ class LRHCPlotter:
 
         return matching_indices,matching_names
 
+    def compose_datasets(self, datasets_list: List[str], name: str):
+        """
+        Compose multiple datasets along the data dimension (third dimension) and store the result.
+
+        Args:
+            datasets_list (List[str]): A list of dataset names to compose.
+            name (str): Name for the new composed dataset.
+
+        Raises:
+            ValueError: If datasets have incompatible shapes or are not found.
+        """
+        # Check that all datasets are loaded
+        for dataset_name in datasets_list:
+            if dataset_name not in self.data:
+                raise ValueError(f"Dataset '{dataset_name}' not loaded. Use 'load_data' first.")
+
+        # Retrieve the datasets
+        datasets = [self.data[dataset_name] for dataset_name in datasets_list]
+
+        # Check compatibility (same number of samples and environments)
+        base_shape = datasets[0].shape
+        n_samples, n_envs = base_shape[0], base_shape[1] if len(base_shape) > 1 else 1
+        for dataset, dataset_name in zip(datasets, datasets_list):
+            if len(dataset.shape) == 2:  # Add singleton environment dimension if needed
+                dataset = dataset[:, np.newaxis, :]
+            if dataset.shape[:2] != (n_samples, n_envs):
+                raise ValueError(
+                    f"Dataset '{dataset_name}' has incompatible shape {dataset.shape}. "
+                    f"Expected {n_samples} samples and {n_envs} environments."
+                )
+
+        # Stack datasets along the data dimension
+        composed_data = np.concatenate(datasets, axis=-1)
+
+        # Store the new dataset
+        self.data[name] = composed_data
+        print(f"Composed dataset '{name}' created with shape {composed_data.shape}.")
+
 if __name__ == "__main__":
     
     # load training data
@@ -331,49 +412,45 @@ if __name__ == "__main__":
         data_idxs=f_idx)
     
     # losses 
-    plotter.plot_data(dataset_name="qf1_loss", title="qf1 loss", 
+    plotter.compose_datasets(name="qf_loss",
+        datasets_list=["qf1_loss", "qf1_loss_validation", 
+                    "qf2_loss", "qf2_loss_validation"])
+    plotter.plot_data(dataset_name="qf_loss", title="qf loss", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
         use_markers=False)
-    plotter.plot_data(dataset_name="qf1_loss_validation", title="qf1 loss_validation", 
+    plotter.compose_datasets(name="actor_losses",
+        datasets_list=["actor_loss", "actor_loss_validation"])
+    plotter.plot_data(dataset_name="actor_losses", title="actor_loss", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="actor_loss", title="actor_loss", 
+        use_markers=True)
+    plotter.compose_datasets(name="alpha_losses",
+        datasets_list=["alpha_loss", "alpha_loss_validation"])
+    plotter.plot_data(dataset_name="alpha_losses", title="alpha_loss", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="actor_loss_validation", title="actor_loss_validation", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="alpha_loss", title="alpha_loss", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="alpha_loss", title="alpha_loss_validation", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-
-    # other training data
-    plotter.plot_data(dataset_name="qf1_vals_mean", title="qf1_mean", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="qf1_vals_std", title="qf1_std", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="qf1_vals_max", title="qf1_max", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
-    plotter.plot_data(dataset_name="qf1_vals_min", title="qf1_min", 
-        xaxis_dataset_name="n_timesteps_done",
-        xlabel="n_timesteps_done",
-        use_markers=False)
+        use_markers=True)
     
+    # other training data
+    plotter.compose_datasets(name="qf_vals",
+        datasets_list=["qf1_vals_mean", "qf2_vals_mean"])
+    plotter.compose_datasets(name="qf_vals_std",
+        datasets_list=["qf1_vals_std", "qf2_vals_std"])
+    plotter.compose_datasets(name="qf_vals_max",
+        datasets_list=["qf1_vals_max", "qf2_vals_max"])
+    plotter.compose_datasets(name="qf_vals_min",
+        datasets_list=["qf1_vals_min", "qf2_vals_min"])
+    plotter.plot_data(dataset_name="qf_vals", 
+        title="Qf mean - std - min/max", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        ylabel="Q val.",
+        use_markers=False,
+        distr_std="qf_vals_std",
+        distr_max="qf_vals_max",
+        distr_min="qf_vals_min")
+
     # total reward
     plotter.plot_data(dataset_name="tot_rew_avrg", title="tot_rew_avrg", 
         xaxis_dataset_name="n_timesteps_done",
@@ -390,6 +467,11 @@ if __name__ == "__main__":
 
     # env data 
     plotter.plot_data(dataset_name="env_step_rt_factor", title="env_step_rt_factor", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=True)
+    
+    plotter.plot_data(dataset_name="ep_tsteps_env_distribution", title="ep_tsteps_env_distribution", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
         use_markers=True)
