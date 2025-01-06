@@ -280,6 +280,9 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
         self._hyperparameters["sub_reward_names"]=self._env.sub_rew_names()
+        self._hyperparameters["sub_trunc_names"]=self._env._get_sub_trunc_names()
+        self._hyperparameters["sub_term_names"]=self._env._get_sub_term_names()
+
         self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
 
         # reset environment
