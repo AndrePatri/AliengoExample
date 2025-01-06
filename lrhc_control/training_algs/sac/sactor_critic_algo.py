@@ -365,6 +365,9 @@ class SActorCriticAlgoBase(ABC):
 
         self._start_time = time.perf_counter()
 
+        self._replay_bf_full = False
+        self._validation_bf_full = False
+
         self._is_done = False
         self._setup_done = True
 
@@ -401,8 +404,6 @@ class SActorCriticAlgoBase(ABC):
 
         self._collection_freq=1
         self._update_freq=1
-
-        self._replay_bf_full = False
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
@@ -521,13 +522,13 @@ class SActorCriticAlgoBase(ABC):
             self._db_vecstep_frequency=self._collection_freq
 
         self._validate=True
-        self._validation_bf_full=False
-        self._validation_ratio=0.1 # [0, 1], 0.1 10% size of training buffer
+        self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
+        self._validation_ratio=1.0/self._validation_collection_vecfreq # [0, 1], 0.1 10% size of training buffer
         self._validation_buffer_size_nominal= int(self._replay_buffer_size_nominal*self._validation_ratio)
         self._validation_buffer_size_vec = self._validation_buffer_size_nominal//self._num_envs
         self._validation_buffer_size = self._validation_buffer_size_vec*self._num_envs
         self._validation_batch_size = int(self._batch_size*self._validation_ratio)
-        self._validation_collection_vecfreq=100 # add vec transitions to val buffer with some vec freq
+        
         self._validation_db_vecstep_freq=self._db_vecstep_frequency
         if self._eval: # no need for validation transitions during evaluation
             self._validate=False
