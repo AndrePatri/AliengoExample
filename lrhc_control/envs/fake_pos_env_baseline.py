@@ -31,7 +31,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
 
         self._max_distance=5.0 # [m]
         self._min_distance=0.0 
-        self._max_vref=0.5 # [m/s]
+        self._max_vref=1.0 # [m/s]
         self._max_dt=self._max_distance/ self._max_vref
         LinVelTrackBaseline.__init__(self, 
             namespace=namespace,

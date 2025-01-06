@@ -52,7 +52,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._smoothing_horizon_vel_err=0.08
         self._track_rew_smoother=None
 
-        self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
+        self._single_task_ref_per_episode=False # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         if not self._single_task_ref_per_episode:
             random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
