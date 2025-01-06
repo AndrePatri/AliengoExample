@@ -330,12 +330,46 @@ if __name__ == "__main__":
         data_labels=selected_f,
         data_idxs=f_idx)
     
-    # qfloss 
+    # losses 
     plotter.plot_data(dataset_name="qf1_loss", title="qf1 loss", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
         use_markers=False)
     plotter.plot_data(dataset_name="qf1_loss_validation", title="qf1 loss_validation", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="actor_loss", title="actor_loss", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="actor_loss_validation", title="actor_loss_validation", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="alpha_loss", title="alpha_loss", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="alpha_loss", title="alpha_loss_validation", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+
+    # other training data
+    plotter.plot_data(dataset_name="qf1_vals_mean", title="qf1_mean", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="qf1_vals_std", title="qf1_std", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="qf1_vals_max", title="qf1_max", 
+        xaxis_dataset_name="n_timesteps_done",
+        xlabel="n_timesteps_done",
+        use_markers=False)
+    plotter.plot_data(dataset_name="qf1_vals_min", title="qf1_min", 
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
         use_markers=False)
