@@ -1,0 +1,98 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import random
+
+# Define the Bandit environment
+class SimpleBandit:
+    def __init__(self):
+        self.probs = [0.3, 0.8]  # Probabilities of reward for actions 0 and 1
+
+    def step(self, action):
+        # Return a reward based on the action's probability
+        reward = 1 if random.random() < self.probs[action] else 0
+        return reward
+
+# Define the Agent (Policy Network)
+class PolicyNetwork(nn.Module):
+    def __init__(self):
+        super(PolicyNetwork, self).__init__()
+        self.fc = nn.Linear(1, 2)  # Output probabilities for two actions
+
+    def forward(self, state):
+        logits = self.fc(state)
+        return torch.softmax(logits, dim=-1)  # Output action probabilities
+
+# Train the Agent using REINFORCE
+def train_agent():
+    env = SimpleBandit()  # Instantiate the environment
+    policy = PolicyNetwork()  # Instantiate the policy network
+    optimizer = optim.Adam(policy.parameters(), lr=0.0)  # Optimizer
+
+    # Training hyperparameters
+    num_episodes = 100000
+    gamma = 0.99  # Discount factor
+
+    # Training loop
+    for episode in range(num_episodes):
+        state = torch.tensor([[0.0]])  # The state is always the same (stateless environment)
+        rewards = []
+        log_probs = []
+
+        # Episode roll-out (single action per episode for a bandit)
+        action_probs = policy(state)  # Get action probabilities
+        action = torch.multinomial(action_probs, num_samples=1).item()  # Sample action
+        log_prob = torch.log(action_probs[0, action])  # Log probability of the chosen action
+        reward = env.step(action)  # Get reward from the environment
+
+        rewards.append(reward)
+        log_probs.append(log_prob)
+
+        # Compute the discounted return (G)
+        G = 0
+        discounted_rewards = []
+        for r in reversed(rewards):
+            G = r + gamma * G
+            discounted_rewards.insert(0, G)
+
+        # Normalize rewards for stability
+        discounted_rewards = torch.tensor(discounted_rewards)
+        if len(discounted_rewards) > 1:
+            discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-8)
+
+        # Policy gradient loss
+        loss = 0
+        for log_prob, G in zip(log_probs, discounted_rewards):
+            loss -= log_prob * G  # REINFORCE loss
+
+        # Backpropagation
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Print progress
+        if (episode + 1) % 100 == 0:
+            print(f"Episode {episode + 1}: Total Reward = {sum(rewards)}")
+
+    # Return the trained policy
+    return policy
+
+# Test the trained agent
+def test_agent(policy, num_tests=100):
+    env = SimpleBandit()
+    total_reward = 0
+
+    for _ in range(num_tests):
+        state = torch.tensor([[0.0]])
+        action_probs = policy(state)
+        action = torch.multinomial(action_probs, num_samples=1).item()
+        reward = env.step(action)
+        total_reward += reward
+
+    print(f"Average Reward over {num_tests} tests: {total_reward / num_tests}")
+
+# Main
+if __name__ == "__main__":
+    trained_policy = train_agent()
+    test_agent(trained_policy)

@@ -41,7 +41,7 @@ class QuadrupedGaitPatternGenerator:
         
         phase_offset = [0.0, self._phase_period / 4, self._phase_period / 2, 3 * self._phase_period / 4]  # Sequential phases
         # phase_thresh = [np.cos(3 * np.pi / 4)] * self._n_phases
-        flight_length=self._phase_period / 32
+        flight_length=self._phase_period / 16
         t_star = 3/4*self._phase_period-flight_length/2
         phase_thresh = [np.sin(2*np.pi/self._phase_period*t_star)] * self._n_phases
         return {

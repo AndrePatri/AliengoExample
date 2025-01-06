@@ -165,7 +165,7 @@ class TrainingEnvData(SharedDataWindow):
 
     def _post_shared_init(self):
         
-        self.grid_n_rows = 7
+        self.grid_n_rows = 9
 
         self.grid_n_cols = 2
 
@@ -327,6 +327,51 @@ class TrainingEnvData(SharedDataWindow):
                                     legend_list=self.shared_data_clients[5].col_names(), 
                                     ylabel="[float]"))
         
+        # agent refs 
+        self.rt_plotters.append(RtPlotWindow(data_dim=self.shared_data_clients[11].rob_refs.root_state.get(data_type="p").shape[1],
+                    n_data = 1,
+                    update_data_dt=self.update_data_dt, 
+                    update_plot_dt=self.update_plot_dt,
+                    window_duration=self.window_duration, 
+                    parent=None, 
+                    base_name="Agent refs - root position", 
+                    window_buffer_factor=self.window_buffer_factor, 
+                    legend_list=["p_x", "p_y", "p_z"], 
+                    ylabel="[m]"))
+        
+        self.rt_plotters.append(RtPlotWindow(
+                    data_dim=self.shared_data_clients[11].rob_refs.root_state.get(data_type="q").shape[1],
+                    n_data = 1,
+                    update_data_dt=self.update_data_dt, 
+                    update_plot_dt=self.update_plot_dt,
+                    window_duration=self.window_duration, 
+                    parent=None, 
+                    base_name="Agent refs - root orientation", 
+                    window_buffer_factor=self.window_buffer_factor, 
+                    legend_list=["q_w", "q_i", "q_j", "q_k"]))
+        
+        self.rt_plotters.append(RtPlotWindow(data_dim=self.shared_data_clients[11].rob_refs.root_state.get(data_type="v").shape[1],
+                    n_data = 1,
+                    update_data_dt=self.update_data_dt, 
+                    update_plot_dt=self.update_plot_dt, 
+                    window_duration=self.window_duration, 
+                    parent=None, 
+                    base_name="Agent refs - base linear vel.", 
+                    window_buffer_factor=self.window_buffer_factor, 
+                    legend_list=["v_x", "v_y", "v_z"], 
+                    ylabel="[m/s]"))
+        
+        self.rt_plotters.append(RtPlotWindow(data_dim=self.shared_data_clients[11].rob_refs.root_state.get(data_type="omega").shape[1],
+                    n_data = 1, 
+                    update_data_dt=self.update_data_dt, 
+                    update_plot_dt=self.update_plot_dt, 
+                    window_duration=self.window_duration, 
+                    parent=None, 
+                    base_name="Agent refs - base angular vel.",
+                    window_buffer_factor=self.window_buffer_factor, 
+                    legend_list=["omega_x", "omega_y", "omega_z"], 
+                    ylabel="[rad/s]"))
+        
         self.grid.addFrame(self.rt_plotters[0].base_frame, 0, 0)
         self.grid.addFrame(self.rt_plotters[1].base_frame, 0, 1)
         self.grid.addFrame(self.rt_plotters[2].base_frame, 1, 0)
@@ -341,6 +386,12 @@ class TrainingEnvData(SharedDataWindow):
         self.grid.addFrame(self.rt_plotters[11].base_frame, 5, 1)
         self.grid.addFrame(self.rt_plotters[12].base_frame, 6, 0)
         self.grid.addFrame(self.rt_plotters[13].base_frame, 6, 1)
+
+        # agent refs
+        self.grid.addFrame(self.rt_plotters[14].base_frame, 7, 0)
+        self.grid.addFrame(self.rt_plotters[15].base_frame, 7, 1)
+        self.grid.addFrame(self.rt_plotters[16].base_frame, 8, 0)
+        self.grid.addFrame(self.rt_plotters[17].base_frame, 8, 1)
 
     def _finalize_grid(self):
                 
@@ -382,6 +433,8 @@ class TrainingEnvData(SharedDataWindow):
 
         if not self._terminated:
             
+            np_idx = np.array(index)
+
             # read data on shared memory
             env_data = self.shared_data_clients[0].get().flatten()
             algo_data = self.shared_data_clients[1].get().flatten()
@@ -396,13 +449,13 @@ class TrainingEnvData(SharedDataWindow):
             self.shared_data_clients[9].synch_all(read=True, retry=True) # subterminations
             self.shared_data_clients[10].counter().synch_all(read=True, retry=True) # episodes timeout counter
 
-            self.shared_data_clients[11].rob_refs.root_state.synch_all(read=True, retry=True) # agent refs
-
             self.shared_data_clients[12].synch_all(read=True, retry=True) # q fun
             self.shared_data_clients[13].synch_all(read=True, retry=True) # q target
             
             self.shared_data_clients[14].synch_all(read=True, retry=True) # sub return
             self.shared_data_clients[15].synch_all(read=True, retry=True) # tot return 
+
+            self.shared_data_clients[11].rob_refs.root_state.synch_all(read=True, retry=True) # agent refs
 
             # update plots
             self.rt_plotters[0].rt_plot_widget.update(env_data)
@@ -426,4 +479,10 @@ class TrainingEnvData(SharedDataWindow):
 
             self.rt_plotters[12].rt_plot_widget.update(np.transpose(self.shared_data_clients[14].get_numpy_mirror()))
             self.rt_plotters[13].rt_plot_widget.update(np.transpose(self.shared_data_clients[15].get_numpy_mirror()))
+
+            # agent refs
+            self.rt_plotters[14].rt_plot_widget.update(self.shared_data_clients[11].rob_refs.root_state.get(data_type="p", robot_idxs=np_idx).flatten())
+            self.rt_plotters[15].rt_plot_widget.update(self.shared_data_clients[11].rob_refs.root_state.get(data_type="q", robot_idxs=np_idx).flatten())
+            self.rt_plotters[16].rt_plot_widget.update(self.shared_data_clients[11].rob_refs.root_state.get(data_type="v", robot_idxs=np_idx).flatten())
+            self.rt_plotters[17].rt_plot_widget.update(self.shared_data_clients[11].rob_refs.root_state.get(data_type="omega", robot_idxs=np_idx).flatten())
 

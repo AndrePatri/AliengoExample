@@ -51,7 +51,10 @@ class RhcToVizBridgeBase(ABC):
             use_static_idx: bool = True,
             update_dt: float = 0.1,
             pub_stime: float = True,
-            install_sighandler: bool = False):
+            install_sighandler: bool = False,
+            with_rhc_internal_data: bool = True):
+            
+        self._with_rhc_internal_data = with_rhc_internal_data
         
         self._install_sighandler=install_sighandler
 
@@ -275,36 +278,46 @@ class RhcToVizBridgeBase(ABC):
         # rhc internal data
         self.rhc_internal_clients = []
         for i in range(len(self._robot_indexes)):
-            self.rhc_internal_clients.append(RhcInternal(config=rhc_internal_config,
-                                                namespace=self.namespace,
-                                                rhc_index=self._robot_indexes[i],
-                                                verbose=self.verbose,
-                                                vlevel=self.vlevel,
-                                                safe=False))
-            self.rhc_internal_clients[self._robot_indexes[i]].run()
+            if self._with_rhc_internal_data:
+                self.rhc_internal_clients.append(RhcInternal(config=rhc_internal_config,
+                                                    namespace=self.namespace,
+                                                    rhc_index=self._robot_indexes[i],
+                                                    verbose=self.verbose,
+                                                    vlevel=self.vlevel,
+                                                    safe=False))
+                self.rhc_internal_clients[self._robot_indexes[i]].run()
+            else:
+                self.rhc_internal_clients.append(None)
 
         # publishing joint names on topic 
         string_array = StringArray()
         self.jnt_names_robot_encoded = string_array.encode(self.jnt_names_robot) # encoding 
         # jnt names in a ; separated string
 
-        self.handshaker.set_n_nodes(self.rhc_internal_clients[0].q.n_cols) # signal to RHViz client
-        # the number of nodes of the RHC problem
+        if self._with_rhc_internal_data:
+            self.handshaker.set_n_nodes(self.rhc_internal_clients[0].q.n_cols) # signal to RHViz client
+            # the number of nodes of the RHC problem
+        else: # we just publish RHCmds
+            self.handshaker.set_n_nodes(1)
 
         if self._srdf_homing_file_path is not None:
             self._homer= RobotHomer(srdf_path=self._srdf_homing_file_path, 
                             jnt_names=self.jnt_names_robot)
 
-        self.jnt_names_rhc = self.rhc_internal_clients[0].jnt_names() # assumes all controllers work on the same robot
+        if self._with_rhc_internal_data:
+            self.jnt_names_rhc = self.rhc_internal_clients[0].jnt_names() # assumes all controllers work on the same robot
+        else:
+            self.jnt_names_rhc = self.rhc_cmds.jnt_names()
+
         rhc_jnt_names_set=set(self.jnt_names_rhc)
         env_jnt_names_set=set(self.jnt_names_robot)
         missing_jnts=list(env_jnt_names_set-rhc_jnt_names_set)
         if not len(missing_jnts)==0:
             self.jnt_names_rhc=self.jnt_names_rhc+missing_jnts
             self._some_jnts_are_missing=True
-            self._missing_homing=np.zeros((len(missing_jnts),self.rhc_internal_clients[0].q.n_cols))
+            self._missing_homing=np.zeros((len(missing_jnts),self.handshaker.get_n_nodes()))
             if self._homer is not None:
-               for node in range(self.rhc_internal_clients[0].q.n_cols):
+               for node in range(self.handshaker.get_n_nodes()):
                    self._missing_homing[:, node]=np.array(self._homer.get_homing_vals(jnt_names=missing_jnts))
                 
         self.jnt_names_rhc_encoded = string_array.encode(self.jnt_names_rhc) # encoding 
@@ -431,7 +444,8 @@ class RhcToVizBridgeBase(ABC):
                 self.rhc_cmds.synch_from_shared_mem()
                 if self._with_agent_refs:
                     self.agent_refs.rob_refs.synch_from_shared_mem()
-                self.rhc_internal_clients[self._current_index].synch(read=True)
+                if self._with_rhc_internal_data:
+                    self.rhc_internal_clients[self._current_index].synch(read=True)
                 self._sim_time = self._sim_data.get()[self._simtime_idx].item() - self._sim_time_init
                 self._publish()
             
@@ -453,8 +467,8 @@ class RhcToVizBridgeBase(ABC):
         if not self._closed:
             if not self.rhc_internal_clients is None:
                 for i in range(len(self.rhc_internal_clients)):
-                    self.rhc_internal_clients[i].close() # closes servers
-
+                    if self.rhc_internal_clients[i] is not None:
+                        self.rhc_internal_clients[i].close() # closes servers
             if not self.robot_state is None:
                 self.robot_state.close()
             if not self.rhc_refs is None:
@@ -496,7 +510,13 @@ class RhcToVizBridgeBase(ABC):
         self.rhc_jntnames_pub.publish(String(data=self.jnt_names_rhc_encoded))
 
         # publish rhc_q
-        rhc_actual=self.rhc_internal_clients[self._current_index].q.get_numpy_mirror()[:, :]
+        if self._with_rhc_internal_data:
+            rhc_actual=self.rhc_internal_clients[self._current_index].q.get_numpy_mirror()[:, :]
+        else: # take data from rhc cmds
+            root_q_rhc = self.rhc_cmds.root_state.get(data_type="q_full",robot_idxs=self._current_index)
+            jnts_q_rhc = self.rhc_cmds.jnts_state.get(data_type="q")[self._current_index, :]
+            rhc_actual = np.concatenate((root_q_rhc, jnts_q_rhc), axis=0)
+
         rhc_missing=self._missing_homing
         
         if rhc_missing is None:

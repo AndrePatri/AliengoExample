@@ -30,13 +30,13 @@ class SAC(SActorCriticAlgoBase):
 
         obs = self._env.get_obs(clone=True) # also accounts for resets when envs are 
         # either terminated or truncated. CRUCIAL: we need to clone, 
-        # otherwise obs is be a view and will be overridden in the call to step
+        # otherwise obs is a view and will be overridden in the call to step
         # with next_obs!!!
-        if self._vec_transition_counter > (self._warmstart_vectimesteps-1):
+        if self._vec_transition_counter > self._warmstart_vectimesteps:
             actions, _, _ = self._agent.get_action(x=obs)
             actions = actions.detach()
             if self._n_expl_envs>0 and \
-                (self._vec_transition_counter%self._noise_freq==0 or \
+                (self._vec_transition_counter % self._noise_freq == 0 or \
                 self._pert_counter>0):
                 self._perturb_some_actions(actions=actions)
                 
@@ -73,7 +73,7 @@ class SAC(SActorCriticAlgoBase):
                 actions[:, :] = mean.detach()
 
             if self._allow_expl_during_eval and self._n_expl_envs>0 and \
-                (self._vec_transition_counter%self._noise_freq==0 or \
+                (self._vec_transition_counter % self._noise_freq == 0 or \
                 self._pert_counter>0):
                 self._perturb_some_actions(actions=actions)
 
@@ -116,7 +116,7 @@ class SAC(SActorCriticAlgoBase):
     def _update_policy(self):
         
         # training phase
-        if self._vec_transition_counter > (self._warmstart_vectimesteps-1):
+        if self._vec_transition_counter > self._warmstart_vectimesteps:
                 
             self._switch_training_mode(train=True)
 
@@ -162,6 +162,18 @@ class SAC(SActorCriticAlgoBase):
                         self._a_optimizer.step()
                         self._alpha = self._log_alpha.exp().item()
                     self._n_policy_updates[self._log_it_counter]+=1
+                
+                # just log last policy update info
+                self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
+                policy_entropy=-log_pi
+                self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
+                self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
+                self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
+                self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
+
+                self._alphas[self._log_it_counter, 0] = self._alpha
+                if self._autotune:
+                    self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
 
             # update the target networks
             if self._update_counter % self._trgt_net_freq == 0:
@@ -172,7 +184,7 @@ class SAC(SActorCriticAlgoBase):
                 self._n_tqfun_updates[self._log_it_counter]+=1
 
             if self._debug and \
-                (self._vec_transition_counter % self._db_vecstep_frequency):
+                (self._vec_transition_counter % self._db_vecstep_frequency == 0):
                 # DEBUG INFO
         
                 # current q estimates on training batch
@@ -188,19 +200,44 @@ class SAC(SActorCriticAlgoBase):
                 # q losses (~bellman error)
                 self._qf1_loss[self._log_it_counter, 0] = qf1_loss.item()
                 self._qf2_loss[self._log_it_counter, 0] = qf2_loss.item()
-    
-                if self._update_counter % self._policy_freq == 0:
-                    # just log last policy update info
-                    self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
-                    policy_entropy=-log_pi
-                    self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
-                    self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
-                    self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
-                    self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
+                    
 
-                    self._alphas[self._log_it_counter, 0] = self._alpha
-                    if self._autotune:
-                        self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
+    def _update_validation_losses(self):
+        
+        if self._debug and (self._vec_transition_counter > self._warmstart_vectimesteps):
+            # wait for training to have started (if in debug)
+
+            obs,actions,next_obs,rewards,next_terminal = self._sample_validation() # sample
+            # experience from validation buffer
+
+            with torch.no_grad():
+                
+                # critics loss
+                next_action, next_log_pi, _ = self._agent.get_action(next_obs)
+                qf1_next_target = self._agent.get_qf1t_val(next_obs, next_action)
+                qf2_next_target = self._agent.get_qf2t_val(next_obs, next_action)
+                min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self._alpha * next_log_pi
+                next_q_value = rewards.flatten() + (1 - next_terminal.flatten()) * self._discount_factor * (min_qf_next_target).view(-1)
+                
+                qf1_a_values = self._agent.get_qf1_val(obs, actions).view(-1)
+                qf2_a_values = self._agent.get_qf2_val(obs, actions).view(-1)
+                qf1_loss_eval = F.mse_loss(qf1_a_values, next_q_value)
+                qf2_loss_eval = F.mse_loss(qf2_a_values, next_q_value)
+
+                # actor loss
+                pi, log_pi, _ = self._agent.get_action(obs)
+                qf1_pi = self._agent.get_qf1_val(obs, pi)
+                qf2_pi = self._agent.get_qf2_val(obs, pi)
+                min_qf_pi = torch.min(qf1_pi, qf2_pi)
+                actor_loss_eval = ((self._alpha * log_pi) - min_qf_pi).mean()
+                
+                # write db data
+                self._qf1_loss_validation[self._log_it_counter, 0] = qf1_loss_eval.item()
+                self._qf2_loss_validation[self._log_it_counter, 0] = qf2_loss_eval.item()
+                self._actor_loss_validation[self._log_it_counter, 0] = actor_loss_eval.item()
+                if self._autotune: # also compute alpha loss
+                    alpha_loss_eval = (-self._log_alpha.exp() * (log_pi + self._target_entropy)).mean()
+                    self._alpha_loss_validation[self._log_it_counter, 0] = alpha_loss_eval.item() 
 
     def _get_performance_metric(self):
         # to be overridden

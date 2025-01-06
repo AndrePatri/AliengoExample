@@ -83,13 +83,13 @@ class SActorCriticAlgoBase(ABC):
         self.done()
 
     def learn(self):
-
+  
         if not self._setup_done:
             self._should_have_called_setup()
 
         self._start_time = time.perf_counter()
 
-        with torch.no_grad(): # don't want grad computation here
+        with torch.no_grad(): # don't need grad computation here
             for i in range(self._collection_freq):
                 if not self._collect_transition():
                     return False
@@ -97,15 +97,25 @@ class SActorCriticAlgoBase(ABC):
         
         self._collection_t = time.perf_counter()
         
+        if self._vec_transition_counter % self._bnorm_vecfreq == 0:
+            with torch.no_grad(): # don't need grad computation here
+                self._update_batch_norm(bsize=self._bnorm_bsize)
+
+        self._policy_update_t_start = time.perf_counter()
         for i in range(self._update_freq):
             self._update_policy()
             self._update_counter+=1
 
         self._policy_update_t = time.perf_counter()
-
+        
         with torch.no_grad():
-            self._post_step()
 
+            if self._vec_transition_counter % self._validation_db_vecstep_freq == 0:
+                self._update_validation_losses()
+            self._validation_t = time.perf_counter()
+
+            self._post_step()
+        
         return True
 
     def eval(self):
@@ -135,6 +145,10 @@ class SActorCriticAlgoBase(ABC):
 
     @abstractmethod
     def _update_policy(self):
+        pass
+    
+    @abstractmethod
+    def _update_validation_losses(self):
         pass
 
     def setup(self,
@@ -288,6 +302,8 @@ class SActorCriticAlgoBase(ABC):
                                     lr=self._lr_policy)
 
             self._init_replay_buffers() # only needed when training
+            if self._validate:
+                self._init_validation_buffers() 
         
         if self._autotune:
             self._log_alpha = torch.zeros(1, requires_grad=True, device=self._torch_device)
@@ -315,7 +331,7 @@ class SActorCriticAlgoBase(ABC):
                     save_code=True,
                     dir=self._drop_dir
                 )
-                wandb.watch(self._agent, log="all")
+                wandb.watch((self._agent), log="all", log_freq=1000, log_graph=False)
         
         if "demo_stop_thresh" in self._hyperparameters:
             self._demo_stop_thresh=self._hyperparameters["demo_stop_thresh"]
@@ -349,6 +365,9 @@ class SActorCriticAlgoBase(ABC):
 
         self._start_time = time.perf_counter()
 
+        self._replay_bf_full = False
+        self._validation_bf_full = False
+
         self._is_done = False
         self._setup_done = True
 
@@ -374,6 +393,7 @@ class SActorCriticAlgoBase(ABC):
         self._env_name = self._env.name()
         self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
         self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
+        
         self._env_n_action_reps = self._env.n_action_reps()
         
         self._use_gpu = self._env.using_gpu()
@@ -385,12 +405,11 @@ class SActorCriticAlgoBase(ABC):
         self._collection_freq=1
         self._update_freq=1
 
-        self._replay_bf_full = False
-
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 16392
+        self._batch_size = 4096
+
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
@@ -398,27 +417,39 @@ class SActorCriticAlgoBase(ABC):
         self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
         self._total_timesteps = self._total_timesteps_vec*self._num_envs # actual n transitions
 
-        self._warmstart_timesteps = int(5e3)
+        # self._warmstart_timesteps = int(5e3)
+        warmstart_length_single_env=min(self._episode_timeout_lb, self._episode_timeout_ub, 
+            self._task_rand_timeout_lb, self._task_rand_timeout_ub)
+        self._warmstart_timesteps=warmstart_length_single_env*self._num_envs
+        if self._warmstart_timesteps < self._batch_size: # ensure we collect sufficient experience before
+            # starting training
+            self._warmstart_timesteps=4*self._batch_size
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
-        self._warmstart_steps=self._warmstart_vectimesteps//self._collection_freq
-        self._warmstart_vectimesteps=self._collection_freq*self._warmstart_steps
+        # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
 
         self._lr_policy = 1e-3
-        self._lr_q = 1e-3
+        self._lr_q = 5e-4
 
-        self._discount_factor = 0.995
+        self._discount_factor = 0.99
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
         self._trgt_net_freq = 1
 
         self._autotune = True
-        self._min_entropy_per_action=1.0
-        self._target_entropy = -self._min_entropy_per_action*self._env.actions_dim()
+        self._trgt_avrg_entropy_per_action=-2.5 # the more negative, the more deterministic the policy
+        self._target_entropy = self._trgt_avrg_entropy_per_action*self._env.actions_dim()
         self._log_alpha = None
         self._alpha = 0.2
         
+        self._bnorm_bsize = 4096
+        self._bnorm_vecfreq_nom = 5 # wrt vec steps
+        # make sure _bnorm_vecfreq is a multiple of _collection_freq
+        self._bnorm_vecfreq = (self._bnorm_vecfreq_nom//self._collection_freq)*self._collection_freq
+        if self._bnorm_vecfreq == 0:
+            self._bnorm_vecfreq=self._collection_freq
+
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 50
@@ -487,9 +518,24 @@ class SActorCriticAlgoBase(ABC):
         self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
         # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
         self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
-        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq #TD3 delayed update
-        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq # qf updated at each vec timesteps
-        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_steps)*self._update_freq//self._trgt_net_freq
+        if self._bnorm_vecfreq == 0:
+            self._db_vecstep_frequency=self._collection_freq
+
+        self._validate=True
+        self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
+        self._validation_ratio=1.0/self._validation_collection_vecfreq # [0, 1], 0.1 10% size of training buffer
+        self._validation_buffer_size_nominal= int(self._replay_buffer_size_nominal*self._validation_ratio)
+        self._validation_buffer_size_vec = self._validation_buffer_size_nominal//self._num_envs
+        self._validation_buffer_size = self._validation_buffer_size_vec*self._num_envs
+        self._validation_batch_size = int(self._batch_size*self._validation_ratio)
+        
+        self._validation_db_vecstep_freq=self._db_vecstep_frequency
+        if self._eval: # no need for validation transitions during evaluation
+            self._validate=False
+
+        self._n_policy_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq #TD3 delayed update
+        self._n_qf_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq # qf updated at each vec timesteps
+        self._n_tqf_updates_to_be_done=(self._total_steps-self._warmstart_vectimesteps)*self._update_freq//self._trgt_net_freq
 
         self._exp_to_policy_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_policy_updates_to_be_done)
         self._exp_to_qf_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_qf_updates_to_be_done)
@@ -546,14 +592,32 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
         self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
         
+        self._hyperparameters["bnorm_bsize"] = self._bnorm_bsize
+        self._hyperparameters["bnorm_vecfreq"] = self._bnorm_vecfreq
+        
+        self._hyperparameters["validate"] = self._validate
+        self._hyperparameters["validation_ratio"] = self._validation_ratio
+        self._hyperparameters["validation_buffer_size_vec"] = self._validation_buffer_size_vec
+        self._hyperparameters["validation_buffer_size"] = self._validation_buffer_size
+        self._hyperparameters["validation_batch_size"] = self._validation_batch_size
+        self._hyperparameters["validation_collection_vecfreq"] = self._validation_collection_vecfreq
+
         # small debug log
         info = f"\nUsing \n" + \
             f"total (vectorized) timesteps to be simulated {self._total_timesteps_vec}\n" + \
             f"total timesteps to be simulated {self._total_timesteps}\n" + \
             f"warmstart timesteps {self._warmstart_timesteps}\n" + \
-            f"replay buffer nominal size {self._replay_buffer_size_nominal}\n" + \
-            f"replay buffer size {self._replay_buffer_size}\n" + \
-            f"batch size {self._batch_size}\n" + \
+            f"training replay buffer nominal size {self._replay_buffer_size_nominal}\n" + \
+            f"training replay buffer size {self._replay_buffer_size}\n" + \
+            f"training replay buffer vec size {self._replay_buffer_size_vec}\n" + \
+            f"training batch size {self._batch_size}\n" + \
+            f"validation enabled {self._validate}\n" + \
+            f"validation buffer nominal size {self._validation_buffer_size_nominal}\n" + \
+            f"validation buffer size {self._validation_buffer_size}\n" + \
+            f"validation buffer vec size {self._validation_buffer_size_vec}\n" + \
+            f"validation collection freq {self._validation_collection_vecfreq}\n" + \
+            f"validation update freq {self._validation_db_vecstep_freq}\n" + \
+            f"validation batch size {self._validation_batch_size}\n" + \
             f"policy update freq {self._policy_freq}\n" + \
             f"target networks freq {self._trgt_net_freq}\n" + \
             f"episode timeout max steps {self._episode_timeout_ub}\n" + \
@@ -603,10 +667,18 @@ class SActorCriticAlgoBase(ABC):
         self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         
+        self._batch_norm_update_dt = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._policy_update_t_start = -1.0
         self._policy_update_t = -1.0
         self._policy_update_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         self._policy_update_fps = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=0.0, device="cpu")
+        
+        self._validation_t = -1.0
+        self._validation_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         
         self._n_of_played_episodes = torch.full((self._db_data_size, 1), 
@@ -756,17 +828,26 @@ class SActorCriticAlgoBase(ABC):
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._qf2_vals_min = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        
         self._qf1_loss = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._qf2_loss = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
-    
         self._actor_loss= torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._alpha_loss = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        if self._validate: # add db data for validation losses
+            self._qf1_loss_validation = torch.full((self._db_data_size, 1), 
+                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._qf2_loss_validation = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._actor_loss_validation= torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._alpha_loss_validation = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         self._alphas = torch.full((self._db_data_size, 1), 
-                    dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._alpha_loss = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
 
         self._policy_entropy_mean=torch.full((self._db_data_size, 1), 
@@ -808,6 +889,36 @@ class SActorCriticAlgoBase(ABC):
                         device=self._torch_device,
                         requires_grad=False)
 
+    def _init_validation_buffers(self):
+        
+        self._bpos_val = 0
+
+        self._obs_val = torch.full(size=(self._validation_buffer_size_vec, self._num_envs, self._obs_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False) 
+        self._actions_val = torch.full(size=(self._validation_buffer_size_vec, self._num_envs, self._actions_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+        self._rewards_val = torch.full(size=(self._validation_buffer_size_vec, self._num_envs, 1),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+        self._next_obs_val = torch.full(size=(self._validation_buffer_size_vec, self._num_envs, self._obs_dim),
+                        fill_value=torch.nan,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False) 
+        self._next_terminal_val = torch.full(size=(self._validation_buffer_size_vec, self._num_envs, 1),
+                        fill_value=False,
+                        dtype=self._dtype,
+                        device=self._torch_device,
+                        requires_grad=False)
+        
     def _save_model(self,
             is_checkpoint: bool = False):
 
@@ -920,8 +1031,12 @@ class SActorCriticAlgoBase(ABC):
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
             hf.create_dataset('env_step_rt_factor', data=self._env_step_rt_factor.numpy())
+            hf.create_dataset('collection_dt', data=self._collection_dt.numpy())
+            hf.create_dataset('batch_norm_update_dt', data=self._batch_norm_update_dt.numpy())
             hf.create_dataset('policy_update_dt', data=self._policy_update_dt.numpy())
             hf.create_dataset('policy_update_fps', data=self._policy_update_fps.numpy())
+            hf.create_dataset('validation_dt', data=self._validation_dt.numpy())
+            
             hf.create_dataset('n_of_played_episodes', data=self._n_of_played_episodes.numpy())
             hf.create_dataset('n_timesteps_done', data=self._n_timesteps_done.numpy())
             hf.create_dataset('n_policy_updates', data=self._n_policy_updates.numpy())
@@ -933,20 +1048,25 @@ class SActorCriticAlgoBase(ABC):
             # algo data 
             hf.create_dataset('qf1_vals_mean', data=self._qf1_vals_mean.numpy())
             hf.create_dataset('qf2_vals_mean', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_std', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_std', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_max', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf1_vals_min', data=self._qf1_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_max', data=self._qf2_vals_mean.numpy())
-            hf.create_dataset('qf2_vals_min', data=self._qf2_vals_mean.numpy())
+            hf.create_dataset('qf1_vals_std', data=self._qf1_vals_std.numpy())
+            hf.create_dataset('qf2_vals_std', data=self._qf2_vals_std.numpy())
+            hf.create_dataset('qf1_vals_max', data=self._qf1_vals_max.numpy())
+            hf.create_dataset('qf1_vals_min', data=self._qf1_vals_min.numpy())
+            hf.create_dataset('qf2_vals_max', data=self._qf2_vals_max.numpy())
+            hf.create_dataset('qf2_vals_min', data=self._qf1_vals_min.numpy())
+            
             hf.create_dataset('qf1_loss', data=self._qf1_loss.numpy())
             hf.create_dataset('qf2_loss', data=self._qf2_loss.numpy())
-
             hf.create_dataset('actor_loss', data=self._actor_loss.numpy())
-
-            hf.create_dataset('alphas', data=self._alphas.numpy())
             hf.create_dataset('alpha_loss', data=self._alpha_loss.numpy())
-
+            if self._validate:
+                hf.create_dataset('qf1_loss_validation', data=self._qf1_loss_validation.numpy())
+                hf.create_dataset('qf2_loss_validation', data=self._qf2_loss_validation.numpy())
+                hf.create_dataset('actor_loss_validation', data=self._actor_loss_validation.numpy())
+                hf.create_dataset('alpha_loss_validation', data=self._alpha_loss_validation.numpy())
+                
+            hf.create_dataset('alphas', data=self._alphas.numpy())
+            
             hf.create_dataset('policy_entropy_mean', data=self._policy_entropy_mean.numpy())
             hf.create_dataset('policy_entropy_std', data=self._policy_entropy_std.numpy())
             hf.create_dataset('policy_entropy_max', data=self._policy_entropy_max.numpy())
@@ -1098,9 +1218,14 @@ class SActorCriticAlgoBase(ABC):
         # these have to always be updated
         self._collection_dt[self._log_it_counter] += \
             (self._collection_t-self._start_time)
+        self._batch_norm_update_dt[self._log_it_counter] += \
+            (self._policy_update_t_start-self._collection_t)
         self._policy_update_dt[self._log_it_counter] += \
-            (self._policy_update_t - self._collection_t)
-        
+            (self._policy_update_t - self._policy_update_t_start)
+        if self._validate:
+            self._validation_dt[self._log_it_counter] += \
+            (self._validation_t - self._policy_update_t)
+
         self._step_counter+=1 # counts algo steps
         
         self._demo_envs_active[self._log_it_counter]=self._env.demo_active()
@@ -1109,7 +1234,7 @@ class SActorCriticAlgoBase(ABC):
             # check if deactivation condition applies
             self._env.switch_demo(active=self._demo_perf_metric[self._log_it_counter]<self._demo_stop_thresh)
         
-        if self._vec_transition_counter % self._db_vecstep_frequency== 0:
+        if self._vec_transition_counter % self._db_vecstep_frequency == 0:
             # only log data every n timesteps 
             
             self._env_step_fps[self._log_it_counter] = (self._db_vecstep_frequency*self._num_envs)/ self._collection_dt[self._log_it_counter]
@@ -1252,7 +1377,8 @@ class SActorCriticAlgoBase(ABC):
                     self._policy_update_fps[self._log_it_counter].item(),
                     self._policy_update_dt[self._log_it_counter].item(),
                     is_done,
-                    self._n_of_played_episodes[self._log_it_counter].item()
+                    self._n_of_played_episodes[self._log_it_counter].item(),
+                    self._batch_norm_update_dt[self._log_it_counter].item(),
                     ]
                 self._shared_algo_data.write(dyn_info_name=info_names,
                                         val=info_data)
@@ -1358,19 +1484,27 @@ class SActorCriticAlgoBase(ABC):
                         "sac_q_info/qf2_vals_max": self._qf2_vals_max[self._log_it_counter, 0],
                         "sac_q_info/qf1_vals_min": self._qf1_vals_min[self._log_it_counter, 0],
                         "sac_q_info/qf2_vals_min": self._qf2_vals_min[self._log_it_counter, 0],
-                        "sac_q_info/qf1_loss": self._qf1_loss[self._log_it_counter, 0],
-                        "sac_q_info/qf2_loss": self._qf2_loss[self._log_it_counter, 0],
 
-                        "sac_actor_info/actor_loss": self._actor_loss[self._log_it_counter, 0],
                         "sac_actor_info/policy_entropy_mean": self._policy_entropy_mean[self._log_it_counter, 0],
                         "sac_actor_info/policy_entropy_std": self._policy_entropy_std[self._log_it_counter, 0],
                         "sac_actor_info/policy_entropy_max": self._policy_entropy_max[self._log_it_counter, 0],
                         "sac_actor_info/policy_entropy_min": self._policy_entropy_min[self._log_it_counter, 0],
+                        
+                        "sac_q_info/qf1_loss": self._qf1_loss[self._log_it_counter, 0],
+                        "sac_q_info/qf2_loss": self._qf2_loss[self._log_it_counter, 0],
+                        "sac_actor_info/actor_loss": self._actor_loss[self._log_it_counter, 0],
+                        "sac_alpha_info/alpha_loss": self._alpha_loss[self._log_it_counter, 0],
 
                         "sac_alpha_info/alpha": self._alphas[self._log_it_counter, 0],
-                        "sac_alpha_info/alpha_loss": self._alpha_loss[self._log_it_counter, 0],
                         "sac_alpha_info/target_entropy": self._target_entropy})
-
+                    
+                    if self._validate:
+                        self._policy_update_db_data_dict.update({
+                            "sac_q_info/qf1_loss_validation": self._qf1_loss_validation[self._log_it_counter, 0],
+                            "sac_q_info/qf2_loss_validation": self._qf2_loss_validation[self._log_it_counter, 0],
+                            "sac_actor_info/actor_loss_validation": self._actor_loss_validation[self._log_it_counter, 0],
+                            "sac_alpha_info/alpha_loss_validation": self._alpha_loss_validation[self._log_it_counter, 0]})
+                    
                     self._wandb_d.update(self._policy_update_db_data_dict)
 
                 if self._agent.running_norm is not None:
@@ -1391,8 +1525,9 @@ class SActorCriticAlgoBase(ABC):
                 f"experience to policy grad ratio: {experience_to_policy_grad_ratio}\n" + \
                 f"experience to q fun grad ratio: {experience_to_qfun_grad_ratio}\n" + \
                 f"experience to trgt q fun grad ratio: {experience_to_tqfun_grad_ratio}\n"+ \
-                f"Warmstart completed: {(self._vec_transition_counter > (self._warmstart_vectimesteps-1)) or self._eval}\n" +\
-                f"Replay buffer full: {self._replay_bf_full}\n" +\
+                f"Warmstart completed: {self._vec_transition_counter > self._warmstart_vectimesteps or self._eval} ; ({self._vec_transition_counter}/{self._warmstart_vectimesteps})\n" +\
+                f"Replay buffer full: {self._replay_bf_full}; current position {self._bpos}/{self._replay_buffer_size_vec}\n" +\
+                f"Validation buffer full: {self._validation_bf_full}; current position {self._bpos_val}/{self._validation_buffer_size_vec}\n" +\
                 f"Elapsed time: {self._elapsed_min[self._log_it_counter].item()/60.0} h\n" + \
                 f"Estimated remaining training time: " + \
                 f"{est_remaining_time_h} h\n" + \
@@ -1408,6 +1543,8 @@ class SActorCriticAlgoBase(ABC):
                 f"Current env. step sps: {self._env_step_fps[self._log_it_counter].item()}, time for experience collection {self._collection_dt[self._log_it_counter].item()} s\n" + \
                 f"Current env (sub-stepping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n" + \
                 f"Current policy update fps: {self._policy_update_fps[self._log_it_counter].item()}, time for policy updates {self._policy_update_dt[self._log_it_counter].item()} s\n" + \
+                f"Time spent updating batch normalizations {self._batch_norm_update_dt[self._log_it_counter].item()} s\n" + \
+                f"Time spent for computing validation {self._validation_dt[self._log_it_counter].item()} s\n" + \
                 f"Demo envs are active: {self._demo_envs_active[self._log_it_counter].item()}. N  demo envs if active {self._env.n_demo_envs()}\n" + \
                 f"Performance metric now: {self._demo_perf_metric[self._log_it_counter].item()}/{self._demo_stop_thresh}\n"
             
@@ -1422,19 +1559,38 @@ class SActorCriticAlgoBase(ABC):
             next_obs: torch.Tensor, 
             next_terminal: torch.Tensor) -> None:
         
-        self._obs[self._bpos] = obs
-        self._next_obs[self._bpos] = next_obs
-        self._actions[self._bpos] = actions
-        self._rewards[self._bpos] = rewards
-        self._next_terminal[self._bpos] = next_terminal
+        if self._validate and \
+            (self._vec_transition_counter % self._validation_collection_vecfreq == 0):
+            # fill validation buffer
+            
+            self._obs_val[self._bpos_val] = obs
+            self._next_obs_val[self._bpos_val] = next_obs
+            self._actions_val[self._bpos_val] = actions
+            self._rewards_val[self._bpos_val] = rewards
+            self._next_terminal_val[self._bpos_val] = next_terminal
 
-        self._bpos += 1
-        if self._bpos == self._replay_buffer_size_vec:
-            self._replay_bf_full = True
-            self._bpos = 0
+            self._bpos_val += 1
+            if self._bpos_val == self._validation_buffer_size_vec:
+                self._validation_bf_full = True
+                self._bpos_val = 0
 
-    def _sample(self):
+        else: # fill normal replay buffer
+            self._obs[self._bpos] = obs
+            self._next_obs[self._bpos] = next_obs
+            self._actions[self._bpos] = actions
+            self._rewards[self._bpos] = rewards
+            self._next_terminal[self._bpos] = next_terminal
+
+            self._bpos += 1
+            if self._bpos == self._replay_buffer_size_vec:
+                self._replay_bf_full = True
+                self._bpos = 0
+
+    def _sample(self, size: int = None):
         
+        if size is None:
+            size=self._batch_size
+
         batched_obs = self._obs.view((-1, self._env.obs_dim()))
         batched_next_obs = self._next_obs.view((-1, self._env.obs_dim()))
         batched_actions = self._actions.view((-1, self._env.actions_dim()))
@@ -1444,7 +1600,7 @@ class SActorCriticAlgoBase(ABC):
         # sampling from the batched buffer
         up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
         shuffled_buffer_idxs = torch.randint(0, up_to,
-                                        (self._batch_size,)) 
+                                        (size,)) 
         
         sampled_obs = batched_obs[shuffled_buffer_idxs]
         sampled_next_obs = batched_next_obs[shuffled_buffer_idxs]
@@ -1456,7 +1612,34 @@ class SActorCriticAlgoBase(ABC):
             sampled_next_obs,\
             sampled_rewards, \
             sampled_terminal
+    
+    def _sample_validation(self, size: int = None):
         
+        if size is None:
+            size=self._validation_batch_size
+
+        batched_obs = self._obs_val.view((-1, self._env.obs_dim()))
+        batched_next_obs = self._next_obs_val.view((-1, self._env.obs_dim()))
+        batched_actions = self._actions_val.view((-1, self._env.actions_dim()))
+        batched_rewards = self._rewards_val.view(-1)
+        batched_terminal = self._next_terminal_val.view(-1)
+
+        # sampling from the batched buffer
+        up_to = self._validation_buffer_size if self._validation_bf_full else self._bpos_val*self._num_envs
+        shuffled_buffer_idxs = torch.randint(0, up_to,
+                                        (size,)) 
+        
+        sampled_obs = batched_obs[shuffled_buffer_idxs]
+        sampled_next_obs = batched_next_obs[shuffled_buffer_idxs]
+        sampled_actions = batched_actions[shuffled_buffer_idxs]
+        sampled_rewards = batched_rewards[shuffled_buffer_idxs]
+        sampled_terminal = batched_terminal[shuffled_buffer_idxs]
+
+        return sampled_obs, sampled_actions,\
+            sampled_next_obs,\
+            sampled_rewards, \
+            sampled_terminal
+    
     def _sample_random_actions(self):
         
         self._random_uniform.uniform_(-1,1)
@@ -1504,6 +1687,23 @@ class SActorCriticAlgoBase(ABC):
         actions[env_indices, action_indices]=\
             actions[env_indices, action_indices]+noise[env_indices, action_indices]*self._action_scale[:,action_indices]*scaling
     
+    def _update_batch_norm(self, bsize: int = None):
+
+        if bsize is None:
+            bsize=self._batch_size # same used for training
+
+        # update obs normalization        
+        # (we should sample also next obs, but if most of the transitions are not terminal, 
+        # this is not an issue and is more efficient)
+        if (self._agent.running_norm is not None) and \
+            (not self._eval):
+            batched_obs = self._obs.view((-1, self._env.obs_dim()))
+            up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
+            shuffled_buffer_idxs = torch.randint(0, up_to,
+                                            (bsize,)) 
+            sampled_obs = batched_obs[shuffled_buffer_idxs]
+            self._agent.update_obs_bnorm(x=sampled_obs)
+            
     def _switch_training_mode(self, 
                     train: bool = True):
 

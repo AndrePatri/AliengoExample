@@ -34,8 +34,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
         episode_timeout_ub = 1024
-        n_steps_task_rand_lb = 200 # agent refs randomization freq
-        n_steps_task_rand_ub = 200 # lb not eq. to ub to remove correlations between episodes
+        n_steps_task_rand_lb = 256 # agent refs randomization freq
+        n_steps_task_rand_ub = 256 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
         n_preinit_steps = 1 # one steps of the controllers to properly initialize everything
@@ -46,14 +46,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
-        self._action_smoothing_horizon_d=0.1
+        self._action_smoothing_horizon_d=0.03
 
         self._use_track_reward_smoother=False # whether to smooth vel error signal
         self._smoothing_horizon_vel_err=0.08
         self._track_rew_smoother=None
 
-        self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
+        self._single_task_ref_per_episode=False # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
+        if not self._single_task_ref_per_episode:
+            random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
         self._use_perc_error=True
         self._directional_tracking=True # whether to compute tracking rew based on reference direction
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
@@ -204,7 +206,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         self._this_child_path = os.path.abspath(__file__)
 
-        super().__init__(namespace=namespace,
+        LRhcTrainingEnvBase.__init__(self,
+                    namespace=namespace,
                     obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     episode_timeout_lb=episode_timeout_lb,
@@ -279,8 +282,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._obs_threshold_ub = 1e3
 
         # actions bounds
-        v_cmd_max = 3*self.max_ref
-        omega_cmd_max = 3*self.max_ref
+        self.max_cmd_v=1.0
+        v_cmd_max = self.max_cmd_v
+        omega_cmd_max = self.max_cmd_v
         self._actions_lb[:, 0:3] = -v_cmd_max 
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
@@ -394,7 +398,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 use_gpu=self._use_gpu)
 
     def get_file_paths(self):
-        paths=super().get_file_paths()
+        paths=LRhcTrainingEnvBase.get_file_paths(self)
         paths.append(self._this_child_path)        
         return paths
 
@@ -435,15 +439,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         sub_terminations[:, 1:2] = self._is_capsized
         sub_terminations[:, 2:3] = self._is_rhc_capsized
 
-    def _custom_reset(self): # reset if truncated
-        if self._single_task_ref_per_episode:
-            return None
-        else:
-            return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
-        # return self._truncations.get_torch_mirror(gpu=self._use_gpu).cpu()
+    def _custom_reset(self):
+        return None
     
     def reset(self):
-        super().reset()
+        LRhcTrainingEnvBase.reset(self)
 
     def _pre_step(self): 
         pass

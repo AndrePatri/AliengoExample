@@ -112,11 +112,20 @@ class RunningNormalizer(torch.nn.Module):
 
     def forward(self, x):
         
-        if not (self.training or self._freeze_stats):
+        if not self._freeze_stats:
             self._running_stats.update(x)
         
         return (x - self._running_stats.mean)/(torch.sqrt(self._running_stats.var)+self._epsilon)
     
+    def manual_stat_update(self, x):
+        self._running_stats.update(x)
+
+    def freeze(self):
+        self._freeze_stats=True
+    
+    def unfreeze(self):
+        self._freeze_stats=False
+
     def get_current_mean(self):
         return self._running_stats.mean.detach().clone()
     
@@ -127,8 +136,8 @@ if __name__ == "__main__":
     
     device = "cuda"
     obs_dim = 4  # Number of observation dimensions
-    n_envs = 20  # Number of environments
-    n_samples = 10000  # Number of iterations to update running stats
+    n_envs = 255  # Number of environments
+    n_samples = 1  # Number of iterations to update running stats
 
     # Set a known mean and variance for the synthetic data
     true_mean = torch.tensor([10.0, -5.0, 3.0, 7.0], dtype=torch.float32, device=device)
@@ -138,8 +147,8 @@ if __name__ == "__main__":
     dummy_obs = true_mean + true_std * torch.randn(size=(n_envs, obs_dim), dtype=torch.float32, device=device)
 
     # Create a RunningNormalizer and set it to update running stats
-    normalizer = RunningNormalizer((obs_dim,), epsilon=1e-8, device=device, dtype=torch.float32, freeze_stats=False)
-    normalizer.train(False)
+    normalizer = RunningNormalizer((obs_dim,), epsilon=1e-8, device=device, dtype=torch.float32, freeze_stats=True)
+    normalizer.unfreeze()
 
     # Feed the controlled data into the normalizer for multiple samples
     for i in range(n_samples):
@@ -148,7 +157,7 @@ if __name__ == "__main__":
         normalizer(dummy_obs)
 
     # Switch to evaluation mode, meaning no more updates to running stats
-    normalizer.train(True)
+    normalizer.freeze()
 
     # Print the computed running mean and std (they should match the true_mean and true_std)
     print("Running mean after updates")
