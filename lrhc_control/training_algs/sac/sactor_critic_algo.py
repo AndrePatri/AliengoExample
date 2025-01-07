@@ -519,7 +519,7 @@ class SActorCriticAlgoBase(ABC):
         self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
         self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
 
-        self._db_vecstep_frequency = 128 # log db data every n (vectorized) SUB timesteps
+        self._db_vecstep_frequency = 32 # log db data every n (vectorized) SUB timesteps
         self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
         # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
         self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
@@ -533,7 +533,6 @@ class SActorCriticAlgoBase(ABC):
         self._validation_buffer_size_vec = self._validation_buffer_size_nominal//self._num_envs
         self._validation_buffer_size = self._validation_buffer_size_vec*self._num_envs
         self._validation_batch_size = int(self._batch_size*self._validation_ratio)
-        
         self._validation_db_vecstep_freq=self._db_vecstep_frequency
         if self._eval: # no need for validation transitions during evaluation
             self._validate=False
