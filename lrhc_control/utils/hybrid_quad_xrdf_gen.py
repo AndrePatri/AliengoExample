@@ -8,6 +8,8 @@ def get_xrdf_cmds(urdf_descr_root_path: str = None):
                 return get_xrdf_cmds_kyon(urdf_descr_root_path=urdf_descr_root_path)
         elif "centauro" in urdf_descr_root_path: 
                 return get_xrdf_cmds_centauro(urdf_descr_root_path=urdf_descr_root_path)
+        elif "b2w" in urdf_descr_root_path: 
+                return get_xrdf_cmds_b2w(urdf_descr_root_path=urdf_descr_root_path)
         else:
                 exception=f"xrdf cmd getter for robot {urdf_descr_root_path} not supported! Please modify this file to add your own."
                 Journal.log("hybrid_quad_xrdf_gen.py",
@@ -26,6 +28,8 @@ def get_xrdf_cmds_horizon(urdf_descr_root_path : str = None):
                 return get_xrdf_cmds_horizon_kyon(urdf_descr_root_path=urdf_descr_root_path)
         elif "centauro" in urdf_descr_root_path: 
                 return get_xrdf_cmds_horizon_centauro(urdf_descr_root_path=urdf_descr_root_path)
+        elif "b2w" in urdf_descr_root_path: 
+                return get_xrdf_cmds_horizon_b2w(urdf_descr_root_path=urdf_descr_root_path)
         else:
                 exception=f"xrdf cmd getter for robot {urdf_descr_root_path} not supported! Please modify this file to add your own."
                 Journal.log("hybrid_quad_xrdf_gen.py",
@@ -130,6 +134,23 @@ def get_xrdf_cmds_horizon_kyon(urdf_descr_root_path: str = None):
         cmds.append("floating_joint:=" + floating_joint)
         cmds.append("payload:=" + payload)
         
+        if urdf_descr_root_path is not None:
+                cmds.append("root:=" + urdf_descr_root_path)
+
+        return cmds
+
+def get_xrdf_cmds_b2w(urdf_descr_root_path: str = None):
+
+        cmds_aux = []
+        cmds_aux.append("use_abs_mesh_paths:=true") # use absolute paths for meshes
+        cmds_aux.append("root:=" + urdf_descr_root_path)
+
+        return cmds_aux
+
+def get_xrdf_cmds_horizon_b2w(urdf_descr_root_path: str = None):
+
+        cmds = []
+ 
         if urdf_descr_root_path is not None:
                 cmds.append("root:=" + urdf_descr_root_path)
 
