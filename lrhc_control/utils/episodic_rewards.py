@@ -14,6 +14,8 @@ class EpisodicRewards(EpisodicData):
             max_episode_length: int = 1,
             ep_vec_freq: int = None):
 
+        self._max_episode_length = max_episode_length
+        
         # separate ep data metrics for total reward
         self._tot_reward_episodic_stats=EpisodicData(name="TotReward",
             data_tensor=torch.sum(reward_tensor,dim=1, keepdim=True),
@@ -23,7 +25,7 @@ class EpisodicRewards(EpisodicData):
         # the maximum ep length
         super().__init__(data_tensor=reward_tensor, data_names=reward_names, name="SubRewards",
                 ep_vec_freq=ep_vec_freq)
-    
+
         self.set_constant_data_scaling(scaling=max_episode_length)
     
     def set_constant_data_scaling(self, scaling: int):
@@ -41,8 +43,14 @@ class EpisodicRewards(EpisodicData):
 
     def update(self, 
         rewards: torch.Tensor,
-        ep_finished: torch.Tensor):
+        ep_finished: torch.Tensor,
+        ignore_ep_end: torch.Tensor = None):
 
+        if ignore_ep_end is not None:
+            to_be_ignored=torch.logical_and(ep_finished,ignore_ep_end)
+            remaining_tsteps=self._max_episode_length-self._steps_counter[to_be_ignored.flatten(), :]
+            # (as if the current reward was received up to the end of the episode)
+            rewards[to_be_ignored.flatten(), :]=rewards[to_be_ignored.flatten(), :]*remaining_tsteps
         super().update(new_data=rewards, ep_finished=ep_finished)
         self._tot_reward_episodic_stats.update(new_data=torch.sum(rewards, dim=1, keepdim=True), 
             ep_finished=ep_finished)

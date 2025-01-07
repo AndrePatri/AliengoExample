@@ -370,6 +370,8 @@ class SActorCriticAlgoBase(ABC):
 
         self._replay_bf_full = False
         self._validation_bf_full = False
+        self._bpos=0
+        self._bpos_val=0
 
         self._is_done = False
         self._setup_done = True

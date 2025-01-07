@@ -938,6 +938,36 @@ class SafetyRandResetsCounter(SimpleCounters):
                 force_reconnection=force_reconnection,
                 with_gpu_mirror=with_gpu_mirror)
 
+class RandomTruncCounter(SimpleCounters):
+
+    def __init__(self,
+                namespace: str,
+                n_steps_lb: int = None,
+                n_steps_ub: int = None,
+                randomize_offsets_at_startup: bool = True,
+                n_envs: int = None, 
+                is_server = False, 
+                verbose: bool = False, 
+                vlevel: VLevel = VLevel.V0,
+                safe: bool = True,
+                force_reconnection: bool = False,
+                with_gpu_mirror: bool = False):
+
+        basename = "RandomTruncCounter"
+
+        super().__init__(namespace=namespace,
+                basename=basename,
+                n_steps_lb=n_steps_lb,
+                n_steps_ub=n_steps_ub,
+                randomize_offsets_at_startup=randomize_offsets_at_startup,
+                n_envs=n_envs, 
+                is_server=is_server, 
+                verbose=verbose, 
+                vlevel=vlevel,
+                safe=safe,
+                force_reconnection=force_reconnection,
+                with_gpu_mirror=with_gpu_mirror)
+        
 if __name__ == "__main__":  
 
     def print_data(counter,i):
