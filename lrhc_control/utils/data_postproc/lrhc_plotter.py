@@ -26,7 +26,6 @@ class LRHCPlotter:
         Args:
             hdf5_file_path (str): Path to the HDF5 file.
         """
-        print(hdf5_file_path)
         if not os.path.exists(hdf5_file_path):
             raise FileNotFoundError(f"The file '{hdf5_file_path}' does not exist.")
         self.hdf5_file_path = hdf5_file_path
@@ -446,6 +445,7 @@ if __name__ == "__main__":
         xaxis_dataset_name="n_timesteps_done",
         xlabel="n_timesteps_done",
         ylabel="Q val.",
+        data_labels=["qf1", "qf2"],
         use_markers=False,
         distr_std="qf_vals_std",
         distr_max="qf_vals_max",
