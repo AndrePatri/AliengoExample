@@ -541,7 +541,7 @@ class LRhcTrainingEnvBase(ABC):
             # we do not add random trunc if also terminal
             # would affect ()
             time_for_random_trunc=torch.logical_and(~terminated,
-                                self._rand_trunc_counter.time_limits_reached())
+                                self._rand_trunc_counter.time_limits_reached().cuda())
             truncated = torch.logical_or(truncated, 
                         time_for_random_trunc)
         
