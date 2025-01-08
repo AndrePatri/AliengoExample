@@ -10,13 +10,15 @@ if __name__ == "__main__":
     parser.add_argument('--ns', type=str, help='Namespace to be used for shared memory')
     parser.add_argument('--agent_refs_world',action='store_true', 
         help='whether to set the agent ref in world frame (it will be internally adjucted to base frame)')
+    parser.add_argument('--cmapping', type=str, help='contact mapping to, respectively, keys 7 9 1 and 3', default="0;1;2;3")
 
     args = parser.parse_args()
     
     keyb_cmds=None
     if args.actions:
         keyb_cmds = AgentActionsFromKeyboard(namespace=args.ns, 
-                                verbose=True)
+                            verbose=True,
+                            contact_mapping=args.cmapping)
     else:
         keyb_cmds = AgentRefsFromKeyboard(namespace=args.ns, 
                                 verbose=True,

@@ -476,9 +476,40 @@ class AgentRefsFromKeyboard:
 
 class AgentActionsFromKeyboard:
 
+    def parse_contact_mapping(self, mapping_str):
+        """
+        Parses a string formatted like "0;1;3;2 " and extracts the numbers as a list of integers.
+        Returns None if the input string is invalid.
+        
+        Args:
+            mapping_str (str): The input string containing numbers separated by semicolons.
+            
+        Returns:
+            List[int] or None: A list of integers extracted from the input string, or None if invalid.
+        """
+        try:
+            # Strip any surrounding whitespace
+            mapping_str = mapping_str.strip()
+            
+            # Split by semicolons and check for validity
+            parts = mapping_str.split(';')
+            if not all(part.isdigit() for part in parts if part):  # Ensure all parts are valid integers
+                return None
+            
+            # Convert to integers and return as a list
+            return [int(num) for num in parts if num]
+        except Exception:
+            # Catch any unexpected errors and return None
+            return None
+        
     def __init__(self, 
-                namespace: str, 
-                verbose = False):
+            namespace: str, 
+            verbose = False,
+            contact_mapping: str = ""):
+
+        self._contact_mapping=self.parse_contact_mapping(contact_mapping)
+        if self._contact_mapping is None:
+            self._contact_mapping=[0, 1, 2, 3] # key 7-9-1-3
 
         self._verbose = verbose
 
@@ -664,13 +695,13 @@ class AgentActionsFromKeyboard:
         contacts=current_actions[self.contact_first:self.contact_end+1]
 
         if key.char == "7":
-            contacts[0] = 1 if is_contact else -1
+            contacts[self._contact_mapping[0]] = 1 if is_contact else -1
         if key.char == "9":
-            contacts[1] = 1 if is_contact else -1
+            contacts[self._contact_mapping[1]] = 1 if is_contact else -1
         if key.char == "1":
-            contacts[2] = 1 if is_contact else -1
+            contacts[self._contact_mapping[2]] = 1 if is_contact else -1
         if key.char == "3":
-            contacts[3] = 1 if is_contact else -1
+            contacts[self._contact_mapping[3]] = 1 if is_contact else -1
 
     def _set_base_height(self,
                     key):
