@@ -74,7 +74,7 @@ class LRHCPlotter:
             with h5py.File(self.hdf5_file_path, 'r') as file:
                 for key, value in file.attrs.items():
                     self.attributes[key] = value
-            print(f"Loaded attributes: {self.attributes}")
+            # print(f"Loaded attributes: {self.attributes}")
         except Exception as e:
             print(f"Error loading attributes: {e}")
 
@@ -385,12 +385,14 @@ if __name__ == "__main__":
     plotter = LRHCPlotter(hdf5_file_path=path)
     datasets = plotter.list_datasets()
     attributes = plotter.list_attributes()
-    print("Dataset names:")
-    print(datasets)
-    print("Attributes:")
-    print(attributes)
     plotter.load_data(dataset_names=datasets)
     plotter.load_attributes()
+    print("\nDataset names:")
+    print(datasets)
+    print("\n")
+    print("\n Run attributes:")
+    print(attributes)
+    print("\n")
 
     obs_names=list(plotter.attributes["obs_names"])
     sub_trunc_names=list(plotter.attributes["sub_trunc_names"])
@@ -401,7 +403,6 @@ if __name__ == "__main__":
     # plot some data
 
     # obs stats
-    
     # gravity vecs
     patterns=["gn_*"]
     idxs,selected=plotter.get_idx_matching(patterns, obs_names)
