@@ -150,7 +150,8 @@ def get_xrdf_cmds_b2w(urdf_descr_root_path: str = None):
 def get_xrdf_cmds_horizon_b2w(urdf_descr_root_path: str = None):
 
         cmds = []
- 
+        
+        cmds.append("floating_joint:=true")
         if urdf_descr_root_path is not None:
                 cmds.append("root:=" + urdf_descr_root_path)
 
