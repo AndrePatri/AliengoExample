@@ -221,7 +221,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     random_trunc_freq=random_trunc_freq,
                     random_trunc_freq_delta=random_trunc_freq_delta,
                     use_random_trunc=True, # to help remove temporal correlations
-                    correct_for_random_trunc=False,
+                    correct_for_random_trunc=True,
                     action_repeat=action_repeat,
                     env_name=env_name,
                     n_preinit_steps=n_preinit_steps,
