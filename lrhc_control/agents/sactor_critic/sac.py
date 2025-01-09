@@ -1,6 +1,7 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 from torch.distributions.normal import Normal
 
@@ -29,6 +30,7 @@ class SACAgent(nn.Module):
             load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
+            input_compression_ratio: float = -1.0, # [0, 1] 
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,
@@ -37,6 +39,14 @@ class SACAgent(nn.Module):
             add_weight_norm: bool = False):
 
         self._use_torch_compile=torch_compile
+
+        self._first_hidden_layer_size_actor=layer_width_actor
+        self._first_hidden_layer_size_critic=layer_width_critic
+        if input_compression_ratio > 0.0:
+            if input_compression_ratio > 1.0:
+                input_compression_ratio=1.0
+            self._first_hidden_layer_size_actor=int(float(obs_dim)*float(input_compression_ratio))
+            self._first_hidden_layer_size_critic=int(float(obs_dim+actions_dim)*float(input_compression_ratio))
 
         if add_weight_norm:
             Journal.log(self.__class__.__name__,
@@ -112,6 +122,7 @@ class SACAgent(nn.Module):
                     actions_lb=actions_lb,
                     device=device,
                     dtype=dtype,
+                    first_hidden_layer_width=self._first_hidden_layer_size_actor,
                     layer_width=layer_width_actor,
                     n_hidden_layers=n_hidden_layers_actor,
                     add_weight_norm=add_weight_norm
@@ -124,6 +135,7 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
+                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
                     n_hidden_layers=n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf1_target = CriticQ(obs_dim=obs_dim,
@@ -131,6 +143,7 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
+                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
                     n_hidden_layers=n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             
@@ -139,6 +152,7 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
+                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
                     n_hidden_layers=n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf2_target = CriticQ(obs_dim=obs_dim,
@@ -146,6 +160,7 @@ class SACAgent(nn.Module):
                     device=device,
                     dtype=dtype,
                     layer_width=layer_width_critic,
+                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
                     n_hidden_layers=n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
         
@@ -250,6 +265,7 @@ class CriticQ(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 512,
+        first_hidden_layer_width: int = -1,
         n_hidden_layers: int = 4,
         add_weight_norm: bool = False):
 
@@ -264,9 +280,13 @@ class CriticQ(nn.Module):
         self._actions_dim = actions_dim
         self._q_net_dim = self._obs_dim + self._actions_dim
 
+        self._first_hidden_layer_width=layer_width
+        if first_hidden_layer_width >0:
+            self._first_hidden_layer_width=first_hidden_layer_width
+
         # Input layer
         layers = [llayer_init(
-            layer=nn.Linear(self._q_net_dim, layer_width),
+            layer=nn.Linear(self._q_net_dim, self._first_hidden_layer_width),
             init_type="kaiming_uniform",
             nonlinearity="leaky_relu",
             a_leaky_relu=self._lrelu_slope,
@@ -279,7 +299,7 @@ class CriticQ(nn.Module):
         for _ in range(n_hidden_layers - 1):
             layers.extend([
                 llayer_init(
-                    layer=nn.Linear(layer_width, layer_width),
+                    layer=nn.Linear(self._first_hidden_layer_width, layer_width),
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
@@ -321,6 +341,7 @@ class Actor(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 256,
+        first_hidden_layer_width: int = -1,
         n_hidden_layers: int = 2,
         add_weight_norm: bool = False):
         
@@ -334,6 +355,10 @@ class Actor(nn.Module):
         self._obs_dim = obs_dim
         self._actions_dim = actions_dim
         
+        self._first_hidden_layer_width=layer_width
+        if first_hidden_layer_width >0:
+            self._first_hidden_layer_width=first_hidden_layer_width
+
         # Action scale and bias
         if actions_ub is None:
             actions_ub = [1] * actions_dim
@@ -377,7 +402,7 @@ class Actor(nn.Module):
         self.LOG_STD_MIN = -5
 
         # Input layer followed by hidden layers
-        layers = [llayer_init(nn.Linear(self._obs_dim, layer_width), 
+        layers = [llayer_init(nn.Linear(self._obs_dim, self._first_hidden_layer_width), 
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
@@ -385,9 +410,10 @@ class Actor(nn.Module):
                     dtype=self._torch_dtype,
                     add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
+        
         for _ in range(n_hidden_layers - 1):
             layers.extend([
-                llayer_init(nn.Linear(layer_width, layer_width), 
+                llayer_init(nn.Linear(self._first_hidden_layer_width, layer_width), 
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,

@@ -75,13 +75,16 @@ if __name__ == "__main__":
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
-    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
-    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
-    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=4)
+    parser.add_argument('--input_compression_ratio', type=int,
+        help='If e.g. 0.8, the fist layer will be of dimension [input_features_size x (input_features_size*input_compression_ratio)]', default=-1.0)
+    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=128)
+    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=256)
+    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=3)
     parser.add_argument('--critic_n_hlayers', type=int, help='Critic network size', default=4)
 
     parser.add_argument('--env_fname', type=str, default="linvel_env_baseline", help='Training env file name (without extension)')
     parser.add_argument('--env_classname', type=str, default="LinVelTrackBaseline", help='Training env class name')
+
 
     args = parser.parse_args()
     args_dict = vars(args)

@@ -218,12 +218,15 @@ class SActorCriticAlgoBase(ABC):
 
         use_torch_compile=False
         add_weight_norm=False
+        input_compression_ratio=-1.0
         if "use_torch_compile" in self._hyperparameters and \
             self._hyperparameters["use_torch_compile"]:
             use_torch_compile=True
         if "add_weight_norm" in self._hyperparameters and \
             self._hyperparameters["add_weight_norm"]:
             add_weight_norm=True
+        if "input_compression_ratio" in self._hyperparameters:
+            input_compression_ratio=self._hyperparameters["input_compression_ratio"]
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     obs_ub=self._env.get_obs_ub().flatten().tolist(),
                     obs_lb=self._env.get_obs_lb().flatten().tolist(),
@@ -232,6 +235,7 @@ class SActorCriticAlgoBase(ABC):
                     actions_lb=self._env.get_actions_lb().flatten().tolist(),
                     rescale_obs=rescale_obs,
                     norm_obs=norm_obs,
+                    input_compression_ratio=input_compression_ratio,
                     device=self._torch_device,
                     dtype=self._dtype,
                     is_eval=self._eval,
