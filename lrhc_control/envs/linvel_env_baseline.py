@@ -127,18 +127,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                             fill_value=0.0) 
         if self._directional_tracking:
             self._task_err_weights[0, 0] = 1.0
-            self._task_err_weights[0, 1] = 0.1
-            self._task_err_weights[0, 2] = 0.1
-            self._task_err_weights[0, 3] = 1e-6
-            self._task_err_weights[0, 4] = 1e-6
-            self._task_err_weights[0, 5] = 1e-6
+            self._task_err_weights[0, 1] = 0.05
+            self._task_err_weights[0, 2] = 0.05
+            self._task_err_weights[0, 3] = 0.05
+            self._task_err_weights[0, 4] = 0.05
+            self._task_err_weights[0, 5] = 0.05
         else:
             self._task_err_weights[0, 0] = 1.0
             self._task_err_weights[0, 1] = 1.0
             self._task_err_weights[0, 2] = 1.0
-            self._task_err_weights[0, 3] = 1e-6
-            self._task_err_weights[0, 4] = 1e-6
-            self._task_err_weights[0, 5] = 1e-6
+            self._task_err_weights[0, 3] = 0.05
+            self._task_err_weights[0, 4] = 0.05
+            self._task_err_weights[0, 5] = 0.05
 
         # task pred tracking
         self._task_pred_offset = 0.0 # 10.0
@@ -147,18 +147,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                             fill_value=0.0) 
         if self._directional_tracking:
             self._task_pred_err_weights[0, 0] = 1.0
-            self._task_pred_err_weights[0, 1] = 0.1
-            self._task_pred_err_weights[0, 2] = 0.1
-            self._task_pred_err_weights[0, 3] = 1e-6
-            self._task_pred_err_weights[0, 4] = 1e-6
-            self._task_pred_err_weights[0, 5] = 1e-6
+            self._task_pred_err_weights[0, 1] = 0.05
+            self._task_pred_err_weights[0, 2] = 0.05
+            self._task_pred_err_weights[0, 3] = 0.05
+            self._task_pred_err_weights[0, 4] = 0.05
+            self._task_pred_err_weights[0, 5] = 0.05
         else:
             self._task_pred_err_weights[0, 0] = 1.0
             self._task_pred_err_weights[0, 1] = 1.0
             self._task_pred_err_weights[0, 2] = 1.0
-            self._task_pred_err_weights[0, 3] = 1e-6
-            self._task_pred_err_weights[0, 4] = 1e-6
-            self._task_pred_err_weights[0, 5] = 1e-6
+            self._task_pred_err_weights[0, 3] = 0.05
+            self._task_pred_err_weights[0, 4] = 0.05
+            self._task_pred_err_weights[0, 5] = 0.05
 
         # fail idx
         self._rhc_fail_idx_offset = 0.0
