@@ -53,16 +53,18 @@ def compare_links(links1, links2):
 
     # Print missing links
     if missing_in_urdf2:
-        print("Links found in the first URDF but not in the second:")
-        for link in missing_in_urdf2:
+        print("Links found in the first URDF but not in the second (sorted by mass):")
+        sorted_missing_in_urdf2 = sorted(missing_in_urdf2, key=lambda link: links1[link]['mass'], reverse=True)
+        for link in sorted_missing_in_urdf2:
             mass = links1[link]['mass']
             inertia = links1[link]['inertia']
             inertia_str = f"Mass: {mass}, Inertia: {inertia}" if inertia else f"Mass: {mass}, Inertia: None"
             print(f"  - {link} ({inertia_str})")
 
     if missing_in_urdf1:
-        print("Links found in the second URDF but not in the first:")
-        for link in missing_in_urdf1:
+        print("Links found in the second URDF but not in the first (sorted by mass):")
+        sorted_missing_in_urdf1 = sorted(missing_in_urdf1, key=lambda link: links2[link]['mass'], reverse=True)
+        for link in sorted_missing_in_urdf1:
             mass = links2[link]['mass']
             inertia = links2[link]['inertia']
             inertia_str = f"Mass: {mass}, Inertia: {inertia}" if inertia else f"Mass: {mass}, Inertia: None"
@@ -91,6 +93,12 @@ def compare_links(links1, links2):
             for diff in differences:
                 print(f"  - {diff}")
 
+def calculate_total_mass(links):
+    """
+    Calculates the total mass of all links in a URDF.
+    """
+    return sum(link['mass'] for link in links.values())
+
 def compare_urdfs(urdf1_path, urdf2_path):
     """
     Compares two URDF files and prints differences in inertial properties and missing links.
@@ -113,6 +121,14 @@ def compare_urdfs(urdf1_path, urdf2_path):
 
     print("\nComparing links...")
     compare_links(links1, links2)
+
+    # Calculate and compare total mass
+    total_mass1 = calculate_total_mass(links1)
+    total_mass2 = calculate_total_mass(links2)
+
+    print("\nTotal Mass Comparison:")
+    print(f"  - Total mass of first URDF: {total_mass1:.4f}")
+    print(f"  - Total mass of second URDF: {total_mass2:.4f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare two URDF files for inertial differences.")
