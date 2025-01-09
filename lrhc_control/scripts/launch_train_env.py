@@ -75,7 +75,7 @@ if __name__ == "__main__":
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
-    parser.add_argument('--input_compression_ratio', type=int,
+    parser.add_argument('--input_compression_ratio', type=float,
         help='If e.g. 0.8, the fist layer will be of dimension [input_features_size x (input_features_size*input_compression_ratio)]', default=-1.0)
     parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=128)
     parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=256)
