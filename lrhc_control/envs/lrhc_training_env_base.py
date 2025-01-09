@@ -540,8 +540,11 @@ class LRhcTrainingEnvBase(ABC):
         if self._rand_trunc_counter is not None:
             # we do not add random trunc if also terminal
             # would affect ()
+            rand_trunc_reached=self._rand_trunc_counter.time_limits_reached()
+            if self._use_gpu:
+                rand_trunc_reached=rand_trunc_reached.cuda()
             time_for_random_trunc=torch.logical_and(~terminated,
-                                self._rand_trunc_counter.time_limits_reached().cuda())
+                                rand_trunc_reached)
             truncated = torch.logical_or(truncated, 
                         time_for_random_trunc)
         

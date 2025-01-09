@@ -170,10 +170,12 @@ class MemBuffer():
             return self._mem_buff[:,:,self._membf_pos-1-idx]
     
     def get_bf(self,clone:bool=False):
+        memory_buffer=self._mem_buff.detach()
+
         if clone:
-            return self._mem_buff.detach().clone()
+            return memory_buffer.clone()
         else:
-            return self._mem_buff.detach()
+            return memory_buffer
         
     def std(self,clone:bool=False):
         if clone:

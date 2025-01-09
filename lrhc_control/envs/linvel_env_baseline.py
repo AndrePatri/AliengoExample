@@ -60,7 +60,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
         self._use_perc_error=True
         self._directional_tracking=True # whether to compute tracking rew based on reference direction
-        self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs
+        self._use_action_history = True # whether to add information on past actions to obs
+        self._actions_history_size=10 # [env substeps] !! add full action history over a window
+        self._add_prev_actions_stats_to_obs = False # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
         self._add_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True
         self._add_gn_rhc_loc=True
@@ -112,8 +114,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=self._n_contacts 
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
-        if self._add_prev_actions_stats_to_obs:
-            obs_dim+=3*actions_dim# previous agent actions statistics (mean, std + last action)
+        
+        if self._use_action_history:
+            if self._add_prev_actions_stats_to_obs:
+                obs_dim+=3*actions_dim # previous agent actions statistics (mean, std + last action)
+            else:
+                obs_dim+=self._actions_history_size*actions_dim
+
         if self._enable_action_smoothing:
             obs_dim+=actions_dim
     
@@ -233,8 +240,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     override_agent_refs=override_agent_refs,
                     timeout_ms=timeout_ms,
                     srew_drescaling=True,
-                    use_act_mem_bf=self._add_prev_actions_stats_to_obs,
-                    act_membf_size=15,
+                    use_act_mem_bf=self._use_action_history,
+                    act_membf_size=self._actions_history_size,
                     use_action_smoothing=self._enable_action_smoothing,
                     smoothing_horizon_c=self._action_smoothing_horizon_c,
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
@@ -256,6 +263,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # other static db info 
         self.custom_db_info["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
+        self.custom_db_info["actions_history_size"] = self._actions_history_size
         self.custom_db_info["use_pof0"] = self._use_pof0
         self.custom_db_info["pof0"] = self._pof0
         self.custom_db_info["action_repeat"] = self._action_repeat
@@ -355,17 +363,32 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     break
         
         # handle action memory buffer in obs
-        i=0
-        prev_actions_idx = next((i for i, s in enumerate(obs_names) if "_prev" in s), None)
-        prev_actions_mean_idx=next((i for i, s in enumerate(obs_names) if "_avrg" in s), None)
-        prev_actions_std_idx=next((i for i, s in enumerate(obs_names) if "_std" in s), None)
+        if self._use_action_history: # just history stats
+            if self._add_prev_actions_stats_to_obs:
+                i=0
+                prev_actions_idx = next((i for i, s in enumerate(obs_names) if "_prev_act" in s), None)
+                prev_actions_mean_idx=next((i for i, s in enumerate(obs_names) if "_avrg_act" in s), None)
+                prev_actions_std_idx=next((i for i, s in enumerate(obs_names) if "_std_act" in s), None)
 
-        self._obs_lb[:, prev_actions_idx:prev_actions_idx+self.actions_dim()]=self._actions_lb
-        self._obs_ub[:, prev_actions_idx:prev_actions_idx+self.actions_dim()]=self._actions_ub
-        self._obs_lb[:, prev_actions_std_idx:prev_actions_std_idx+self.actions_dim()]=0
-        self._obs_ub[:, prev_actions_std_idx:prev_actions_std_idx+self.actions_dim()]=self.get_actions_scale()
-        self._obs_lb[:, prev_actions_mean_idx:prev_actions_mean_idx+self.actions_dim()]=self._actions_lb
-        self._obs_ub[:, prev_actions_mean_idx:prev_actions_mean_idx+self.actions_dim()]=self._actions_ub
+                if prev_actions_idx is not None:
+                    self._obs_lb[:, prev_actions_idx:prev_actions_idx+self.actions_dim()]=self._actions_lb
+                    self._obs_ub[:, prev_actions_idx:prev_actions_idx+self.actions_dim()]=self._actions_ub
+                if prev_actions_mean_idx is not None:
+                    self._obs_lb[:, prev_actions_mean_idx:prev_actions_mean_idx+self.actions_dim()]=self._actions_lb
+                    self._obs_ub[:, prev_actions_mean_idx:prev_actions_mean_idx+self.actions_dim()]=self._actions_ub
+                if prev_actions_std_idx is not None:
+                    self._obs_lb[:, prev_actions_std_idx:prev_actions_std_idx+self.actions_dim()]=0
+                    self._obs_ub[:, prev_actions_std_idx:prev_actions_std_idx+self.actions_dim()]=self.get_actions_scale()
+                
+            else: # full history
+                i=0
+                first_action_mem_buffer_idx = next((i for i, s in enumerate(obs_names) if "_m1_act" in s), None)
+                if first_action_mem_buffer_idx is not None:
+                    action_idx_start_idx_counter=first_action_mem_buffer_idx
+                    for j in range(self._actions_history_size):
+                        self._obs_lb[:, action_idx_start_idx_counter:action_idx_start_idx_counter+self.actions_dim()]=self._actions_lb
+                        self._obs_ub[:, action_idx_start_idx_counter:action_idx_start_idx_counter+self.actions_dim()]=self._actions_ub
+                        action_idx_start_idx_counter+=self.actions_dim()
 
         # some aux data to avoid allocations at training runtime
         self._rhc_twist_cmd_rhc_world=self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu).detach().clone()
@@ -606,14 +629,19 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=self._n_jnts
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_eff_rhc_applied_next
             next_idx+=self._n_jnts
-        if self._add_prev_actions_stats_to_obs:
-            self._prev_act_idx=next_idx
-            obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=0) # last obs
-            next_idx+=self.actions_dim()
-            obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
-            next_idx+=self.actions_dim()
-            obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
-            next_idx+=self.actions_dim()
+        if self._use_action_history:
+            if self._add_prev_actions_stats_to_obs: # just add last, std and mean to obs
+                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=0) # last obs
+                next_idx+=self.actions_dim()
+                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
+                next_idx+=self.actions_dim()
+                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
+                next_idx+=self.actions_dim()
+            else: # add whole memory buffer to obs
+                for i in range(self._actions_history_size):
+                    obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=i) # get all (n_envs x (obs_dim x horizon))
+                    next_idx+=self.actions_dim()
+
         if self._enable_action_smoothing: # adding smoothed actions
             obs[:, next_idx:(next_idx+self.actions_dim())]=self.get_actual_actions()
             next_idx+=self.actions_dim()
@@ -873,17 +901,24 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs_names[next_idx+i] = f"rhc_cmd_eff_{jnt_names[i]}"
             next_idx+=self._n_jnts
         # previous actions info
-        if self._add_prev_actions_stats_to_obs:
+        if self._use_action_history:
             action_names = self._get_action_names()
-            for prev_act_idx in range(self.actions_dim()):
-                obs_names[next_idx+prev_act_idx] = action_names[prev_act_idx]+f"_prev"
-            next_idx+=self.actions_dim()
-            for prev_act_mean in range(self.actions_dim()):
-                obs_names[next_idx+prev_act_mean] = action_names[prev_act_mean]+f"_avrg"
-            next_idx+=self.actions_dim()
-            for prev_act_std in range(self.actions_dim()):
-                obs_names[next_idx+prev_act_std] = action_names[prev_act_std]+f"_std"
-            next_idx+=self.actions_dim()
+            if self._add_prev_actions_stats_to_obs:
+                for act_idx in range(self.actions_dim()):
+                    obs_names[next_idx+act_idx] = action_names[act_idx]+f"_prev_act"
+                next_idx+=self.actions_dim()
+                for act_idx in range(self.actions_dim()):
+                    obs_names[next_idx+act_idx] = action_names[act_idx]+f"_avrg_act"
+                next_idx+=self.actions_dim()
+                for act_idx in range(self.actions_dim()):
+                    obs_names[next_idx+act_idx] = action_names[act_idx]+f"_std_act"
+                next_idx+=self.actions_dim()
+            else:
+                for i in range(self._actions_history_size):
+                    for act_idx in range(self.actions_dim()):
+                        obs_names[next_idx+act_idx] = action_names[act_idx]+f"_m{i+1}_act"
+                    next_idx+=self.actions_dim()
+
         if self._enable_action_smoothing:
             for smoothed_action in range(self.actions_dim()):
                 obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
