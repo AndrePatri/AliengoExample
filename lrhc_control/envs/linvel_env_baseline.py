@@ -220,7 +220,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     use_random_safety_reset=True,
                     random_trunc_freq=random_trunc_freq,
                     random_trunc_freq_delta=random_trunc_freq_delta,
-                    use_random_trunc=True, # to help remove temporal correlations
+                    use_random_trunc=False, # to help remove temporal correlations
                     correct_for_random_trunc=True,
                     action_repeat=action_repeat,
                     env_name=env_name,
