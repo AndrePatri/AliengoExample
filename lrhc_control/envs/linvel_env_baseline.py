@@ -38,7 +38,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         n_steps_task_rand_ub = 256 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
-        random_trunc_freq = episode_timeout_ub*10 # env timesteps
+        random_trunc_freq = episode_timeout_ub*15 # env timesteps
         random_trunc_freq_delta=episode_timeout_ub
         n_preinit_steps = 1 # one steps of the controllers to properly initialize everything
         action_repeat = 1 # frame skipping (different agent action every action_repeat
