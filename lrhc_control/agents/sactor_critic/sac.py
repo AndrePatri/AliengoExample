@@ -294,12 +294,25 @@ class CriticQ(nn.Module):
             dtype=self._torch_dtype,
             add_weight_norm=add_weight_norm
         ), nn.LeakyReLU(negative_slope=self._lrelu_slope)]
-
+        
         # Hidden layers
-        for _ in range(n_hidden_layers - 1):
+        layers.extend([
+            llayer_init(
+                layer=nn.Linear(self._first_hidden_layer_width, layer_width),
+                init_type="kaiming_uniform",
+                nonlinearity="leaky_relu",
+                a_leaky_relu=self._lrelu_slope,
+                device=self._torch_device,
+                dtype=self._torch_dtype,
+                add_weight_norm=add_weight_norm
+            ),
+            nn.LeakyReLU(negative_slope=self._lrelu_slope)
+        ])
+
+        for _ in range(n_hidden_layers - 2):
             layers.extend([
                 llayer_init(
-                    layer=nn.Linear(self._first_hidden_layer_width, layer_width),
+                    layer=nn.Linear(layer_width, layer_width),
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
@@ -411,9 +424,22 @@ class Actor(nn.Module):
                     add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
         
-        for _ in range(n_hidden_layers - 1):
+        # Hidden layers
+        # first hidden optionally uses _first_hidden_layer_width
+        layers.extend([
+            llayer_init(nn.Linear(self._first_hidden_layer_width, layer_width), 
+                init_type="kaiming_uniform",
+                nonlinearity="leaky_relu",
+                a_leaky_relu=self._lrelu_slope,
+                device=self._torch_device,
+                dtype=self._torch_dtype,
+                add_weight_norm=add_weight_norm),
+            nn.LeakyReLU(negative_slope=self._lrelu_slope)
+        ])
+        
+        for _ in range(n_hidden_layers - 2):
             layers.extend([
-                llayer_init(nn.Linear(self._first_hidden_layer_width, layer_width), 
+                llayer_init(nn.Linear(layer_width, layer_width), 
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
