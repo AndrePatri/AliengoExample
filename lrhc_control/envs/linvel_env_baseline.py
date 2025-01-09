@@ -60,9 +60,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
         self._use_perc_error=True
         self._directional_tracking=True # whether to compute tracking rew based on reference direction
+
         self._use_action_history = True # whether to add information on past actions to obs
+        self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
         self._actions_history_size=10 # [env substeps] !! add full action history over a window
-        self._add_prev_actions_stats_to_obs = False # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
+        
         self._add_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True
         self._add_gn_rhc_loc=True
