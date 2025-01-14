@@ -374,6 +374,11 @@ class LRhcEnvBase(ABC):
             self._reset_sim()
             self._init_safe_cluster_actions(robot_name=robot_name)
 
+            Journal.log(self.__class__.__name__,
+                "_setup",
+                f"Will use joint impedance config at {self._jnt_imp_config_paths[robot_name]} for {robot_name}",
+                LogType.STAT)
+            
             self._jnt_imp_controllers[robot_name] = self._generate_jnt_imp_control(robot_name=robot_name)
             self._jnt_imp_cntrl_shared_data[robot_name] = JntImpCntrlData(is_server=True, 
                                             n_envs=self._num_envs, 
