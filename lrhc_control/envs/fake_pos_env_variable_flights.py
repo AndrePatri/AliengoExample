@@ -30,7 +30,7 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             timeout_ms: int = 60000):
 
         self._max_distance=5.0 # [m]
-        self._min_distance=0.0 
+        self._min_distance=self._max_distance-0.01
         self._max_vref=1.0 # [m/s]
         self._max_dt=self._max_distance/ self._max_vref
 
