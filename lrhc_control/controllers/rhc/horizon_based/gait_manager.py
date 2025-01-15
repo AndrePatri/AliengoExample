@@ -357,11 +357,18 @@ class GaitManager:
         if len(phase_idxs)==0:
             return None
         else:
-            phase_idx=phase_idxs[0] # just get info for closest phase on the horizon
-            active_nodes=active_phases[phase_idx].getActiveNodes()
-            start_pos=active_phases[phase_idx].getPosition()
-            n_nodes=active_phases[phase_idx].getNNodes()
-            return (start_pos, active_nodes, n_nodes)
+            phase_idx_start=phase_idxs[0]
+            active_nodes_start=active_phases[phase_idx_start].getActiveNodes()
+            pos_start=active_phases[phase_idx_start].getPosition()
+            n_nodes_start=active_phases[phase_idx_start].getNNodes()
+
+            phase_idx_last=phase_idxs[-1] # just get info for last phase on the horizon
+            active_nodes_last=active_phases[phase_idx_last].getActiveNodes()
+            pos_last=active_phases[phase_idx_last].getPosition()
+            n_nodes_last=active_phases[phase_idx_last].getNNodes()
+
+            return (pos_last, 
+                pos_last-pos_start+1)
     
     def set_ref_pos(self,
         timeline_name:str,

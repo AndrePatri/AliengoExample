@@ -213,7 +213,7 @@ class HybridQuadRhcRefs(RhcRefs):
             # self._flight_info=None
             if flight_info is not None:
                 pos=flight_info[0]
-                length=len(flight_info[1])
+                length=flight_info[1]
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
                     col_index=i, # contact i
@@ -263,7 +263,7 @@ class HybridQuadRhcRefs(RhcRefs):
             # self._flight_info=None
             if self._flight_info is not None:
                 pos=self._flight_info[0]
-                length=len(self._flight_info[1])
+                length=self._flight_info[1]
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
                     col_index=i,
