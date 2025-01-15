@@ -41,7 +41,7 @@ from perf_sleep.pyperfsleep import PerfSleep
 from abc import abstractmethod, ABC
 
 import os
-from typing import List
+from typing import List, Dict
 
 class LRhcTrainingEnvBase(ABC):
 
@@ -78,8 +78,9 @@ class LRhcTrainingEnvBase(ABC):
             use_action_smoothing: bool = False,
             smoothing_horizon_c: float = 0.01,
             smoothing_horizon_d: float = 0.1,
-            n_demo_envs_perc: float = 0.0):
-        
+            n_demo_envs_perc: float = 0.0,
+            env_opts: Dict = {}):
+    
         self._n_demo_envs_perc=n_demo_envs_perc
 
         self._vec_ep_freq_metrics_db = vec_ep_freq_metrics_db # update single env metrics every
@@ -101,10 +102,6 @@ class LRhcTrainingEnvBase(ABC):
         if self._action_repeat <=0: 
             self._action_repeat = 1
         self._substep_dt=1.0 # dt [s] between each substep
-        try:
-            self._substep_dt=self._env_opts["substep_dt"]
-        except:
-            pass
         sim_data = {}
         sim_info_shared = SharedEnvInfo(namespace=namespace,
                     is_server=False,
@@ -223,6 +220,29 @@ class LRhcTrainingEnvBase(ABC):
         
         self._demo_setup() # setup for demo envs
 
+        # base env options (can be added in _custom_post_init or after initialization)
+        self._env_opts={}
+        self._env_opts.update(env_opts)
+        self._env_opts["n_demo_envs_perc"]=self._n_demo_envs_perc
+        self._env_opts["vec_ep_freq_metrics_db"]=self._vec_ep_freq_metrics_db
+        self._env_opts["use_random_safety_reset"]=self._use_random_safety_reset
+        self._env_opts["use_random_trunc"]=self._use_random_trunc
+        self._env_opts["correct_for_random_trunc"]=self._correct_for_random_trunc
+        self._env_opts["action_repeat"]=self._action_repeat
+        self._env_opts["substep_dt"]=self._substep_dt
+        self._env_opts["use_act_mem_bf"]=self._use_act_mem_bf
+        self._env_opts["act_membf_size"]=self._act_membf_size
+        self._env_opts["use_action_smoothing"]=self._use_action_smoothing
+        self._env_opts["smoothing_horizon_c"]=self._smoothing_horizon_c
+        self._env_opts["smoothing_horizon_d"]=self._smoothing_horizon_d
+        self._env_opts["override_agent_refs"]=self._override_agent_refs
+        self._env_opts["episode_timeout_lb"]=self._episode_timeout_lb
+        self._env_opts["episode_timeout_ub"]=self._episode_timeout_ub
+        self._env_opts["n_steps_task_rand_lb"]=self._n_steps_task_rand_lb
+        self._env_opts["n_steps_task_rand_ub"]=self._n_steps_task_rand_ub
+        self._env_opts["random_rst_freq"]=self._random_rst_freq
+        self._env_opts["random_trunc_freq"]=self._random_trunc_freq
+
         self._custom_post_init()
 
         if self._use_action_smoothing:
@@ -263,6 +283,9 @@ class LRhcTrainingEnvBase(ABC):
                 "__init__",
                 f"Demo env. indexes are [{demo_idxs_str}]",
                 LogType.INFO)
+    
+    def env_opts(self):
+        return self._env_opts
     
     def demo_env_idxs(self, get_bool: bool=False):
         if get_bool:

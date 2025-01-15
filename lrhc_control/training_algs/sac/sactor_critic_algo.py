@@ -304,6 +304,9 @@ class SActorCriticAlgoBase(ABC):
         self._init_drop_dir(drop_dir_name)
         self._hyperparameters["drop_dir"]=self._drop_dir
 
+        # add env options to hyperparameters
+        self._hyperparameters.update(self._env_opts) 
+
         # seeding + deterministic behavior for reproducibility
         self._set_all_deterministic()
         torch.autograd.set_detect_anomaly(self._anomaly_detect)
@@ -399,6 +402,8 @@ class SActorCriticAlgoBase(ABC):
             run_name: str = "SACDefaultRunName"):
 
         self._dtype = self._env.dtype()
+
+        self._env_opts=self._env.env_opts()
 
         self._num_envs = self._env.n_envs()
         self._obs_dim = self._env.obs_dim()

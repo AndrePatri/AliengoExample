@@ -16,6 +16,8 @@ import math
 
 from lrhc_control.utils.math_utils import check_capsize
 
+from typing import Dict
+
 class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
     def __init__(self,
@@ -27,7 +29,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             dtype: torch.dtype = torch.float32,
             debug: bool = True,
             override_agent_refs: bool = False,
-            timeout_ms: int = 60000):
+            timeout_ms: int = 60000,
+            env_opts: Dict = {}):
         
         env_name = "LinVelTrack"
         device = "cuda" if use_gpu else "cpu"
@@ -73,6 +76,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         self._use_prob_based_stepping=False
         self._add_flight_info=True
+        
         self._use_pos_control=False
         self._add_rhc_cmds_to_obs=True
 
@@ -247,7 +251,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     use_action_smoothing=self._enable_action_smoothing,
                     smoothing_horizon_c=self._action_smoothing_horizon_c,
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
-                    n_demo_envs_perc=n_demo_envs_perc)
+                    n_demo_envs_perc=n_demo_envs_perc,
+                    env_opts=env_opts)
 
         self._is_substep_rew[0]=False
         if self._add_CoT_reward:
@@ -264,13 +269,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_custom_db_info(db_data=rhc_fail_idx)
 
         # other static db info 
-        self.custom_db_info["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
-        self.custom_db_info["actions_history_size"] = self._actions_history_size
-        self.custom_db_info["use_pof0"] = self._use_pof0
-        self.custom_db_info["pof0"] = self._pof0
-        self.custom_db_info["action_repeat"] = self._action_repeat
-        self.custom_db_info["add_flight_info"] = self._add_flight_info
-
+        self._env_opts["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
+        self._env_opts["actions_history_size"] = self._actions_history_size
+        self._env_opts["use_pof0"] = self._use_pof0
+        self._env_opts["pof0"] = self._pof0
+        self._env_opts["action_repeat"] = self._action_repeat
+        self._env_opts["add_flight_info"] = self._add_flight_info
+        
     def _set_jnts_blacklist_pattern(self):
         self._jnt_q_blacklist_patterns=["wheel"]
 

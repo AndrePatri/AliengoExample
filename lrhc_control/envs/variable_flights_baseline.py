@@ -16,6 +16,8 @@ import math
 
 from lrhc_control.utils.math_utils import check_capsize
 
+from typing import Dict
+
 class VariableFlightsBaseline(LinVelTrackBaseline):
 
     def __init__(self,
@@ -26,7 +28,8 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             dtype: torch.dtype = torch.float32,
             debug: bool = True,
             override_agent_refs: bool = False,
-            timeout_ms: int = 60000):
+            timeout_ms: int = 60000,
+            env_opts: Dict = {}):
 
         self._control_flength=False
         self._control_fapex=True
@@ -50,7 +53,8 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             dtype=dtype,
             debug=debug,
             override_agent_refs=override_agent_refs,
-            timeout_ms=timeout_ms)
+            timeout_ms=timeout_ms,
+            env_opts=env_opts)
 
         self.custom_db_info["control_flength"] = self._control_flength
         self.custom_db_info["control_fapex"] = self._control_fapex

@@ -36,6 +36,10 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
         
+        self._env_opts["full_demo"]=self._full_demo
+        self._env_opts["smooth_twist_cmd"]=self._smooth_twist_cmd
+        self._env_opts["smoothing_horizon_twist"]=self._smoothing_horizon_twist
+
         if self._demo_envs_idxs is None:
             Journal.log(self.__class__.__name__,
                 "__init__",
