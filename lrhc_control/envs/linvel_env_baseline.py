@@ -113,7 +113,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._use_rhc_avrg_vel_pred:
             obs_dim+=6
         if self._add_flight_info:
-            obs_dim+=self._n_contacts 
+            obs_dim+=2*self._n_contacts 
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
         
@@ -621,8 +621,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs[:, next_idx:(next_idx+6)] = self._root_twist_avrg_rhc_base_loc
             next_idx+=6
         if self._add_flight_info:
-            flight_info_size=len(self._contact_names)
-            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now[:, 0:flight_info_size]
+            flight_info_size=flight_info_now.shape[1]
+            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now
             next_idx+=flight_info_size
         if self._add_rhc_cmds_to_obs:
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
@@ -888,10 +888,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_names[next_idx+5] = "omega_z_avrg_rhc"
             next_idx+=6
         if self._add_flight_info:
-            flight_info_size=len(self._contact_names)
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
-            next_idx+=flight_info_size
+            next_idx+=len(self._contact_names)
+            for i in range(len(self._contact_names)):
+                obs_names[next_idx+i] = "flight_len_"+ self._contact_names[i]
+            next_idx+=len(self._contact_names)
+
         if self._add_rhc_cmds_to_obs:
             for i in range(self._n_jnts): # jnt obs (pos):
                 obs_names[next_idx+i] = f"rhc_cmd_q_{jnt_names[i]}"
