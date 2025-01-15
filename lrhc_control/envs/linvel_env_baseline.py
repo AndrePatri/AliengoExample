@@ -180,7 +180,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # power penalty
         self._power_offset = 1.0 # 1.0
-        self._power_scale = 3e-3 # 10.0
+        self._power_scale = 1.0 # 10.0
         self._power_penalty_weights = torch.full((1, n_jnts), dtype=dtype, device=device,
                             fill_value=1.0)
         self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
@@ -789,7 +789,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
             agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
             ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
-            CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=False)
+            CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=True)
             self._substep_rewards[:, 1:2] = self._power_offset*torch.exp(-self._power_scale*CoT)
 
         # # weighted_mech_power=self._drained_mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort)
