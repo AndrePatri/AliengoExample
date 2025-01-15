@@ -37,8 +37,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
         episode_timeout_ub = 1024
-        n_steps_task_rand_lb = 318 # agent refs randomization freq
-        n_steps_task_rand_ub = 318 # lb not eq. to ub to remove correlations between episodes
+        n_steps_task_rand_lb = 512 # agent refs randomization freq
+        n_steps_task_rand_ub = 512 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
         random_trunc_freq = episode_timeout_ub*15 # env timesteps
@@ -80,7 +80,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_pos_control=False
         self._add_rhc_cmds_to_obs=True
 
-        self._add_CoT_reward=False
+        self._add_CoT_reward=True
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
