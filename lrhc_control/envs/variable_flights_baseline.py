@@ -31,9 +31,9 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._control_flength=False
-        self._control_fapex=True
-        self._control_fend=True
+        self._control_flength=True
+        self._control_fapex=False
+        self._control_fend=False
 
         actions_dim=10
         n_contacts=4
