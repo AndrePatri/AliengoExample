@@ -247,11 +247,12 @@ class SActorCriticAlgoBase(ABC):
                     n_hidden_layers_critic=n_hidden_layers_critic,
                     torch_compile=use_torch_compile,
                     add_weight_norm=add_weight_norm)
-
-        self._hyperparameters["layer_width_actor_actual"]=self._agent.layer_width_actor()
-        self._hyperparameters["n_hidden_layers_actor_actual"]=self._agent.n_hidden_layers_actor()
-        self._hyperparameters["layer_width_critic_actual"]=self._agent.layer_width_critic()
-        self._hyperparameters["n_hidden_layers_critic_actual"]=self._agent.n_hidden_layers_critic()
+        
+        # loging actual widths and layers in case they were override inside agent init
+        self._hyperparameters["actor_lwidth"]=self._agent.layer_width_actor()
+        self._hyperparameters["actor_n_hlayers"]=self._agent.n_hidden_layers_actor()
+        self._hyperparameters["critic_lwidth"]=self._agent.layer_width_critic()
+        self._hyperparameters["critic_n_hlayers"]=self._agent.n_hidden_layers_critic()
 
         if self._agent.running_norm is not None:
             # some db data for the agent
