@@ -28,8 +28,22 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000):
 
-        super().__init__(namespace=namespace,
-            actions_dim=22, # twist + contact flags + flight params (length, apex, end)Xn_contacts
+        self._control_flength=False
+        self._control_fapex=True
+        self._control_fend=True
+
+        actions_dim=10
+        n_contacts=4
+        if self._control_flength:
+            actions_dim+=n_contacts
+        if self._control_fapex:
+            actions_dim+=n_contacts
+        if self._control_fend:
+            actions_dim+=n_contacts
+
+        LinVelTrackBaseline.__init__(self,
+            namespace=namespace,
+            actions_dim=actions_dim,
             verbose=verbose,
             vlevel=vlevel,
             use_gpu=use_gpu,
@@ -37,15 +51,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             debug=debug,
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
-    
+
+        self.custom_db_info["control_flength"] = self._control_flength
+        self.custom_db_info["control_fapex"] = self._control_fapex
+        self.custom_db_info["control_fend"] = self._control_fend
+
     def get_file_paths(self):
-        paths=super().get_file_paths()
+        paths=LinVelTrackBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
         return paths
 
     def _custom_post_init(self):
         
-        super()._custom_post_init()
+        LinVelTrackBaseline._custom_post_init(self)
 
         # actions bounds
         if not self._use_prob_based_stepping:
@@ -76,15 +94,31 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         self._default_action[:, ~self._is_continuous_actions] = 1.0
 
     def _set_refs(self):
-        super()._set_refs()
+        LinVelTrackBaseline._set_refs(self)
 
         action_to_be_applied = self.get_actual_actions()
+        
+        start_idx_params=10
+        if self._control_flength:
+            flen_now=self._rhc_refs.flight_settings.get(data_type="len", gpu=self._use_gpu)
+            flen_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            self._rhc_refs.flight_settings.set(data=flen_now, data_type="len", gpu=self._use_gpu)
+            start_idx_params+=self._n_contacts
 
-        flight_settings = self._rhc_refs.flight_settings.get_torch_mirror(gpu=self._use_gpu)
-        flight_settings[:, :]=action_to_be_applied[:, 10:(10+flight_settings.shape[1])]
+        if self._control_fapex:
+            fapex_now=self._rhc_refs.flight_settings.get(data_type="apex_dpos", gpu=self._use_gpu)
+            fapex_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            self._rhc_refs.flight_settings.set(data=fapex_now, data_type="apex_dpos", gpu=self._use_gpu)
+            start_idx_params+=self._n_contacts
+            
+        if self._control_fend:
+            fend_now=self._rhc_refs.flight_settings.get(data_type="end_dpos", gpu=self._use_gpu)
+            fend_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            self._rhc_refs.flight_settings.set(data=fend_now, data_type="end_dpos", gpu=self._use_gpu)
+            start_idx_params+=self._n_contacts
 
     def _write_refs(self):
-        super()._write_refs()
+        LinVelTrackBaseline._write_refs(self)
         if self._use_gpu:
             self._rhc_refs.flight_settings.synch_mirror(from_gpu=True,non_blocking=False)
         self._rhc_refs.flight_settings.synch_all(read=False, retry=True)
@@ -98,23 +132,28 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         action_names[3] = "roll_omega_cmd"
         action_names[4] = "pitch_omega_cmd"
         action_names[5] = "yaw_omega_cmd"
+
         action_names[6] = "contact_0"
         action_names[7] = "contact_1"
         action_names[8] = "contact_2"
         action_names[9] = "contact_3"
 
-        action_names[10] = "contact_len0"
-        action_names[11] = "contact_len1"
-        action_names[12] = "contact_len2"
-        action_names[13] = "contact_len3"
-        action_names[14] = "contact_apex0"
-        action_names[15] = "contact_apex1"
-        action_names[16] = "contact_apex2"
-        action_names[17] = "contact_apex3"
-        action_names[18] = "contact_end0"
-        action_names[19] = "contact_end1"
-        action_names[20] = "contact_end2"
-        action_names[21] = "contact_end3"
+        next_idx=10
+        if self._control_flength:
+            for i in range(len(self._contact_names)):
+                contact=self._contact_names[i]
+                action_names[next_idx+i] = f"contact_len_{contact}"
+            next_idx+=len(self._contact_names)
+        if self._control_fapex:
+            for i in range(len(self._contact_names)):
+                contact=self._contact_names[i]
+                action_names[next_idx+i] = f"contact_apex_{contact}"
+            next_idx+=len(self._contact_names)
+        if self._control_fend:
+            for i in range(len(self._contact_names)):
+                contact=self._contact_names[i]
+                action_names[next_idx+i] = f"contact_end_{contact}"
+            next_idx+=len(self._contact_names)
 
         return action_names
 

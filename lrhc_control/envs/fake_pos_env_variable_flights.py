@@ -33,6 +33,20 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
         self._min_distance=0.0 
         self._max_vref=1.0 # [m/s]
         self._max_dt=self._max_distance/ self._max_vref
+
+        self._control_flength=True
+        self._control_fapex=False
+        self._control_fend=False
+
+        actions_dim=10
+        n_contacts=4
+        if self._control_flength:
+            actions_dim+=n_contacts
+        if self._control_fapex:
+            actions_dim+=n_contacts
+        if self._control_fend:
+            actions_dim+=n_contacts
+
         VariableFlightsBaseline.__init__(self, 
             namespace=namespace,
             verbose=verbose,
@@ -42,7 +56,12 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             debug=debug,
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
-    
+
+        self.custom_db_info["max_distance"] = self._max_distance
+        self.custom_db_info["min_distance"] = self._min_distance
+        self.custom_db_info["max_vref"] = self._max_vref
+        self.custom_db_info["max_dt"] = self._max_dt
+        
     def get_file_paths(self):
         paths=VariableFlightsBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        

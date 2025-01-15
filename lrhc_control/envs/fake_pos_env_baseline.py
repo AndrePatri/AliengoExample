@@ -21,6 +21,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
 
     def __init__(self,
             namespace: str,
+            actions_dim: int = 10,
             verbose: bool = False,
             vlevel: VLevel = VLevel.V1,
             use_gpu: bool = True,
@@ -35,7 +36,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
         self._max_dt=self._max_distance/ self._max_vref
         LinVelTrackBaseline.__init__(self, 
             namespace=namespace,
-            actions_dim=10, # twist + contact flags
+            actions_dim=actions_dim, # twist + contact flags
             verbose=verbose,
             vlevel=vlevel,
             use_gpu=use_gpu,
@@ -43,7 +44,12 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             debug=debug,
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms)
-    
+        
+        self.custom_db_info["max_distance"] = self._max_distance
+        self.custom_db_info["min_distance"] = self._min_distance
+        self.custom_db_info["max_vref"] = self._max_vref
+        self.custom_db_info["max_dt"] = self._max_dt
+
     def get_file_paths(self):
         paths=LinVelTrackBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
