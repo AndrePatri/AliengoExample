@@ -46,8 +46,8 @@ class SACAgent(nn.Module):
         self._n_hidden_layers_critic=n_hidden_layers_critic
 
         if compression_ratio > 0.0:
-            self._layer_width_actor=compression_ratio*obs_dim
-            self._layer_width_critic=compression_ratio*(obs_dim+actions_dim)
+            self._layer_width_actor=int(compression_ratio*obs_dim)
+            self._layer_width_critic=int(compression_ratio*(obs_dim+actions_dim))
         
         if add_weight_norm:
             Journal.log(self.__class__.__name__,
@@ -426,7 +426,7 @@ class Actor(nn.Module):
                     dtype=self._torch_dtype,
                     add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
-        
+    
         # Hidden layers
         # first hidden optionally uses _first_hidden_layer_width
         layers.extend([
