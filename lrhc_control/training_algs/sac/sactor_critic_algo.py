@@ -218,15 +218,15 @@ class SActorCriticAlgoBase(ABC):
 
         use_torch_compile=False
         add_weight_norm=False
-        input_compression_ratio=-1.0
+        compression_ratio=-1.0
         if "use_torch_compile" in self._hyperparameters and \
             self._hyperparameters["use_torch_compile"]:
             use_torch_compile=True
         if "add_weight_norm" in self._hyperparameters and \
             self._hyperparameters["add_weight_norm"]:
             add_weight_norm=True
-        if "input_compression_ratio" in self._hyperparameters:
-            input_compression_ratio=self._hyperparameters["input_compression_ratio"]
+        if "compression_ratio" in self._hyperparameters:
+            compression_ratio=self._hyperparameters["compression_ratio"]
         self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                     obs_ub=self._env.get_obs_ub().flatten().tolist(),
                     obs_lb=self._env.get_obs_lb().flatten().tolist(),
@@ -235,7 +235,7 @@ class SActorCriticAlgoBase(ABC):
                     actions_lb=self._env.get_actions_lb().flatten().tolist(),
                     rescale_obs=rescale_obs,
                     norm_obs=norm_obs,
-                    input_compression_ratio=input_compression_ratio,
+                    compression_ratio=compression_ratio,
                     device=self._torch_device,
                     dtype=self._dtype,
                     is_eval=self._eval,
@@ -247,6 +247,11 @@ class SActorCriticAlgoBase(ABC):
                     n_hidden_layers_critic=n_hidden_layers_critic,
                     torch_compile=use_torch_compile,
                     add_weight_norm=add_weight_norm)
+
+        self._hyperparameters["layer_width_actor_actual"]=self._agent.layer_width_actor()
+        self._hyperparameters["n_hidden_layers_actor_actual"]=self._agent.n_hidden_layers_actor()
+        self._hyperparameters["layer_width_critic_actual"]=self._agent.layer_width_critic()
+        self._hyperparameters["n_hidden_layers_critic_actual"]=self._agent.n_hidden_layers_critic()
 
         if self._agent.running_norm is not None:
             # some db data for the agent
@@ -417,7 +422,7 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 4096
+        self._batch_size = 8192
 
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
@@ -438,7 +443,7 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
 
         self._lr_policy = 1e-3
-        self._lr_q = 5e-4
+        self._lr_q = 1e-3
 
         self._discount_factor = 0.995
         self._smoothing_coeff = 0.005
@@ -447,7 +452,7 @@ class SActorCriticAlgoBase(ABC):
         self._trgt_net_freq = 1
 
         self._autotune = True
-        self._trgt_avrg_entropy_per_action=-2.5 # the more negative, the more deterministic the policy
+        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
         self._target_entropy = self._trgt_avrg_entropy_per_action*self._env.actions_dim()
         self._log_alpha = None
         self._alpha = 0.2

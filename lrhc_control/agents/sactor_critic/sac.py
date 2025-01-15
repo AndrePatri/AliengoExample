@@ -30,7 +30,7 @@ class SACAgent(nn.Module):
             load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
-            input_compression_ratio: float = -1.0, # [0, 1] 
+            compression_ratio: float = - 1.0, # > 0; if [0, 1] compression, >1 "expansion"
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,
@@ -40,14 +40,15 @@ class SACAgent(nn.Module):
 
         self._use_torch_compile=torch_compile
 
-        self._first_hidden_layer_size_actor=layer_width_actor
-        self._first_hidden_layer_size_critic=layer_width_critic
-        if input_compression_ratio > 0.0:
-            if input_compression_ratio > 1.0:
-                input_compression_ratio=1.0
-            self._first_hidden_layer_size_actor=int(float(obs_dim)*float(input_compression_ratio))
-            self._first_hidden_layer_size_critic=int(float(obs_dim+actions_dim)*float(input_compression_ratio))
+        self._layer_width_actor=layer_width_actor
+        self._layer_width_critic=layer_width_critic
+        self._n_hidden_layers_actor=n_hidden_layers_actor
+        self._n_hidden_layers_critic=n_hidden_layers_critic
 
+        if compression_ratio > 0.0:
+            self._layer_width_actor=compression_ratio*obs_dim
+            self._layer_width_critic=compression_ratio*(obs_dim+actions_dim)
+        
         if add_weight_norm:
             Journal.log(self.__class__.__name__,
                 "__init__",
@@ -122,9 +123,8 @@ class SACAgent(nn.Module):
                     actions_lb=actions_lb,
                     device=device,
                     dtype=dtype,
-                    first_hidden_layer_width=self._first_hidden_layer_size_actor,
-                    layer_width=layer_width_actor,
-                    n_hidden_layers=n_hidden_layers_actor,
+                    layer_width=self._layer_width_actor,
+                    n_hidden_layers=self._n_hidden_layers_actor,
                     add_weight_norm=add_weight_norm
                     )
 
@@ -134,34 +134,30 @@ class SACAgent(nn.Module):
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf1_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             
             self.qf2 = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf2_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    first_hidden_layer_width=self._first_hidden_layer_size_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
         
             self.qf1_target.load_state_dict(self.qf1.state_dict())
@@ -183,13 +179,25 @@ class SACAgent(nn.Module):
             self.qf2_target = torch.compile(self.qf2_target)
             self.running_norm=torch.compile(self.running_norm)
 
-        msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}]\
-        and critic [{layer_width_critic}, {n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
+        msg=f"Created SAC agent with actor [{self._layer_width_actor}, {self._n_hidden_layers_actor}]\
+        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
         Journal.log(self.__class__.__name__,
             "__init__",
             msg,
             LogType.INFO)
-        
+    
+    def layer_width_actor(self):
+        return self._layer_width_actor
+
+    def n_hidden_layers_actor(self):
+        return self._n_hidden_layers_actor
+
+    def layer_width_critic(self):
+        return self._layer_width_critic
+
+    def n_hidden_layers_critic(self):
+        return self._n_hidden_layers_critic
+
     def get_impl_path(self):
         import os 
         return os.path.abspath(__file__)
@@ -265,7 +273,6 @@ class CriticQ(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 512,
-        first_hidden_layer_width: int = -1,
         n_hidden_layers: int = 4,
         add_weight_norm: bool = False):
 
@@ -280,9 +287,8 @@ class CriticQ(nn.Module):
         self._actions_dim = actions_dim
         self._q_net_dim = self._obs_dim + self._actions_dim
 
-        self._first_hidden_layer_width=layer_width
-        if first_hidden_layer_width >0:
-            self._first_hidden_layer_width=first_hidden_layer_width
+        self._first_hidden_layer_width=self._q_net_dim # fist layer fully connected and of same dim
+        # as input
 
         # Input layer
         layers = [llayer_init(
@@ -354,7 +360,6 @@ class Actor(nn.Module):
         device: str = "cuda",
         dtype = torch.float32,
         layer_width: int = 256,
-        first_hidden_layer_width: int = -1,
         n_hidden_layers: int = 2,
         add_weight_norm: bool = False):
         
@@ -368,10 +373,8 @@ class Actor(nn.Module):
         self._obs_dim = obs_dim
         self._actions_dim = actions_dim
         
-        self._first_hidden_layer_width=layer_width
-        if first_hidden_layer_width >0:
-            self._first_hidden_layer_width=first_hidden_layer_width
-
+        self._first_hidden_layer_width=self._obs_dim # fist layer fully connected and of same dim
+    
         # Action scale and bias
         if actions_ub is None:
             actions_ub = [1] * actions_dim
