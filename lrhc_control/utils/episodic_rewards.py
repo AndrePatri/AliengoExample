@@ -46,14 +46,9 @@ class EpisodicRewards(EpisodicData):
         ep_finished: torch.Tensor,
         ignore_ep_end: torch.Tensor = None):
 
-        if ignore_ep_end is not None:
-            to_be_ignored=torch.logical_and(ep_finished,ignore_ep_end)
-            remaining_tsteps=self._max_episode_length-self._steps_counter[to_be_ignored.flatten(), :]
-            # (as if the current reward was received up to the end of the episode)
-            rewards[to_be_ignored.flatten(), :]=rewards[to_be_ignored.flatten(), :]*remaining_tsteps
-        super().update(new_data=rewards, ep_finished=ep_finished)
+        super().update(new_data=rewards, ep_finished=ep_finished, ignore_ep_end=ignore_ep_end)
         self._tot_reward_episodic_stats.update(new_data=torch.sum(rewards, dim=1, keepdim=True), 
-            ep_finished=ep_finished)
+            ep_finished=ep_finished, ignore_ep_end=ignore_ep_end)
 
     def reward_names(self):
         return self._data_names

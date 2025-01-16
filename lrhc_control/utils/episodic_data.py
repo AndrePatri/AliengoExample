@@ -384,7 +384,8 @@ class EpisodicData():
 
     def update(self, 
         new_data: torch.Tensor,
-        ep_finished: torch.Tensor): # rewards scaled over episode length
+        ep_finished: torch.Tensor,
+        ignore_ep_end: torch.Tensor = None): # rewards scaled over episode length
 
         if (not new_data.shape[0] == self._n_envs) or \
             (not new_data.shape[1] == self._data_size):
@@ -418,16 +419,31 @@ class EpisodicData():
         self._fresh_metrics_avail[:, :]=False
 
         if not self._use_constant_scaling:
-            self._scale_now[:, :] = self._steps_counter+1 # use current n of timesteps as scale 
+            # use current n of timesteps as scale
+            self._scale_now[:, :] = self._steps_counter+1  
         else:
-            self._scale_now[:, :] = self._scaling # constant scaling
+            # constant scaling (e.g. max ep length)
+            self._scale_now[:, :] = self._scaling 
 
-        self._current_ep_sum[:, :] = self._current_ep_sum + new_data # sum over the current episode
-        self._current_ep_sum_scaled[:, :] = self._current_ep_sum[:, :] / self._scale_now[:, :] # average using the scale
+        # sum over the current episode
+        self._current_ep_sum[:, :] = self._current_ep_sum + new_data 
+
+        # average using the scale
+        self._current_ep_sum_scaled[:, :] = self._current_ep_sum[:, :] / self._scale_now[:, :] 
         
+        # sum over played episodes (stats are logged over self._ep_vec_freq episodes for each env)
         self._tot_sum_up_to_now[ep_finished.flatten(), :] += self._current_ep_sum_scaled[ep_finished.flatten(), :]
 
         self._n_played_eps[ep_finished.flatten(), 0] += 1 # an episode has been played
+
+        if ignore_ep_end is not None: # ignore data if to be ignored and ep end;
+            # useful to avoid introducing wrong db data when, for example, using random
+            # episodic truncations
+            to_be_ignored=torch.logical_and(ep_finished,ignore_ep_end)
+            self._n_played_eps[to_be_ignored.flatten(), 0] -= 1 # episode never happened
+            # remove data
+            self._tot_sum_up_to_now[to_be_ignored.flatten(), :] -= self._current_ep_sum_scaled[to_be_ignored.flatten(), :]
+
         self._average_over_eps[ep_finished.flatten(), :] = \
             (self._tot_sum_up_to_now[ep_finished.flatten(), :]) / \
                 self._n_played_eps[ep_finished.flatten(), :] 

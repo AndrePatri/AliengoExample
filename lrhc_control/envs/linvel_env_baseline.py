@@ -41,8 +41,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         n_steps_task_rand_ub = 318 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
-        random_trunc_freq = episode_timeout_ub*15 # env timesteps
-        random_trunc_freq_delta=4*episode_timeout_ub
+        random_trunc_freq = episode_timeout_ub*10 # env timesteps
+        random_trunc_freq_delta=2*episode_timeout_ub
         n_preinit_steps = 1 # one steps of the controllers to properly initialize everything
         action_repeat = 1 # frame skipping (different agent action every action_repeat
         # env substeps)
@@ -234,7 +234,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     random_trunc_freq=random_trunc_freq,
                     random_trunc_freq_delta=random_trunc_freq_delta,
                     use_random_trunc=False, # to help remove temporal correlations
-                    correct_for_random_trunc=False,
                     action_repeat=action_repeat,
                     env_name=env_name,
                     n_preinit_steps=n_preinit_steps,
@@ -654,13 +653,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=self.actions_dim()
 
     def _get_custom_db_data(self, 
-            episode_finished):
+            episode_finished,
+            ignore_ep_end):
         episode_finished = episode_finished.cpu()
         self.custom_db_data["AgentTwistRefs"].update(new_data=self._agent_refs.rob_refs.root_state.get(data_type="twist",
                                                                                             gpu=False), 
-                                    ep_finished=episode_finished)
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
         self.custom_db_data["RhcFailIdx"].update(new_data=self._rhc_fail_idx(gpu=False), 
-                                    ep_finished=episode_finished)
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
     
     def _drained_mech_pow(self, jnts_vel, jnts_effort, autoscaled: bool = False):
         mech_pow_jnts=(jnts_effort*jnts_vel)*self._power_penalty_weights
