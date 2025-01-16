@@ -37,8 +37,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
         episode_timeout_ub = 1024
-        n_steps_task_rand_lb = 318 # agent refs randomization freq
-        n_steps_task_rand_ub = 318 # lb not eq. to ub to remove correlations between episodes
+        n_steps_task_rand_lb = 512 # agent refs randomization freq
+        n_steps_task_rand_ub = 512 # lb not eq. to ub to remove correlations between episodes
         # across diff envs
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
         random_trunc_freq = episode_timeout_ub*5 # env timesteps
