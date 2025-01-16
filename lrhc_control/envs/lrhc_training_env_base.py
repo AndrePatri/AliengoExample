@@ -559,11 +559,11 @@ class LRhcTrainingEnvBase(ABC):
         terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
         truncated = self._truncations.get_torch_mirror(gpu=self._use_gpu)
         ignore_ep_end=None
-        ignore_ep_end_cpu=None
         if self._rand_trunc_counter is not None:
-            ignore_ep_end_cpu=self._rand_trunc_counter.time_limits_reached()
+            ignore_ep_end=self._rand_trunc_counter.time_limits_reached()
             if self._use_gpu:
-                ignore_ep_end=ignore_ep_end_cpu.cuda()
+                ignore_ep_end=ignore_ep_end.cuda()
+            
             truncated = torch.logical_or(truncated, 
                 ignore_ep_end) # add truncation (sub truncations defined in child env
             # remain untouched)
@@ -592,6 +592,7 @@ class LRhcTrainingEnvBase(ABC):
         # actual data from the step and not after reset)
         if self._is_debug:
             self._debug() # copies db data on shared memory
+            ignore_ep_end_cpu=ignore_ep_end if not self._use_gpu else ignore_ep_end.cpu()
             self._update_custom_db_data(episode_finished=episode_finished_cpu, 
                     ignore_ep_end=ignore_ep_end_cpu # ignore data if random trunc
                     )           
