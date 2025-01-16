@@ -28,6 +28,8 @@ if __name__ == "__main__":
 
     # Replacing argparse.BooleanOptionalAction with 'store_true' and 'store_false' for compatibility with Python 3.8
     parser.add_argument('--cloop',action='store_true', help='whether to use RHC controllers in closed loop mode')
+    parser.add_argument('--cluster_dt', type=float, default=0.05, help='dt used by MPC controllers for discretization')
+    parser.add_argument('--n_nodes', type=int, default=31, help='n nodes used by MPC controllers')
 
     parser.add_argument('--verbose',action='store_true', help='run in verbose mode')
 
@@ -57,6 +59,8 @@ if __name__ == "__main__":
     # Ensure custom_args_names and custom_args_vals have the same length
     custom_opts = generate_custom_arg_dict(args=args)
     custom_opts.update({"cloop": args.cloop, 
+        "cluster_dt": args.cluster_dt, 
+        "n_nodes": args.n_nodes, 
         "codegen_override_dir": args.codegen_override_dir})
     if args.no_mp_fork: # this needs to be in the main
         mp.set_start_method('spawn')
