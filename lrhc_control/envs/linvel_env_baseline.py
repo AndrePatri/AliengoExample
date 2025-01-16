@@ -244,7 +244,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     debug=debug,
                     override_agent_refs=override_agent_refs,
                     timeout_ms=timeout_ms,
-                    srew_drescaling=True,
+                    srew_drescaling=False,
                     use_act_mem_bf=self._use_action_history,
                     act_membf_size=self._actions_history_size,
                     use_action_smoothing=self._enable_action_smoothing,
