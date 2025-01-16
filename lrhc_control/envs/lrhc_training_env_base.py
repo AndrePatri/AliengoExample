@@ -1397,7 +1397,7 @@ class LRhcTrainingEnvBase(ABC):
                             n_envs=self._n_envs,
                             n_steps_lb=self._random_trunc_freq-self._random_trunc_freq_delta,
                             n_steps_ub=self._random_trunc_freq,
-                            randomize_offsets_at_startup=False,
+                            randomize_offsets_at_startup=True,
                             is_server=True,
                             verbose=self._verbose,
                             vlevel=self._vlevel,
