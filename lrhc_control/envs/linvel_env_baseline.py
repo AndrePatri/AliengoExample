@@ -80,7 +80,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._use_pos_control=False
         self._add_rhc_cmds_to_obs=True
 
-        self._add_CoT_reward=True
+        self._add_CoT_reward=False
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -233,7 +233,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     use_random_safety_reset=True,
                     random_trunc_freq=random_trunc_freq,
                     random_trunc_freq_delta=random_trunc_freq_delta,
-                    use_random_trunc=False, # to help remove temporal correlations
+                    use_random_trunc=True, # to help remove temporal correlations
                     action_repeat=action_repeat,
                     env_name=env_name,
                     n_preinit_steps=n_preinit_steps,
