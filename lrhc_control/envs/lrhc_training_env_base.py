@@ -1116,6 +1116,7 @@ class LRhcTrainingEnvBase(ABC):
         # used to hold substep rewards (not super mem. efficient)
         self._is_substep_rew = torch.zeros((self._substep_rewards.shape[1],),dtype=torch.bool,device=device)
         self._is_substep_rew.fill_(True) # default to all substep rewards
+   
         self._episodic_rewards_metrics = EpisodicRewards(reward_tensor=self._sub_rewards.get_torch_mirror(),
                                         reward_names=self._get_rewards_names(),
                                         max_episode_length=self._episode_timeout_ub,

@@ -834,17 +834,17 @@ class SimpleCounters(SharedDataBase):
                 self.get()[:, :]=self.get()+random_step_offsets # add random offsets from 0 to the mean counter duration
 
         else:
-            n_to_be_reset = torch.sum(to_be_reset.squeeze()).item()
+            n_to_be_reset = torch.sum(to_be_reset.flatten()).item()
             if not n_to_be_reset == 0:
-                self.get()[to_be_reset.squeeze() , :] = 0
+                self.get()[to_be_reset.flatten() , :] = 0
                 if randomize_limits and (not self._n_steps_lb==self._n_steps_ub):
-                    self._n_steps[to_be_reset.squeeze() , :] = torch.randint(low=self._n_steps_lb, high=self._n_steps_ub, size=(n_to_be_reset, 1),
+                    self._n_steps[to_be_reset.flatten() , :] = torch.randint(low=self._n_steps_lb, high=self._n_steps_ub, size=(n_to_be_reset, 1),
                                                 dtype=torch.int32,device=self._torch_device)
                 
                 if randomize_offsets:
                     random_step_offsets=torch.randint(low=0, high=self._n_steps_mean, size=(n_to_be_reset, 1),
                                     dtype=torch.int32,device=self._torch_device)
-                    self.get()[to_be_reset.squeeze(), :]=self.get()[to_be_reset.squeeze(), :]+random_step_offsets # add random offsets from 0 to the mean counter duration
+                    self.get()[to_be_reset.flatten(), :]=self.get()[to_be_reset.flatten(), :]+random_step_offsets # add random offsets from 0 to the mean counter duration
         
         self._write()
 
