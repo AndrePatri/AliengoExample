@@ -180,10 +180,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._rhc_fail_idx_scale=1
         
         # energy penalties
-        self._CoT_offset = 10.0
-        self._CoT_scale = 1e-2
-        self._power_offset = 10.0 
-        self._power_scale = 1e-2
+        self._CoT_offset = 1.0
+        self._CoT_scale = 5e-3
+        self._power_offset = 1.0 
+        self._power_scale = 5e-3
         self._power_penalty_weights = torch.full((1, n_jnts), dtype=dtype, device=device,
                             fill_value=1.0)
         self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
@@ -807,11 +807,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
                 ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
                 CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=True)
-                self._substep_rewards[:, self._CoT_rew_idx:(self._CoT_rew_idx+1)] = self._CoT_offset-self._CoT_scale*CoT
+                self._substep_rewards[:, self._CoT_rew_idx:(self._CoT_rew_idx+1)] = self._CoT_offset*torch.exp(-self._CoT_scale*CoT)
 
             if self._add_power_reward:
                 weighted_mech_power=self._mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort, drained=True)
-                self._substep_rewards[:, self._pow_rew_idx:(self._pow_rew_idx+1)] = self._power_offset-self._power_scale*weighted_mech_power
+                self._substep_rewards[:, self._pow_rew_idx:(self._pow_rew_idx+1)] = self._power_offset*torch.exp(-self._power_scale*weighted_mech_power)
         # if self._use_rhc_avrg_vel_pred:
         #     agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
         #     self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 
