@@ -480,7 +480,7 @@ class SActorCriticAlgoBase(ABC):
         self._is_discrete_actions_bool=~self._is_continuous_actions
         self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
         
-        self._continuous_act_expl_noise_std=0.01
+        self._continuous_act_expl_noise_std=0.05
         self._discrete_act_expl_noise_std=0.5
 
         self._a_optimizer = None
