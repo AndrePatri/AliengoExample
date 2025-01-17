@@ -9,6 +9,8 @@ from lrhc_control.utils.gait_scheduler import QuadrupedGaitPatternGenerator, Gai
 
 from lrhc_control.envs.linvel_env_baseline import LinVelTrackBaseline
 
+from typing import Dict
+
 class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
 
     def __init__(self,
@@ -19,7 +21,8 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
             dtype: torch.dtype = torch.float32,
             debug: bool = True,
             override_agent_refs: bool = False,
-            timeout_ms: int = 60000):
+            timeout_ms: int = 60000,
+            env_opts: Dict = {}):
 
         super().__init__(namespace=namespace,
             actions_dim=10, # only contacts
@@ -29,7 +32,8 @@ class FixedGaitSchedEnvBaseline(LinVelTrackBaseline):
             dtype=dtype,
             debug=debug,
             override_agent_refs=override_agent_refs,
-            timeout_ms=timeout_ms)
+            timeout_ms=timeout_ms,
+            env_opts=env_opts)
     
     def get_file_paths(self):
         paths=super().get_file_paths()

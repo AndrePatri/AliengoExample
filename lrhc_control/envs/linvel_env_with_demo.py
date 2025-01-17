@@ -10,6 +10,8 @@ from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 
 from lrhc_control.envs.linvel_env_baseline import LinVelTrackBaseline
 
+from typing import Dict
+
 class LinVelEnvWithDemo(LinVelTrackBaseline):
 
     def __init__(self,
@@ -20,7 +22,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             dtype: torch.dtype = torch.float32,
             debug: bool = True,
             override_agent_refs: bool = False,
-            timeout_ms: int = 60000):
+            timeout_ms: int = 60000,
+            env_opts: Dict = {}):
         
         self._full_demo=True # whether to override the full action
         self._smooth_twist_cmd=True
@@ -34,7 +37,8 @@ class LinVelEnvWithDemo(LinVelTrackBaseline):
             dtype=dtype,
             debug=debug,
             override_agent_refs=override_agent_refs,
-            timeout_ms=timeout_ms)
+            timeout_ms=timeout_ms,
+            env_opts=env_opts)
         
         if self._demo_envs_idxs is None:
             Journal.log(self.__class__.__name__,

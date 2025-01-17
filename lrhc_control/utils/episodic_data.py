@@ -203,8 +203,20 @@ class EpisodicData():
             data_names: List[str] = None, 
             debug: bool = False,
             dtype: torch.dtype = torch.float32,
-            ep_vec_freq: int = 1):
-
+            ep_vec_freq: int = 1,
+            store_transitions: bool = False, # also store detailed transition history
+            max_ep_duration: int = -1
+            ):
+        
+        self._store_transitions=store_transitions
+        self._max_ep_duration=max_ep_duration
+        if self._store_transitions and self._max_ep_duration < 0:
+            Journal.log(self.__class__.__name__,
+                "__init__",
+                "When store_transitions==True, then a positive max_ep_duration should be provided",
+                LogType.EXCEP,
+                throw_when_excep=True)
+            
         self._keep_track=True # we generally want to propagate 
         # the current 
 
@@ -337,6 +349,23 @@ class EpisodicData():
             fill_value=False,
             dtype=torch.bool, device="cpu",
             requires_grad=False)
+        
+        self._full_data=None
+        if self._store_transitions:
+            self._full_data=torch.full(size=(
+                            self._ep_vec_freq,
+                            self._max_ep_duration,
+                            self._n_envs, self._data_size), 
+                fill_value=torch.nan,
+                dtype=self._dtype, device="cpu",
+                requires_grad=False)
+            self._full_data_last=torch.full(size=(
+                            self._ep_vec_freq,
+                            self._max_ep_duration,
+                            self._n_envs, self._data_size), 
+                fill_value=torch.nan,
+                dtype=self._dtype, device="cpu",
+                requires_grad=False)
 
     def reset(self,
             keep_track: bool = None,
@@ -357,11 +386,13 @@ class EpisodicData():
             self._min_over_eps[:, :]=self._big_val
             self._current_ep_sum_scaled.zero_()
             self._tot_sum_up_to_now.zero_()
-            self._average_over_eps.zero_()
-            
+            self._average_over_eps.zero_()            
             self._n_played_eps.zero_()
-
             self._scale_now.fill_(1)
+
+            if self._full_data is not None:
+                self._full_data.fill_(torch.nan)
+            
         else: # only reset some envs
             if keep_track is not None:
                 if not keep_track:
@@ -379,9 +410,11 @@ class EpisodicData():
             self._tot_sum_up_to_now[to_be_reset, :]=0
             self._average_over_eps[to_be_reset, :]=0
             self._n_played_eps[to_be_reset, :]=0
-
             self._scale_now[to_be_reset, :]=1
-
+            
+            if self._full_data is not None:
+                self._full_data[:, :, to_be_reset, :]=torch.nan
+                
     def update(self, 
         new_data: torch.Tensor,
         ep_finished: torch.Tensor,
@@ -434,8 +467,12 @@ class EpisodicData():
         # sum over played episodes (stats are logged over self._ep_vec_freq episodes for each env)
         self._tot_sum_up_to_now[ep_finished.flatten(), :] += self._current_ep_sum_scaled[ep_finished.flatten(), :]
 
-        self._n_played_eps[ep_finished.flatten(), 0] += 1 # an episode has been played
+        if self._full_data is not None: # store data on single transition
+            self._full_data[self._n_played_eps, self._steps_counter, # this step
+                :, :]=new_data.to(dtype=self._dtype)
 
+        self._n_played_eps[ep_finished.flatten(), 0] += 1 # an episode has been played
+        
         if ignore_ep_end is not None: # ignore data if to be ignored and ep end;
             # useful to avoid introducing wrong db data when, for example, using random
             # episodic truncations
@@ -449,7 +486,7 @@ class EpisodicData():
                 self._n_played_eps[ep_finished.flatten(), :] 
         
         self._current_ep_sum[ep_finished.flatten(), :] = 0 # if finished, reset current sum
-
+        
         self._max_over_eps[:, :]=torch.maximum(input=self._max_over_eps, other=new_data)
         self._min_over_eps[:, :]=torch.minimum(input=self._min_over_eps, other=new_data)
         # increment counters
@@ -468,11 +505,22 @@ class EpisodicData():
         self._min_over_eps_last[selector, :]=\
             self._min_over_eps[selector, :]
 
+        if self._full_data is not None:
+            self._full_data_last[:, :, selector, :]=self._full_data[:, :, selector, :]
+            
         EpisodicData.reset(self,to_be_reset=selector)        
 
     def data_names(self):
         return self._data_names
+    
+    def get_full_episodic_data(self, 
+        env_selector: torch.Tensor = None):
 
+        if env_selector is None:
+            return self._full_data_last
+        else:
+            return self._full_data_last[:, :, env_selector.squeeze(), :]
+            
     def get_max(self, 
         env_selector: torch.Tensor = None):
         if env_selector is None:

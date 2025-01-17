@@ -12,7 +12,9 @@ class EpisodicRewards(EpisodicData):
             reward_tensor: torch.Tensor,
             reward_names: List[str] = None,
             max_episode_length: int = 1,
-            ep_vec_freq: int = None):
+            ep_vec_freq: int = None,
+            store_transitions: bool = False, # also store detailed transition history
+            max_ep_duration: int = -1):
 
         self._max_episode_length = max_episode_length
         
@@ -20,11 +22,15 @@ class EpisodicRewards(EpisodicData):
         self._tot_reward_episodic_stats=EpisodicData(name="TotReward",
             data_tensor=torch.sum(reward_tensor,dim=1, keepdim=True),
             data_names=["TotReward"],
-            ep_vec_freq=ep_vec_freq)
+            ep_vec_freq=ep_vec_freq,
+            store_transitions=store_transitions,
+            max_ep_duration=max_ep_duration)
         
         # the maximum ep length
         super().__init__(data_tensor=reward_tensor, data_names=reward_names, name="SubRewards",
-                ep_vec_freq=ep_vec_freq)
+                ep_vec_freq=ep_vec_freq,
+                store_transitions=store_transitions,
+                max_ep_duration=max_ep_duration)
 
         self.set_constant_data_scaling(scaling=max_episode_length)
     
@@ -70,6 +76,14 @@ class EpisodicRewards(EpisodicData):
         self._tot_reward_episodic_stats.reset(keep_track=keep_track,
             to_be_reset=to_be_reset)
 
+    def get_full_episodic_subrew(self, 
+        env_selector: torch.Tensor = None):
+        return self.get_full_episodic_data(env_selector=env_selector)
+    
+    def get_full_episodic_totrew(self, 
+        env_selector: torch.Tensor = None):
+        return self._tot_reward_episodic_stats.get_full_episodic_data(env_selector=env_selector)
+    
     # wrapping base methods for sub rewards
     def get_sub_rew_max(self, 
         env_selector: torch.Tensor = None):

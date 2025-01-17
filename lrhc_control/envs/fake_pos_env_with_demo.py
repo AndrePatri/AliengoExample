@@ -9,6 +9,7 @@ from lrhc_control.utils.gait_scheduler import QuadrupedGaitPatternGenerator, Gai
 from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 
 from lrhc_control.envs.fake_pos_env_baseline import FakePosEnvBaseline
+from typing import Dict
 
 class FakePosEnvWithDemo(FakePosEnvBaseline):
 
@@ -20,7 +21,8 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
             dtype: torch.dtype = torch.float32,
             debug: bool = True,
             override_agent_refs: bool = False,
-            timeout_ms: int = 60000):
+            timeout_ms: int = 60000,
+            env_opts: Dict = {}):
         
         self._full_demo=False # whether to override the full action
         self._smooth_twist_cmd=True
@@ -34,7 +36,8 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
             dtype=dtype,
             debug=debug,
             override_agent_refs=override_agent_refs,
-            timeout_ms=timeout_ms)
+            timeout_ms=timeout_ms,
+            env_opts=env_opts)
         
         self._env_opts["full_demo"]=self._full_demo
         self._env_opts["smooth_twist_cmd"]=self._smooth_twist_cmd

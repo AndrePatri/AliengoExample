@@ -273,10 +273,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=False)
         agent_twist_ref_data = EpisodicData("AgentTwistRefs", agent_twist_ref, 
             ["v_x", "v_y", "v_z", "omega_x", "omega_y", "omega_z"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=agent_twist_ref_data)
         rhc_fail_idx = EpisodicData("RhcFailIdx", self._rhc_fail_idx(gpu=False), ["rhc_fail_idx"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=rhc_fail_idx)
 
         # other static db info 
@@ -462,7 +466,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             return self._n_steps_task_rand_ub
         else:
             return self._episode_timeout_ub
-        
+    
+    def _max_ep_length(self):
+        if self._single_task_ref_per_episode:
+            return self._n_steps_task_rand_ub
+        else:
+            return self._episode_timeout_ub
+    
     def _check_sub_truncations(self):
         # overrides parent
         sub_truncations = self._sub_truncations.get_torch_mirror(gpu=self._use_gpu)

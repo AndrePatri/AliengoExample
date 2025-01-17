@@ -207,17 +207,6 @@ class LRhcTrainingEnvBase(ABC):
         
         self._timeout = timeout_ms
 
-        self._attach_to_shared_mem()
-
-        self._init_obs(obs_dim)
-        self._init_actions(actions_dim)
-        self._init_rewards()
-        self._init_terminations()
-        self._init_truncations()
-        self._init_infos()
-        
-        self._demo_setup() # setup for demo envs
-
         # base env options (can be added in _custom_post_init or after initialization)
         self._env_opts={}
         self._env_opts.update(env_opts)
@@ -239,6 +228,21 @@ class LRhcTrainingEnvBase(ABC):
         self._env_opts["n_steps_task_rand_ub"]=self._n_steps_task_rand_ub
         self._env_opts["random_rst_freq"]=self._random_rst_freq
         self._env_opts["random_trunc_freq"]=self._random_trunc_freq
+
+        self._full_db=False
+        if "full_env_db" in self._env_opts:
+            self._full_db=self._env_opts["full_env_db"]
+
+        self._attach_to_shared_mem()
+
+        self._init_obs(obs_dim)
+        self._init_actions(actions_dim)
+        self._init_rewards()
+        self._init_terminations()
+        self._init_truncations()
+        self._init_infos()
+        
+        self._demo_setup() # setup for demo envs
 
         self._custom_post_init()
 
@@ -1115,13 +1119,18 @@ class LRhcTrainingEnvBase(ABC):
         self._episodic_rewards_metrics = EpisodicRewards(reward_tensor=self._sub_rewards.get_torch_mirror(),
                                         reward_names=self._get_rewards_names(),
                                         max_episode_length=self._episode_timeout_ub,
-                                        ep_vec_freq=self._vec_ep_freq_metrics_db)
+                                        ep_vec_freq=self._vec_ep_freq_metrics_db,
+                                        store_transitions=self._full_db,
+                                        max_ep_duration=self._max_ep_length())
         self._episodic_rewards_metrics.set_constant_data_scaling(scaling=self._get_reward_scaling())
         
     def _get_reward_scaling(self):
         # to be overridden by child (default to no scaling)
         return 1
-        
+    
+    def _max_ep_length(self):
+        return self._episode_timeout_ub
+    
     def _init_infos(self):
 
         self.custom_db_data = {}
@@ -1129,13 +1138,17 @@ class LRhcTrainingEnvBase(ABC):
         rhc_latest_contact_ref = self._rhc_refs.contact_flags.get_torch_mirror()
         contact_names = self._rhc_refs.rob_refs.contact_names()
         stepping_data = EpisodicData("RhcRefsFlag", rhc_latest_contact_ref, contact_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=stepping_data)
         # log also action data
         actions = self._actions.get_torch_mirror()
         action_names = self._get_action_names()
         action_data = EpisodicData("Actions", actions, action_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=action_data)
 
         # log sub-term and sub-truncations data
@@ -1147,13 +1160,17 @@ class LRhcTrainingEnvBase(ABC):
         sub_termination_names = self.sub_term_names()
     
         sub_term_data = EpisodicData("SubTerminations", sub_term, sub_termination_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         sub_term_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_term_data)
         sub_trunc = self._sub_truncations.get_torch_mirror()
         sub_truncations_names = self.sub_trunc_names()
         sub_trunc_data = EpisodicData("SubTruncations", sub_trunc, sub_truncations_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         sub_trunc_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_trunc_data)
 

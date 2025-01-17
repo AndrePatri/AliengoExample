@@ -17,6 +17,8 @@ import shutil
 import time
 
 import wandb
+import h5py
+import numpy as np
 
 from EigenIPC.PyEigenIPC import LogType
 from EigenIPC.PyEigenIPC import Journal
@@ -40,6 +42,8 @@ class SActorCriticAlgoBase(ABC):
 
         self._eval = False
         self._det_eval = True
+
+        self._full_env_db=False
 
         self._agent = None 
         
@@ -172,6 +176,9 @@ class SActorCriticAlgoBase(ABC):
 
         self._dump_checkpoints = dump_checkpoints
         
+        if "full_env_db" in custom_args:
+            self._full_env_db=custom_args["full_env_db"]
+            
         self._eval = eval
         self._load_qf=False
         if self._eval:
@@ -425,7 +432,7 @@ class SActorCriticAlgoBase(ABC):
         self._collection_freq=1
         self._update_freq=1
 
-        self._replay_buffer_size_nominal = int(4e6) # 32768
+        self._replay_buffer_size_nominal = int(2e3) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
@@ -540,6 +547,11 @@ class SActorCriticAlgoBase(ABC):
         self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
         if self._bnorm_vecfreq == 0:
             self._db_vecstep_frequency=self._collection_freq
+
+        self._env_db_checkpoints_vecfreq=-1
+        if self._full_env_db:
+            self._env_db_checkpoints_vecfreq=5*min(self._episode_timeout_lb, self._episode_timeout_ub, 
+                self._task_rand_timeout_lb, self._task_rand_timeout_ub)
 
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
@@ -946,7 +958,7 @@ class SActorCriticAlgoBase(ABC):
             path = path + "_checkpoint" + str(self._log_it_counter)
         info = f"Saving model to {path}"
         Journal.log(self.__class__.__name__,
-            "done",
+            "_save_model",
             info,
             LogType.INFO,
             throw_when_excep = True)
@@ -961,11 +973,68 @@ class SActorCriticAlgoBase(ABC):
         # torch.save(self._agent.parameters(), path) # only save agent parameters
         info = f"Done."
         Journal.log(self.__class__.__name__,
-            "done",
+            "_save_model",
             info,
             LogType.INFO,
             throw_when_excep = True)
-                    
+    
+    def _dump_env_checkpoint_model(self):
+
+        path = self._env_db_checkpoints_fname+str(self._log_it_counter)
+
+        info = f"Saving env db checkpoint data to {path}"
+        Journal.log(self.__class__.__name__,
+            "_dump_env_checkpoint_model",
+            info,
+            LogType.INFO,
+            throw_when_excep = True)
+        
+        with h5py.File(path+".hdf5", 'w') as hf:
+            hf.create_dataset('sub_reward_names', data=self._reward_names, 
+                dtype='S20') 
+            hf.create_dataset('log_iteration', data=np.array(self._log_it_counter)) 
+            hf.create_dataset('n_timesteps_done', data=self._n_timesteps_done.numpy())
+            hf.create_dataset('n_policy_updates', data=self._n_policy_updates.numpy())
+            hf.create_dataset('elapsed_min', data=self._elapsed_min.numpy())
+
+            # full training envs
+            hf.create_dataset('sub_rew', 
+                data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._db_env_selector))
+            hf.create_dataset('tot_rew', 
+                data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._db_env_selector))
+            
+            if self._n_expl_envs > 0:
+                hf.create_dataset('sub_rew_expl', 
+                    data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._expl_env_selector))
+                hf.create_dataset('tot_rew_expl', 
+                    data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._expl_env_selector))
+
+            if self._env.n_demo_envs() > 0:
+                hf.create_dataset('sub_rew_demo', 
+                    data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._demo_env_selector))
+                hf.create_dataset('tot_rew_demo', 
+                    data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._demo_env_selector))
+            
+            # dump all custom env data
+            db_data_names = list(self._env.custom_db_data.keys())
+            for db_dname in db_data_names:
+                episodic_data=self._env.custom_db_data[db_dname]
+                var_name = db_dname
+                hf.create_dataset(var_name, 
+                    data=episodic_data.get_full_episodic_data(env_selector=self._db_env_selector))
+                if self._n_expl_envs > 0:
+                    hf.create_dataset(var_name+"_expl", 
+                        data=episodic_data.get_full_episodic_data(env_selector=self._expl_env_selector))
+                if self._env.n_demo_envs() > 0:
+                    hf.create_dataset(var_name+"_demo", 
+                        data=episodic_data.get_full_episodic_data(env_selector=self._demo_env_selector))
+            
+        Journal.log(self.__class__.__name__,
+            "_dump_env_checkpoint_model",
+            info,
+            LogType.INFO,
+            throw_when_excep = True)
+        
     def done(self):
         
         if not self._is_done:
@@ -985,8 +1054,6 @@ class SActorCriticAlgoBase(ABC):
             self._is_done = True
 
     def _dump_dbinfo_to_file(self):
-
-        import h5py
 
         info = f"Dumping debug info at {self._dbinfo_drop_fname}"
         Journal.log(self.__class__.__name__,
@@ -1205,6 +1272,14 @@ class SActorCriticAlgoBase(ABC):
         else:
             self._drop_dir = drop_dir_name + "/" + f"{self.__class__.__name__}/" + self._run_name + "/" + self._unique_id
         os.makedirs(self._drop_dir)
+        
+        self._env_db_checkpoints_dropdir=None
+        self._env_db_checkpoints_fname=None
+        if self._env_db_checkpoints_vecfreq>0:
+            self._env_db_checkpoints_dropdir=self._drop_dir+"/env_db_checkpoints"
+            self._env_db_checkpoints_fname = self._env_db_checkpoints_dropdir + \
+                "/" + self._unique_id + "env_db_checkpoint"
+            os.makedirs(self._env_db_checkpoints_dropdir)
 
         # model
         if not self._eval or (self._model_path is None):
@@ -1347,6 +1422,11 @@ class SActorCriticAlgoBase(ABC):
         if self._dump_checkpoints and \
             (self._vec_transition_counter % self._m_checkpoint_freq == 0):
             self._save_model(is_checkpoint=True)
+
+        if self._full_env_db and \
+            (self._vec_transition_counter % self._env_db_checkpoints_vecfreq == 0):
+            print("\n\n UEEEEEEEEEEEEEEEEEEEE \n\n")
+            self._dump_env_checkpoint_model()
 
         if self._vec_transition_counter == self._total_timesteps_vec:
             self.done()           
