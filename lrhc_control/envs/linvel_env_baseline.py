@@ -256,11 +256,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     n_demo_envs_perc=n_demo_envs_perc,
                     env_opts=env_opts)
 
+        start_idx=0
         self._is_substep_rew[0]=False
+        self._track_rew_idx=start_idx
+        start_idx+=1
         if self._add_CoT_reward:
-            self._is_substep_rew[1]=True
+            self._is_substep_rew[start_idx]=True
+            self._CoT_rew_idx=start_idx
+            start_idx+=1
         if self._add_power_reward:
-            self._is_substep_rew[2]=True
+            self._is_substep_rew[start_idx]=True
+            self._pow_rew_idx=start_idx
+            start_idx+=1
 
         # custom db info 
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=False)
@@ -774,10 +781,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             directional=self._directional_tracking)
 
         fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
-        sub_rewards[:, 0:1] =  self._task_offset*(1-fail_idx)*torch.exp(-self._task_scale*task_error)
+        sub_rewards[:, self._track_rew_idx:(self._track_rew_idx+1)] =  self._task_offset*(1-fail_idx)*torch.exp(-self._task_scale*task_error)
         if self._track_rew_smoother is not None:
             self._track_rew_smoother.update(new_signal=sub_rewards[:, 0:1])
-            sub_rewards[:, 0:1]=self._track_rew_smoother.get()
+            sub_rewards[:, self._track_rew_idx:(self._track_rew_idx+1)]=self._track_rew_smoother.get()
 
         if self._use_rhc_avrg_vel_pred:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 
@@ -800,11 +807,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
                 ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
                 CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, mass_weight=True)
-                self._substep_rewards[:, 1:2] = self._CoT_offset-self._CoT_scale*CoT
+                self._substep_rewards[:, self._CoT_rew_idx:(self._CoT_rew_idx+1)] = self._CoT_offset-self._CoT_scale*CoT
 
             if self._add_power_reward:
                 weighted_mech_power=self._mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort, drained=True)
-                self._substep_rewards[:, 2:3] = self._power_offset-self._power_scale*weighted_mech_power
+                self._substep_rewards[:, self._pow_rew_idx:(self._pow_rew_idx+1)] = self._power_offset-self._power_scale*weighted_mech_power
         # if self._use_rhc_avrg_vel_pred:
         #     agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
         #     self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 
