@@ -432,7 +432,7 @@ class SActorCriticAlgoBase(ABC):
         self._collection_freq=1
         self._update_freq=1
 
-        self._replay_buffer_size_nominal = int(2e3) # 32768
+        self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
