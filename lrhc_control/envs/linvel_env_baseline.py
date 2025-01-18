@@ -120,9 +120,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._task_pred_err_weights[0, 5] = 0.05
 
         # energy penalties
-        self._CoT_offset = 1.0
+        self._CoT_offset = 0.5
         self._CoT_scale = 1e-3
-        self._power_offset = 1.0 
+        self._power_offset = 0.5
         self._power_scale = 1e-3
 
         # terminations
@@ -271,9 +271,22 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             ep_vec_freq=self._vec_ep_freq_metrics_db,
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
+        
+        f_names=[]
+        for contact in self._contact_names:
+            f_names.append(f"fc_{contact}_x_base_loc")
+            f_names.append(f"fc_{contact}_y_base_loc")
+            f_names.append(f"fc_{contact}_z_base_loc")
+        rhc_contact_f = EpisodicData("RhcContactForces", 
+            self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=False), 
+            f_names,
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
 
         self._add_custom_db_info(db_data=agent_twist_ref_data)
         self._add_custom_db_info(db_data=rhc_fail_idx)
+        self._add_custom_db_info(db_data=rhc_contact_f)
 
         # add static db info 
         self._env_opts["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
@@ -668,14 +681,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             episode_finished,
             ignore_ep_end):
         episode_finished = episode_finished.cpu()
-        self.custom_db_data["AgentTwistRefs"].update(new_data=self._agent_refs.rob_refs.root_state.get(data_type="twist",
-                                                                                            gpu=False), 
-                                    ep_finished=episode_finished,
-                                    ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["AgentTwistRefs"].update(
+                new_data=self._agent_refs.rob_refs.root_state.get(data_type="twist", gpu=False), 
+                ep_finished=episode_finished,
+                ignore_ep_end=ignore_ep_end)
         self.custom_db_data["RhcFailIdx"].update(new_data=self._rhc_fail_idx(gpu=False), 
-                                    ep_finished=episode_finished,
-                                    ignore_ep_end=ignore_ep_end)
-    
+                ep_finished=episode_finished,
+                ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["RhcContactForces"].update(
+                new_data=self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=False), 
+                ep_finished=episode_finished,
+                ignore_ep_end=ignore_ep_end)
+
     def _mech_pow(self, jnts_vel, jnts_effort, autoscaled: bool = False, drained: bool = True):
         mech_pow_jnts=(jnts_effort*jnts_vel)*self._power_penalty_weights
         if drained:
