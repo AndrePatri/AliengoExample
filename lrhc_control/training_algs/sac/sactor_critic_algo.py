@@ -480,6 +480,9 @@ class SActorCriticAlgoBase(ABC):
         self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 50
+        self._noise_freq=(self._noise_freq//self._collection_freq)*self._collection_freq
+        if self._noise_freq == 0:
+            self._noise_freq=self._collection_freq
         self._noise_duration = 5 # should be less than _noise_freq
 
         self._is_continuous_actions_bool=self._env.is_action_continuous()
@@ -545,11 +548,14 @@ class SActorCriticAlgoBase(ABC):
         self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
         # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
         self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
-        if self._bnorm_vecfreq == 0:
+        if self._db_vecstep_frequency == 0:
             self._db_vecstep_frequency=self._collection_freq
 
         self._env_db_checkpoints_vecfreq=1*min(self._episode_timeout_lb, self._episode_timeout_ub, 
             self._task_rand_timeout_lb, self._task_rand_timeout_ub)
+        self._env_db_checkpoints_vecfreq=(self._env_db_checkpoints_vecfreq//self._collection_freq)*self._collection_freq
+        if self._env_db_checkpoints_vecfreq == 0:
+            self._env_db_checkpoints_vecfreq=self._collection_freq
 
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
