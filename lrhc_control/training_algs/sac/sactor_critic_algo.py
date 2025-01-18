@@ -429,8 +429,8 @@ class SActorCriticAlgoBase(ABC):
 
         # main algo settings
 
-        self._collection_freq=1
-        self._update_freq=1
+        self._collection_freq=5
+        self._update_freq=25
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
@@ -477,7 +477,8 @@ class SActorCriticAlgoBase(ABC):
         if self._bnorm_vecfreq == 0:
             self._bnorm_vecfreq=self._collection_freq
 
-        self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
+        self._n_expl_env_perc=0.05 # [0, 1]
+        self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 50
         self._noise_freq=(self._noise_freq//self._collection_freq)*self._collection_freq
