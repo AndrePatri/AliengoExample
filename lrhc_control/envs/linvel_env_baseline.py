@@ -124,9 +124,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._CoT_scale = 1e-3
         self._power_offset = 1.0 
         self._power_scale = 1e-3
-        self._power_penalty_weights = torch.full((1, n_jnts), dtype=dtype, device=device,
-                            fill_value=1.0)
-        self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
 
         # terminations
         self._add_term_mpc_capsize=False # add termination based on mpc capsizing prediction
@@ -287,6 +284,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._env_opts["add_flight_info"] = self._add_flight_info
 
         # rewards
+        self._power_penalty_weights = torch.full((1, self._n_jnts), dtype=self._dtype, device=device,
+                            fill_value=1.0)
+        self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
         subr_names=self._get_rewards_names() # initializes
         # _reward_map
         # which rewards are to be computed at substeps frequency?
