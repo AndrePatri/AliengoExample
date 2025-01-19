@@ -831,12 +831,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     mass_weight=False # inessential scaling
                     )
                 idx=self._reward_map["CoT"]
-                self._substep_rewards[:, idx:(idx+1)] = self._CoT_offset-self._CoT_scale*CoT
+                self._substep_rewards[:, idx:(idx+1)] = self._CoT_offset*(1-self._CoT_scale*CoT)
 
             if self._add_power_reward:
                 weighted_mech_power=self._mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort, drained=True)
                 idx=self._reward_map["mech_pow"]
-                self._substep_rewards[:, idx:(idx+1)] = self._power_offset-self._power_scale*weighted_mech_power
+                self._substep_rewards[:, idx:(idx+1)] = self._power_offset*(1-self._power_scale*weighted_mech_power)
         
     def _randomize_task_refs(self,
         env_indxs: torch.Tensor = None):
