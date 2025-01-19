@@ -58,6 +58,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         n_demo_envs_perc = 0.0 # demo environments
         
+        self.max_cmd_v=1.5 # maximum cmd v for v actions (single component)
+
         # action smoothing
         self._enable_action_smoothing=False
         self._action_smoothing_horizon_c=0.01
@@ -325,7 +327,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if not self._use_prob_based_stepping:
             self._is_continuous_actions[6:10]=False
 
-        self.max_cmd_v=1.5
         v_cmd_max = self.max_cmd_v
         omega_cmd_max = self.max_cmd_v
         self._actions_lb[:, 0:3] = -v_cmd_max 
