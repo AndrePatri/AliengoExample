@@ -120,9 +120,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._task_pred_err_weights[0, 5] = 0.05
 
         # energy penalties
-        self._CoT_offset = 0.5
+        self._CoT_offset = 1.5
         self._CoT_scale = 1e-3
-        self._power_offset = 0.5
+        self._power_offset = 1.5
         self._power_scale = 1e-3
 
         # terminations
