@@ -454,7 +454,7 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
-
+        
         self._lr_policy = 1e-3
         self._lr_q = 1e-3
 
@@ -480,19 +480,21 @@ class SActorCriticAlgoBase(ABC):
         self._n_expl_env_perc=0.05 # [0, 1]
         self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
-        self._noise_freq = 50
+        self._noise_freq = 25
         self._noise_freq=(self._noise_freq//self._collection_freq)*self._collection_freq
         if self._noise_freq == 0:
             self._noise_freq=self._collection_freq
         self._noise_duration = 5 # should be less than _noise_freq
 
+        self._env_actions_ub=self._env.get_actions_ub()
+        self._env_actions_lb=self._env.get_actions_lb()
         self._is_continuous_actions_bool=self._env.is_action_continuous()
         self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
-        self._is_discrete_actions_bool=~self._is_continuous_actions
+        self._is_discrete_actions_bool=self._env.is_action_discrete()
         self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
         
-        self._continuous_act_expl_noise_std=0.05
-        self._discrete_act_expl_noise_std=0.5
+        self._continuous_act_expl_noise_std=0.05 
+        self._discrete_act_expl_noise_std=1.0
 
         self._a_optimizer = None
         
@@ -1750,15 +1752,15 @@ class SActorCriticAlgoBase(ABC):
     def _perturb_some_actions(self,
             actions: torch.Tensor):
         
-        if self._is_continuous_actions.any(): # if there are any continuous actions
+        if self._is_continuous_actions_bool.any(): # if there are any continuous actions
             self._perturb_actions(actions,
                 action_idxs=self._is_continuous_actions, 
                 env_idxs=self._expl_env_selector.to(actions.device),
                 normal=True, # use normal for continuous
                 scaling=self._continuous_act_expl_noise_std)
-        if (~self._is_continuous_actions).any(): # actions to be treated as discrete
+        if self._is_discrete_actions_bool.any(): # actions to be treated as discrete
             self._perturb_actions(actions,
-                action_idxs=~self._is_continuous_actions, 
+                action_idxs=self._is_discrete_actions, 
                 env_idxs=self._expl_env_selector.to(actions.device),
                 normal=False, # use uniform distr for discrete
                 scaling=self._discrete_act_expl_noise_std)
@@ -1783,10 +1785,16 @@ class SActorCriticAlgoBase(ABC):
         
         env_indices = env_idxs.reshape(-1,1)  # Get indices of True environments
         action_indices = action_idxs.reshape(1,-1) # Get indices of True actions
+        action_indices_flat=action_indices.flatten()
+
+        perturbation=noise[env_indices, action_indices]*self._action_scale[:, action_indices_flat]*scaling
+        perturbed_actions=actions[env_indices, action_indices]+perturbation
+        perturbed_actions.clamp_(self._env_actions_lb[:, action_indices_flat], 
+                self._env_actions_ub[:, action_indices_flat]) # enforce actions bounds
 
         actions[env_indices, action_indices]=\
-            actions[env_indices, action_indices]+noise[env_indices, action_indices]*self._action_scale[:,action_indices]*scaling
-    
+            perturbed_actions
+
     def _update_batch_norm(self, bsize: int = None):
 
         if bsize is None:
