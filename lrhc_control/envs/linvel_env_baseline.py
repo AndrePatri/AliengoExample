@@ -201,7 +201,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                             fill_value=1.5)
         
         # task reference parameters (specified in world frame)
-        self.max_ref=0.5
+        self.max_ref=1.0
         # lin vel
         self._twist_ref_lb[0, 0] = -self.max_ref
         self._twist_ref_lb[0, 1] = -self.max_ref
@@ -325,7 +325,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if not self._use_prob_based_stepping:
             self._is_continuous_actions[6:10]=False
 
-        self.max_cmd_v=1.0
+        self.max_cmd_v=1.5
         v_cmd_max = self.max_cmd_v
         omega_cmd_max = self.max_cmd_v
         self._actions_lb[:, 0:3] = -v_cmd_max 
@@ -357,8 +357,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             "flight_pos"
             ]
         obs_ubs=[1.0,
-            5*self.max_ref,
-            5*self.max_ref,
+            5*self.max_cmd_v,
+            5*self.max_cmd_v,
             2*torch.pi,
             30.0,
             2.0,
@@ -368,8 +368,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             200.0,
             self._n_nodes_rhc.mean().item()]
         obs_lbs=[-1.0,
-            -5*self.max_ref,
-            -5*self.max_ref,
+            -5*self.max_cmd_v,
+            -5*self.max_cmd_v,
             -2*torch.pi,
             -30.0,
             -2.0,
