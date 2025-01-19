@@ -37,8 +37,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
 
         self._actions_map={}
 
-        actions_dim=10
-        n_contacts=4
+        # temporarily creating robot state client to get some data
+        robot_state_tmp = RobotState(namespace=namespace,
+                                is_server=False, 
+                                safe=False,
+                                verbose=verbose,
+                                vlevel=vlevel,
+                                with_gpu_mirror=False,
+                                with_torch_view=False)
+        robot_state_tmp.run()
+        n_contacts = len(robot_state_tmp.contact_names())
+        robot_state_tmp.close()
+        
+        actions_dim=10 # base size
         if self._control_flength:
             actions_dim+=n_contacts
         if self._control_fapex:
@@ -76,8 +87,8 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         
         if not self._use_prob_based_stepping:
             self._is_continuous_actions[6:10]=False
-        v_cmd_max = 3*self.max_ref
-        omega_cmd_max = 3*self.max_ref
+        v_cmd_max = 2*self.max_cmd_v
+        omega_cmd_max = 2*self.max_cmd_v
         self._actions_lb[:, 0:3] = -v_cmd_max 
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
@@ -94,16 +105,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             idx=self._actions_map["contact_len_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=3
             self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
+            self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (apex)
         if self._control_fapex:
             idx=self._actions_map["contact_apex_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
+            self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (end)
         if self._control_fend:
             idx=self._actions_map["contact_end_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
+            self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
 
         self._default_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
         self._default_action[:, ~self._is_continuous_actions] = 1.0
