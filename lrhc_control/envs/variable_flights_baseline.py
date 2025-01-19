@@ -32,13 +32,16 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             env_opts: Dict = {}):
 
         self._control_flength=True
-        self._control_fapex=False
+        self._control_fapex=True
         self._control_fend=False
+
+        self._actions_map={}
 
         actions_dim=10
         n_contacts=4
         if self._control_flength:
             actions_dim+=n_contacts
+            self._actions_map[""]
         if self._control_fapex:
             actions_dim+=n_contacts
         if self._control_fend:
@@ -70,6 +73,8 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         LinVelTrackBaseline._custom_post_init(self)
 
         # actions bounds
+        actions=self._get_action_names() # also fills actions map
+        
         if not self._use_prob_based_stepping:
             self._is_continuous_actions[6:10]=False
         v_cmd_max = 3*self.max_ref
@@ -84,15 +89,22 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         else:
             self._actions_lb[:, 6:10] = -1.0 
             self._actions_ub[:, 6:10] = 1.0 
+        
         # flight params (length)
-        self._actions_lb[:, 10:14]=3
-        self._actions_ub[:, 10:14]=self._n_nodes_rhc.mean().item()
+        if self.control_flength:
+            idx=self._actions_map["contact_len_start"]
+            self._actions_lb[:, idx:(idx+self._n_contacts)]=3
+            self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
         # flight params (apex)
-        self._actions_lb[:, 14:18]=0.0
-        self._actions_ub[:, 14:18]=0.5
+        if self._control_fapex:
+            idx=self._actions_map["contact_apex_start"]
+            self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
+            self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
         # flight params (end)
-        self._actions_lb[:, 18:22]=0.0
-        self._actions_ub[:, 18:22]=0.5
+        if self._control_fend:
+            idx=self._actions_map["contact_end_start"]
+            self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
+            self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
 
         self._default_action[:, :] = (self._actions_ub+self._actions_lb)/2.0
         self._default_action[:, ~self._is_continuous_actions] = 1.0
@@ -102,24 +114,23 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
 
         action_to_be_applied = self.get_actual_actions()
         
-        start_idx_params=10
         if self._control_flength:
+            idx=self._actions_map["contact_len_start"]
             flen_now=self._rhc_refs.flight_settings.get(data_type="len", gpu=self._use_gpu)
-            flen_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            flen_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=flen_now, data_type="len", gpu=self._use_gpu)
-            start_idx_params+=self._n_contacts
 
         if self._control_fapex:
+            idx=self._actions_map["contact_apex_start"]
             fapex_now=self._rhc_refs.flight_settings.get(data_type="apex_dpos", gpu=self._use_gpu)
-            fapex_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            fapex_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fapex_now, data_type="apex_dpos", gpu=self._use_gpu)
-            start_idx_params+=self._n_contacts
             
         if self._control_fend:
+            idx=self._actions_map["contact_end_start"]
             fend_now=self._rhc_refs.flight_settings.get(data_type="end_dpos", gpu=self._use_gpu)
-            fend_now[:, :]=action_to_be_applied[:, start_idx_params:(start_idx_params+self._n_contacts)]
+            fend_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fend_now, data_type="end_dpos", gpu=self._use_gpu)
-            start_idx_params+=self._n_contacts
 
     def _write_refs(self):
         LinVelTrackBaseline._write_refs(self)
@@ -147,16 +158,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"contact_len_{contact}"
+            self._actions_map["contact_len_start"]=next_idx
             next_idx+=len(self._contact_names)
         if self._control_fapex:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"contact_apex_{contact}"
+            self._actions_map["contact_apex_start"]=next_idx
             next_idx+=len(self._contact_names)
         if self._control_fend:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"contact_end_{contact}"
+            self._actions_map["contact_end_start"]=next_idx
             next_idx+=len(self._contact_names)
 
         return action_names
