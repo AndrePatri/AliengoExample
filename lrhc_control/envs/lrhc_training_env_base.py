@@ -1718,6 +1718,9 @@ class LRhcTrainingEnvBase(ABC):
     def is_action_continuous(self):
         return self._is_continuous_actions
     
+    def is_action_discrete(self):
+        return ~self._is_continuous_actions
+
     @abstractmethod
     def _pre_step(self):
         pass
