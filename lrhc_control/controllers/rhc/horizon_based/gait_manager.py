@@ -331,7 +331,7 @@ class GaitManager:
         else:
             Journal.log(self.__class__.__name__,
                 "add_flight",
-                f"Unit duration not yet supported",
+                f"Unit duration not yet supported (got {self._flight_durations[contact_name]})",
                 LogType.EXCEP,
                 throw_when_excep=True)
 
