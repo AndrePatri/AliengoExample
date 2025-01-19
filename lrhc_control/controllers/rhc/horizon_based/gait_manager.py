@@ -258,82 +258,82 @@ class GaitManager:
     def add_flight(self, contact_name,
         robot_q: np.ndarray):
 
-        if self._flight_durations[contact_name]>1:
-            timeline = self._contact_timelines[contact_name]
+        timeline = self._contact_timelines[contact_name]
 
-            flights_on_horizon=self._contact_timelines[contact_name].getPhaseIdx(self._flight_phases[contact_name]) 
+        flights_on_horizon=self._contact_timelines[contact_name].getPhaseIdx(self._flight_phases[contact_name]) 
+        
+        last_flight_idx=self._injection_node-1 # default to make things work
+        if not len(flights_on_horizon)==0: # some flight phases are there
+            last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
+        if last_flight_idx<self._injection_node: # allow injecting
+
+            if not self._flight_durations[contact_name]>1:
+                Journal.log(self.__class__.__name__,
+                    "add_flight",
+                    f"Unit duration not yet supported (got {self._flight_durations[contact_name]})",
+                    LogType.WARN,
+                    throw_when_excep=True)
+
+            # ensure flight params is valid (sanity checks)
+            if self._flight_durations[contact_name]<self._flight_duration_min:
+                self._flight_durations[contact_name]=self._flight_duration_min
+            if self._flight_durations[contact_name]>self._flight_duration_max:
+                self._flight_durations[contact_name]=self._flight_duration_max
             
-            last_flight_idx=self._injection_node-1 # default to make things work
-            if not len(flights_on_horizon)==0: # some flight phases are there
-                last_flight_idx=flights_on_horizon[-1]+self._post_flight_stance
-            if last_flight_idx<self._injection_node: # allow injecting
+            if self._dhs[contact_name]<self._dh_min:
+                self._dhs[contact_name]=self._dh_min
+            if self._dhs[contact_name]>self._dh_max:
+                self._dhs[contact_name]=self._dh_max
 
-                # sanity checks on flight params
-                if self._flight_durations[contact_name]<self._flight_duration_min:
-                    self._flight_durations[contact_name]=self._flight_duration_min
-                if self._flight_durations[contact_name]>self._flight_duration_max:
-                    self._flight_durations[contact_name]=self._flight_duration_max
-                
-                if self._dhs[contact_name]<self._dh_min:
-                    self._dhs[contact_name]=self._dh_min
-                if self._dhs[contact_name]>self._dh_max:
-                    self._dhs[contact_name]=self._dh_max
+            if self._step_heights[contact_name]<self._step_height_min:
+                self._step_heights[contact_name]=self._step_height_min
+            if self._step_heights[contact_name]>self._step_height_max:
+                self._step_heights[contact_name]=self._step_height_max
 
-                if self._step_heights[contact_name]<self._step_height_min:
-                    self._step_heights[contact_name]=self._step_height_min
-                if self._step_heights[contact_name]>self._step_height_max:
-                    self._step_heights[contact_name]=self._step_height_max
-
-                # inject pos traj if pos mode
-                if self._ref_trjs[contact_name] is not None:
-                    # recompute trajectory online (just needed if using pos traj)
-                    starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
-                    self._ref_trjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.from_derivatives(self._flight_durations[contact_name], 
-                                                                            p_start=starting_pos, 
-                                                                            p_goal=starting_pos+self._dhs[contact_name], 
-                                                                            clearance=self._step_heights[contact_name],
-                        derivatives=self._traj_der,
-                        second_der=self._traj_second_der,
-                        third_der=self._third_traj_der)
-                        )
-                    for i in range(self._flight_durations[contact_name]):
-                        res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
-                            pos=self._injection_node+i, 
-                            absolute_position=True)
-                        phase_token.setItemReference(f'z_{contact_name}',
-                            self._ref_trjs[contact_name][:, i])
-                    if self._touchdown_phases[contact_name] is not None:
-                        # add touchdown phase for forcing vertical landing
-                        res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
-                                pos=self._injection_node+self._flight_durations[contact_name], 
-                                absolute_position=True)                
-                        
-                # inject vel traj if vel mode
-                if self._ref_vtrjs[contact_name] is not None:
-                    self._ref_vtrjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_durations[contact_name], 
-                                                                            p_start=0.0, 
-                                                                            p_goal=0.0+self._dhs[contact_name], 
-                                                                            clearance=self._step_heights[contact_name],
-                        derivatives=self._traj_der,
-                        second_der=self._traj_second_der,
-                        third_der=self._third_traj_der))
-                    for i in range(self._flight_durations[contact_name]):
-                        res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
-                            pos=self._injection_node+i, 
-                            absolute_position=True)
-                        phase_token.setItemReference(f'vz_{contact_name}',
-                            self._ref_vtrjs[contact_name][2:3, i:i+1])
-                    if self._touchdown_phases[contact_name] is not None:
-                        # add touchdown phase for forcing vertical landing
-                        res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
-                                pos=self._injection_node+self._flight_durations[contact_name], 
-                                absolute_position=True)                
-        else:
-            Journal.log(self.__class__.__name__,
-                "add_flight",
-                f"Unit duration not yet supported (got {self._flight_durations[contact_name]})",
-                LogType.EXCEP,
-                throw_when_excep=True)
+            # inject pos traj if pos mode
+            if self._ref_trjs[contact_name] is not None:
+                # recompute trajectory online (just needed if using pos traj)
+                starting_pos=self._fk_contacts[contact_name](q=robot_q)['ee_pos'].elements()[2]
+                self._ref_trjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.from_derivatives(self._flight_durations[contact_name], 
+                                                                        p_start=starting_pos, 
+                                                                        p_goal=starting_pos+self._dhs[contact_name], 
+                                                                        clearance=self._step_heights[contact_name],
+                    derivatives=self._traj_der,
+                    second_der=self._traj_second_der,
+                    third_der=self._third_traj_der)
+                    )
+                for i in range(self._flight_durations[contact_name]):
+                    res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
+                        pos=self._injection_node+i, 
+                        absolute_position=True)
+                    phase_token.setItemReference(f'z_{contact_name}',
+                        self._ref_trjs[contact_name][:, i])
+                if self._touchdown_phases[contact_name] is not None:
+                    # add touchdown phase for forcing vertical landing
+                    res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
+                            pos=self._injection_node+self._flight_durations[contact_name], 
+                            absolute_position=True)                
+                    
+            # inject vel traj if vel mode
+            if self._ref_vtrjs[contact_name] is not None:
+                self._ref_vtrjs[contact_name][2, 0:self._flight_durations[contact_name]]=np.atleast_2d(self._tg.derivative_of_trajectory(self._flight_durations[contact_name], 
+                                                                        p_start=0.0, 
+                                                                        p_goal=0.0+self._dhs[contact_name], 
+                                                                        clearance=self._step_heights[contact_name],
+                    derivatives=self._traj_der,
+                    second_der=self._traj_second_der,
+                    third_der=self._third_traj_der))
+                for i in range(self._flight_durations[contact_name]):
+                    res, phase_token=timeline.addPhase(self._flight_phases[contact_name], 
+                        pos=self._injection_node+i, 
+                        absolute_position=True)
+                    phase_token.setItemReference(f'vz_{contact_name}',
+                        self._ref_vtrjs[contact_name][2:3, i:i+1])
+                if self._touchdown_phases[contact_name] is not None:
+                    # add touchdown phase for forcing vertical landing
+                    res, phase_token=timeline.addPhase(self._touchdown_phases[contact_name], 
+                            pos=self._injection_node+self._flight_durations[contact_name], 
+                            absolute_position=True)       
 
         if timeline.getEmptyNodes() > 0:
             timeline.addPhase(timeline.getRegisteredPhase(f'stance_{contact_name}_short'))
