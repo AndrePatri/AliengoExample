@@ -41,7 +41,6 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         n_contacts=4
         if self._control_flength:
             actions_dim+=n_contacts
-            self._actions_map[""]
         if self._control_fapex:
             actions_dim+=n_contacts
         if self._control_fend:
@@ -91,7 +90,7 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             self._actions_ub[:, 6:10] = 1.0 
         
         # flight params (length)
-        if self.control_flength:
+        if self._control_flength:
             idx=self._actions_map["contact_len_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=3
             self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
