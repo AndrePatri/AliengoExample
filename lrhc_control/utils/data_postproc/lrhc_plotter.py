@@ -80,7 +80,7 @@ class LRHCPlotter:
             print(f"Error loading attributes: {e}")
 
 
-    def load_data(self, dataset_names):
+    def load_data(self, dataset_names, env_idx: int = None):
         """
         Load one or more datasets from the HDF5 file.
         
@@ -100,6 +100,9 @@ class LRHCPlotter:
                             self.data[dataset_name] = dataset[()]  # Use scalar access
                         else:
                             self.data[dataset_name] = dataset[:]  # Use slicing for arrays
+                            if env_idx is not None: # load data just for one specific env
+                                self.data[dataset_name] = self.data[dataset_name][:, env_idx:env_idx+1, :]
+                                
                         print(f"Dataset '{dataset_name}' with shape {self.data[dataset_name].shape} loaded successfully.")
                     else:
                         print(f"Warning: Dataset '{dataset_name}' not found in the file.")
@@ -705,12 +708,12 @@ if __name__ == "__main__":
 
     else:
         # load env db data
-        path = "/root/training_data/d2025_01_20_h15_m18_s13-FakePosEnvBaseline_env_db_checkpoint130.hdf5"
+        path = "/root/training_data/d2025_01_20_h15_m57_s18-FakePosEnvBaseline_env_db_checkpoint50.hdf5"
 
         plotter = LRHCPlotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
         attributes = plotter.list_attributes()
-        plotter.load_data(dataset_names=datasets)
+        plotter.load_data(dataset_names=datasets, env_idx=0)
         plotter.load_attributes()
         print("\nDataset names:")
         print(datasets)
