@@ -556,7 +556,7 @@ if __name__ == "__main__":
             data_idxs=idxs)
         
         # actions buffer
-        patterns=["*_prev"]
+        patterns=["*_prev_act"]
         idxs,selected=plotter.get_idx_matching(patterns, obs_names)
         plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - prev cmds", 
             xaxis_dataset_name=xaxis_dataset_name,
@@ -572,7 +572,7 @@ if __name__ == "__main__":
             marker_size=1,
             data_labels=selected,
             data_idxs=idxs)
-        patterns=["*_avrg"]
+        patterns=["*_avrg_act"]
         idxs,selected=plotter.get_idx_matching(patterns, obs_names)
         plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - mean cmds over window", 
             xaxis_dataset_name=xaxis_dataset_name,
@@ -588,7 +588,7 @@ if __name__ == "__main__":
             marker_size=1,
             data_labels=selected,
             data_idxs=idxs)
-        patterns=["*_std"]
+        patterns=["*_std_act"]
         idxs,selected=plotter.get_idx_matching(patterns, obs_names)
         plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - std cmds over window", 
             xaxis_dataset_name=xaxis_dataset_name,
@@ -705,7 +705,7 @@ if __name__ == "__main__":
 
     else:
         # load env db data
-        path = "/root/training_data/d2025_01_20_h11_m50_s36-FakePosEnvBaseline_env_db_checkpoint86.hdf5"
+        path = "/root/training_data/d2025_01_20_h12_m16_s12-FakePosEnvBaseline_env_db_checkpoint91.hdf5"
 
         plotter = LRHCPlotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
@@ -720,21 +720,270 @@ if __name__ == "__main__":
         print("\n")
 
         n_eps=int(plotter.attributes["ep_vec_freq"])
+        obs_names=list(plotter.attributes["Obs_data_names"])
+        actions_names=list(plotter.attributes["Actions_data_names"])
+        contact_forces_names=list(plotter.attributes["RhcContactForces_data_names"])
+        twist_refs_names=list(plotter.attributes["AgentTwistRefs_data_names"])
+        rhc_refs_names=list(plotter.attributes["RhcRefsFlag_data_names"])
+        sub_term_names=list(plotter.attributes["SubTerminations_data_names"])
+        sub_trunc_names=list(plotter.attributes["SubTruncations_data_names"])
+        sub_reward_names=list(plotter.attributes["sub_reward_names"])
+
+        xlabel="env_step"
+        xaxis_dataset_name=None
+        marker_size=2
         for ep_idx in range(n_eps):
             ep_prefix=f"ep_{ep_idx}_"
-
-            contact_forces_names=list(plotter.attributes["RhcContactForces_data_names"])
-            patterns=["*z_base_loc"]
-            idxs,selected=plotter.get_idx_matching(patterns, contact_forces_names)
-            plotter.plot_data(dataset_name=ep_prefix+"RhcContactForces", 
-                title="Vertical MPC contact f (base loc)", 
-                xaxis_dataset_name=None,
-                xlabel="env_step",
-                use_markers=False,
-                marker_size=1,
+            
+            # gravity vec
+            patterns=["gn_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - gravity vec", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - gravity vec", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # joint pos
+            patterns=["q_jnt_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - meas joint q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
                 data_labels=selected,
                 data_idxs=idxs)
         
+            # joint vel
+            patterns=["v_jnt_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - meas joint v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd effort
+            patterns=["rhc_cmd_eff_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - rhc cmd effort", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # estimated contact forces
+            patterns=["fc_contact*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - est. contact f", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # mpc fail idx
+            patterns=["rhc_fail*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - MPC fail index", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # rhc flight info
+            patterns=["flight_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - rhc flight info", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # linvel
+            patterns=["linvel_*_base_loc"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - linvel (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # actions buffer
+            patterns=["*_prev_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - action buffer - prev cmds", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            patterns=["*_avrg_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - action buffer - mean cmds over window", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            patterns=["*_std_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - action buffer - std cmds over window", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+
+            patterns=["_m*_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - action buffer - full action history buffer", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # actions
+            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
+                title=ep_prefix+"actions - all", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=actions_names,
+                data_idxs=None)
+            # contact actions
+            patterns=["*contact*"]
+            idxs,selected=plotter.get_idx_matching(patterns, actions_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
+                title=ep_prefix+"actions - contact actions only", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # sub terminations
+            plotter.plot_data(dataset_name=ep_prefix+"SubTerminations", 
+                title=ep_prefix+"SubTerminations", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=sub_term_names,
+                data_idxs=None)
+            
+            # sub terminations
+            plotter.plot_data(dataset_name=ep_prefix+"SubTruncations", 
+                title=ep_prefix+"SubTruncations", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=sub_trunc_names,
+                data_idxs=None)
+
+            # sub rewards
+            plotter.plot_data(dataset_name=ep_prefix+"sub_rew", 
+                title=ep_prefix+"sub_rew", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=sub_reward_names,
+                data_idxs=None)
+            
+            # tot rewards
+            plotter.plot_data(dataset_name=ep_prefix+"tot_rew", 
+                title=ep_prefix+"tot reward", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=["tot_reward"],
+                data_idxs=None)
+
+            # agent twist refs
+            plotter.plot_data(dataset_name=ep_prefix+"AgentTwistRefs", 
+                title=ep_prefix+"agent refs", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=twist_refs_names,
+                data_idxs=None)
+
+            # other custom data
+            patterns=["*z_base_loc"]
+            idxs,selected=plotter.get_idx_matching(patterns, contact_forces_names)
+            plotter.plot_data(dataset_name=ep_prefix+"RhcContactForces", 
+                title=ep_prefix+"Vertical MPC contact f (base loc)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=False,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            plotter.plot_data(dataset_name=ep_prefix+"RhcFailIdx", 
+                title=ep_prefix+"Rhc fail idx", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels="fail_idx",
+                data_idxs=None)
+            
+            plotter.plot_data(dataset_name=ep_prefix+"RhcRefsFlag", 
+                title=ep_prefix+"Rhc fail idx", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=rhc_refs_names,
+                data_idxs=None)
+            
+            
         plotter.show()
 
     
