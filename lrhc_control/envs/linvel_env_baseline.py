@@ -287,9 +287,29 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
 
+        self._pow_db_data=torch.full(size=(self._n_envs,2),
+                dtype=self._dtype, device="cpu",
+                fill_value=-1.0)
+        power_db = EpisodicData("Power", 
+            self._pow_db_data, 
+            ["CoT", "W"],
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+        
+        self._track_error_db=torch.full_like(agent_twist_ref, fill_value=0.0)
+        task_err_db = EpisodicData("TrackingError", 
+            agent_twist_ref, 
+            ["e_vx", "e_vy", "e_vz", "e_omegax", "e_omegay", "e_omegaz"],
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+
         self._add_custom_db_info(db_data=agent_twist_ref_data)
         self._add_custom_db_info(db_data=rhc_fail_idx)
         self._add_custom_db_info(db_data=rhc_contact_f)
+        self._add_custom_db_info(db_data=power_db)
+        self._add_custom_db_info(db_data=task_err_db)
 
         # add static db info 
         self._env_opts["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
@@ -694,7 +714,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 new_data=self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=False), 
                 ep_finished=episode_finished,
                 ignore_ep_end=ignore_ep_end)
-
+        self.custom_db_data["Power"].update(
+                new_data=self._pow_db_data, 
+                ep_finished=episode_finished,
+                ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["TrackingError"].update(
+                new_data=self._track_error_db, 
+                ep_finished=episode_finished,
+                ignore_ep_end=ignore_ep_end)
+        
     def _mech_pow(self, jnts_vel, jnts_effort, autoscaled: bool = False, drained: bool = True):
         mech_pow_jnts=(jnts_effort*jnts_vel)*self._power_penalty_weights
         if drained:
@@ -712,6 +740,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if mass_weight:
             robot_weight=self._rhc_robot_weight
             CoT=CoT/robot_weight
+        
+        # add to db metrics
+        self._pow_db_data[:, 0]=CoT.cpu()
+        self._pow_db_data[:, 1]=drained_mech_pow.cpu()
+
         return CoT
 
     def _jnt_vel_penalty(self, jnts_vel):
@@ -799,6 +832,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             weights=self._task_err_weights,
             directional=self._directional_tracking)
         
+        # add to db metrics
+        self._track_error_db[:, :]=task_error
+
         idx=self._reward_map["task_error"]
         sub_rewards[:, idx:(idx+1)] =  self._task_offset*torch.exp(-self._task_scale*task_error)
         if self._use_fail_idx_weight: # add weight based on fail idx

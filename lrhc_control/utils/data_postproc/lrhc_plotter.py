@@ -705,7 +705,7 @@ if __name__ == "__main__":
 
     else:
         # load env db data
-        path = "/root/training_data/d2025_01_20_h12_m16_s12-FakePosEnvBaseline_env_db_checkpoint91.hdf5"
+        path = "/root/training_data/d2025_01_20_h15_m18_s13-FakePosEnvBaseline_env_db_checkpoint130.hdf5"
 
         plotter = LRHCPlotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
@@ -728,6 +728,8 @@ if __name__ == "__main__":
         sub_term_names=list(plotter.attributes["SubTerminations_data_names"])
         sub_trunc_names=list(plotter.attributes["SubTruncations_data_names"])
         sub_reward_names=list(plotter.attributes["sub_reward_names"])
+        pow_names=list(plotter.attributes["Power_data_names"])
+        track_err_names=list(plotter.attributes["TrackingError_data_names"])
 
         xlabel="env_step"
         xaxis_dataset_name=None
@@ -887,7 +889,7 @@ if __name__ == "__main__":
                 title=ep_prefix+"actions - all", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
-                use_markers=True,
+                use_markers=False,
                 marker_size=marker_size,
                 data_labels=actions_names,
                 data_idxs=None)
@@ -898,7 +900,7 @@ if __name__ == "__main__":
                 title=ep_prefix+"actions - contact actions only", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
-                use_markers=True,
+                use_markers=False,
                 marker_size=marker_size,
                 data_labels=selected,
                 data_idxs=idxs)
@@ -954,6 +956,26 @@ if __name__ == "__main__":
                 data_idxs=None)
 
             # other custom data
+
+            plotter.plot_data(dataset_name=ep_prefix+"Power", 
+                title=ep_prefix+"Power", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=pow_names,
+                data_idxs=None)
+            
+            plotter.plot_data(dataset_name=ep_prefix+"TrackingError", 
+                title=ep_prefix+"TrackingError", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                ylabel="m/s",
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=track_err_names,
+                data_idxs=None)
+
             patterns=["*z_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, contact_forces_names)
             plotter.plot_data(dataset_name=ep_prefix+"RhcContactForces", 
@@ -982,7 +1004,6 @@ if __name__ == "__main__":
                 marker_size=marker_size,
                 data_labels=rhc_refs_names,
                 data_idxs=None)
-            
             
         plotter.show()
 
