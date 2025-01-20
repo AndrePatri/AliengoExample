@@ -255,7 +255,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
                     n_demo_envs_perc=n_demo_envs_perc,
                     env_opts=env_opts,
-                    vec_ep_freq_metrics_db=2)
+                    vec_ep_freq_metrics_db=1)
 
     def _custom_post_init(self):
 
