@@ -481,9 +481,6 @@ class SActorCriticAlgoBase(ABC):
         self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 25
-        self._noise_freq=(self._noise_freq//self._collection_freq)*self._collection_freq
-        if self._noise_freq == 0:
-            self._noise_freq=self._collection_freq
         self._noise_duration = 5 # should be less than _noise_freq
 
         self._env_actions_ub=self._env.get_actions_ub()
