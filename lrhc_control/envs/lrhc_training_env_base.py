@@ -684,6 +684,10 @@ class LRhcTrainingEnvBase(ABC):
         self.custom_db_data["Actions"].update(new_data=self._actions.get_torch_mirror(gpu=False), 
                                     ep_finished=episode_finished,
                                     ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["Obs"].update(new_data=self._obs.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+        
         self.custom_db_data["SubTerminations"].update(new_data=self._sub_terminations.get_torch_mirror(gpu=False), 
                                     ep_finished=episode_finished,
                                     ignore_ep_end=ignore_ep_end)
@@ -1151,6 +1155,15 @@ class LRhcTrainingEnvBase(ABC):
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=action_data)
+        
+        # and observations
+        observations = self._obs.get_torch_mirror()
+        observations_names = self._get_obs_names()
+        obs_data = EpisodicData("Obs", observations, observations_names,
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+        self._add_custom_db_info(db_data=obs_data)
 
         # log sub-term and sub-truncations data
         t_scaling=1 # 1 so that we log an interpretable data in terms of why the episode finished
