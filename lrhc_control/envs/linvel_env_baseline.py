@@ -123,9 +123,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # energy penalties
         self._CoT_offset = 1.5
-        self._CoT_scale = 1e-3
+        self._CoT_scale = 5e-4
         self._power_offset = 1.5
-        self._power_scale = 1e-3
+        self._power_scale = 5e-4
 
         # terminations
         self._add_term_mpc_capsize=False # add termination based on mpc capsizing prediction
