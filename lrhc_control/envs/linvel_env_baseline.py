@@ -37,8 +37,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         device = "cuda" if use_gpu else "cpu"
 
         # counters settings
-        episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
-        episode_timeout_ub = 1024
+        episode_timeout_lb = 2048 # episode timeouts (including env substepping when action_repeat>1)
+        episode_timeout_ub = 2048
         n_steps_task_rand_lb = 512 # agent task randomization freq
         n_steps_task_rand_ub = 512 
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
