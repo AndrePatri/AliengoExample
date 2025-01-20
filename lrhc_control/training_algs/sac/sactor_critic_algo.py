@@ -66,7 +66,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._episodic_reward_metrics = self._env.ep_rewards_metrics()
         
-        tot_tsteps=200e6
+        tot_tsteps=100e6
         self._init_params(tot_tsteps=tot_tsteps)
         
         self._init_dbdata()
@@ -454,7 +454,7 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
-        
+                
         self._lr_policy = 1e-3
         self._lr_q = 1e-3
 
@@ -992,50 +992,76 @@ class SActorCriticAlgoBase(ABC):
                 info,
                 LogType.INFO,
                 throw_when_excep = True)
-            
+
             with h5py.File(path+".hdf5", 'w') as hf:
-                hf.create_dataset('sub_reward_names', data=self._reward_names, 
-                    dtype='S20') 
-                hf.create_dataset('log_iteration', data=np.array(self._log_it_counter)) 
-                hf.create_dataset('n_timesteps_done', data=self._n_timesteps_done.numpy())
-                hf.create_dataset('n_policy_updates', data=self._n_policy_updates.numpy())
-                hf.create_dataset('elapsed_min', data=self._elapsed_min.numpy())
 
+                for key, value in self._hyperparameters.items():
+                    if value is None:
+                        value = "None"
+        
                 # full training envs
-                hf.create_dataset('sub_rew', 
-                    data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._db_env_selector))
-                hf.create_dataset('tot_rew', 
-                    data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._db_env_selector))
-                
-                if self._n_expl_envs > 0:
-                    hf.create_dataset('sub_rew_expl', 
-                        data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._expl_env_selector))
-                    hf.create_dataset('tot_rew_expl', 
-                        data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._expl_env_selector))
+                sub_rew_full=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._db_env_selector)
+                tot_rew_full=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._db_env_selector)
 
+                if self._n_expl_envs > 0:
+                    sub_rew_full_expl=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._expl_env_selector)
+                    tot_rew_full_expl=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._expl_env_selector)
                 if self._env.n_demo_envs() > 0:
-                    hf.create_dataset('sub_rew_demo', 
-                        data=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._demo_env_selector))
-                    hf.create_dataset('tot_rew_demo', 
-                        data=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._demo_env_selector))
-                
-                # dump all custom env data
+                    sub_rew_full_demo=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._demo_env_selector)
+                    tot_rew_full_demo=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._demo_env_selector)
+
+                ep_vec_freq=self._episodic_reward_metrics.ep_vec_freq() # assuming all db data was collected with the same ep_vec_freq
+
+                hf.attrs['sub_reward_names'] = self._reward_names
+                hf.attrs['log_iteration'] = self._log_it_counter
+                hf.attrs['n_timesteps_done'] = self._n_timesteps_done[self._log_it_counter]
+                hf.attrs['n_policy_updates'] = self._n_policy_updates[self._log_it_counter]
+                hf.attrs['elapsed_min'] = self._elapsed_min[self._log_it_counter]
+                hf.attrs['ep_vec_freq'] = ep_vec_freq
+
+                # first dump custom db data names
                 db_data_names = list(self._env.custom_db_data.keys())
                 for db_dname in db_data_names:
-                    episodic_data=self._env.custom_db_data[db_dname]
+                    episodic_data_names = self._env.custom_db_data[db_dname].data_names()
                     var_name = db_dname
-                    hf.create_dataset(var_name, 
-                        data=episodic_data.get_full_episodic_data(env_selector=self._db_env_selector))
+                    hf.attrs[var_name+"_data_names"] = episodic_data_names
+                            
+                for ep_idx in range(ep_vec_freq): # create separate datasets for each episode
+                    ep_prefix=f'ep_{ep_idx}_'
+
+                    # rewards
+                    hf.create_dataset(ep_prefix+'sub_rew', 
+                        data=sub_rew_full[ep_idx, :, :, :])
+                    hf.create_dataset(ep_prefix+'tot_rew', 
+                        data=tot_rew_full[ep_idx, :, :, :])
                     if self._n_expl_envs > 0:
-                        hf.create_dataset(var_name+"_expl", 
-                            data=episodic_data.get_full_episodic_data(env_selector=self._expl_env_selector))
+                        hf.create_dataset(ep_prefix+'sub_rew_expl', 
+                            data=sub_rew_full_expl[ep_idx, :, :, :])
+                        hf.create_dataset(ep_prefix+'tot_rew_expl', 
+                            data=tot_rew_full_expl[ep_idx, :, :, :])
                     if self._env.n_demo_envs() > 0:
-                        hf.create_dataset(var_name+"_demo", 
-                            data=episodic_data.get_full_episodic_data(env_selector=self._demo_env_selector))
+                        hf.create_dataset(ep_prefix+'sub_rew_demo', 
+                            data=sub_rew_full_demo)
+                        hf.create_dataset(ep_prefix+'tot_rew_demo', 
+                            data=tot_rew_full_demo[ep_idx, :, :, :])
+                    
+                    # dump all custom env data
+                    db_data_names = list(self._env.custom_db_data.keys())
+                    for db_dname in db_data_names:
+                        episodic_data=self._env.custom_db_data[db_dname]
+                        var_name = db_dname
+                        hf.create_dataset(ep_prefix+var_name, 
+                            data=episodic_data.get_full_episodic_data(env_selector=self._db_env_selector)[ep_idx, :, :, :])
+                        if self._n_expl_envs > 0:
+                            hf.create_dataset(ep_prefix+var_name+"_expl", 
+                                data=episodic_data.get_full_episodic_data(env_selector=self._expl_env_selector)[ep_idx, :, :, :])
+                        if self._env.n_demo_envs() > 0:
+                            hf.create_dataset(ep_prefix+var_name+"_demo", 
+                                data=episodic_data.get_full_episodic_data(env_selector=self._demo_env_selector)[ep_idx, :, :, :])
                 
             Journal.log(self.__class__.__name__,
                 "_dump_env_checkpoints",
-                info,
+                "done.",
                 LogType.INFO,
                 throw_when_excep = True)
         
@@ -1048,6 +1074,9 @@ class SActorCriticAlgoBase(ABC):
             
             self._dump_dbinfo_to_file()
             
+            if self._full_env_db:
+                self._dump_env_checkpoints()
+
             if self._shared_algo_data is not None:
                 self._shared_algo_data.write(dyn_info_name=["is_done"],
                     val=[1.0])
@@ -1076,7 +1105,7 @@ class SActorCriticAlgoBase(ABC):
             
             # rewards
             hf.create_dataset('sub_reward_names', data=self._reward_names, 
-                dtype='S20') 
+                dtype='S40') 
             hf.create_dataset('sub_rew_max', data=self._sub_rew_max.numpy())
             hf.create_dataset('sub_rew_avrg', data=self._sub_rew_avrg.numpy())
             hf.create_dataset('sub_rew_min', data=self._sub_rew_min.numpy())
@@ -1282,7 +1311,7 @@ class SActorCriticAlgoBase(ABC):
         if self._full_env_db>0:
             self._env_db_checkpoints_dropdir=self._drop_dir+"/env_db_checkpoints"
             self._env_db_checkpoints_fname = self._env_db_checkpoints_dropdir + \
-                "/" + self._unique_id + "env_db_checkpoint"
+                "/" + self._unique_id + "_env_db_checkpoint"
             os.makedirs(self._env_db_checkpoints_dropdir)
         # model
         if not self._eval or (self._model_path is None):

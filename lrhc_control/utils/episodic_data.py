@@ -276,6 +276,9 @@ class EpisodicData():
     def name(self):
         return self._name
     
+    def ep_vec_freq(self):
+        return self._ep_vec_freq
+    
     def _init_data(self):
         
         self._big_val=1e6
