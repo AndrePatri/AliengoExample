@@ -134,7 +134,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._rhc_fail_idx_scale=1.0
         self._use_action_history = True # whether to add information on past actions to obs
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
-        self._actions_history_size=10 # [env substeps] !! add full action history over a window
+        self._actions_history_size=15 # [env substeps] !! add full action history over a window
         
         self._add_mpc_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True # we need to obserse mpc failure idx to correlate it with terminations
