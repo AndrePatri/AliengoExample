@@ -742,8 +742,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             CoT=CoT/robot_weight
         
         # add to db metrics
-        self._pow_db_data[:, 0]=CoT.cpu()
-        self._pow_db_data[:, 1]=drained_mech_pow.cpu()
+        self._pow_db_data[:, 0:1]=CoT.cpu()
+        self._pow_db_data[:, 1:2]=drained_mech_pow.cpu()
 
         return CoT
 
