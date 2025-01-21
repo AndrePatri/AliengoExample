@@ -1,7 +1,7 @@
 from lrhc_control.utils.sys_utils import PathsGetter
 from lrhc_control.envs.lrhc_training_env_base import LRhcTrainingEnvBase
 
-from control_cluster_bridge.utilities.shared_data.rhc_data import RobotState, RhcStatus
+from control_cluster_bridge.utilities.shared_data.rhc_data import RobotState, RhcStatus, RhcRefs
 from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, base2world_frame, w2hor_frame
 
 import torch
@@ -143,7 +143,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_fail_idx_to_obs=True # we need to obserse mpc failure idx to correlate it with terminations
         
         self._use_linvel_from_rhc=True # no lin vel meas available, we use est. from mpc
-        self._add_flight_info=True # add feedback info on contact phases from mpc
+        self._add_flight_info=True # add feedback info on pos and length of flight phases from mpc
+        self._add_flight_settings=True # add feedback info on flight params from mpc
 
         self._use_prob_based_stepping=False # interpret actions as stepping prob (never worked)
         
@@ -165,11 +166,23 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                         with_torch_view=False, 
                         with_gpu_mirror=False)
         rhc_status_tmp.run()
+        rhc_refs_tmp = RhcRefs(namespace=namespace,
+                            is_server=False,
+                            safe=False,
+                            verbose=verbose,
+                            vlevel=vlevel,
+                            with_gpu_mirror=False,
+                            with_torch_view=False)
+        rhc_refs_tmp.run()
         n_jnts = robot_state_tmp.n_jnts()
         self._contact_names = robot_state_tmp.contact_names()
         self._n_contacts = len(self._contact_names)
+        self._flight_info_size=rhc_refs_tmp.flight_info.n_cols
+        self._flight_setting_size=rhc_refs_tmp.flight_settings.n_cols
+
         robot_state_tmp.close()
         rhc_status_tmp.close()
+        rhc_refs_tmp.close()
 
         # defining obs dimension
         obs_dim=3 # normalized gravity vector in base frame
@@ -185,7 +198,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._use_rhc_avrg_vel_tracking:
             obs_dim+=6 # mpc avrg twist
         if self._add_flight_info: # contact pos and len
-            obs_dim+=2*self._n_contacts 
+            obs_dim+=self._flight_info_size
+        if self._add_flight_settings:
+            obs_dim+=self._flight_setting_size
         if self._add_rhc_cmds_to_obs:
             obs_dim+=3*n_jnts 
         if self._use_action_history:
@@ -640,7 +655,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         robot_jnt_eff_rhc_applied_next=self._rhc_cmds.jnts_state.get(data_type="eff",gpu=self._use_gpu)
 
         flight_info_now = self._rhc_refs.flight_info.get(data_type="all",gpu=self._use_gpu)
-
+        flight_settings_now = self._rhc_refs.flight_settings.get(data_type="all",gpu=self._use_gpu)
+        
         # refs
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
@@ -675,9 +691,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs[:, next_idx:(next_idx+6)] = self._root_twist_avrg_rhc_base_loc
             next_idx+=6
         if self._add_flight_info:
-            flight_info_size=flight_info_now.shape[1]
-            obs[:, next_idx:(next_idx+flight_info_size)] = flight_info_now
-            next_idx+=flight_info_size
+            obs[:, next_idx:(next_idx+self._flight_info_size)] = flight_info_now
+            next_idx+=self._flight_info_size
+        if self._add_flight_settings:
+            obs[:, next_idx:(next_idx+self._flight_setting_size)] = flight_settings_now
+            next_idx+=self._flight_setting_size
+
         if self._add_rhc_cmds_to_obs:
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
             next_idx+=self._n_jnts
@@ -965,6 +984,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=len(self._contact_names)
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_len_"+ self._contact_names[i]
+            next_idx+=len(self._contact_names)
+        if self._add_flight_settings:
+            for i in range(len(self._contact_names)):
+                obs_names[next_idx+i] = "flight_len_cmd_"+ self._contact_names[i]
+            next_idx+=len(self._contact_names)
+            for i in range(len(self._contact_names)):
+                obs_names[next_idx+i] = "flight_apex_cmd_"+ self._contact_names[i]
+            next_idx+=len(self._contact_names)
+            for i in range(len(self._contact_names)):
+                obs_names[next_idx+i] = "flight_end_cmd_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
 
         if self._add_rhc_cmds_to_obs:
