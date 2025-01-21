@@ -270,7 +270,7 @@ class GaitManager:
             if not self._flight_durations[contact_name]>1:
                 Journal.log(self.__class__.__name__,
                     "add_flight",
-                    f"Unit duration not yet supported (got {self._flight_durations[contact_name]})",
+                    f"Got flight duration {self._flight_durations[contact_name]} < 1!",
                     LogType.WARN,
                     throw_when_excep=True)
 
