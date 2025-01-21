@@ -18,16 +18,13 @@ class DummyAgent(nn.Module):
             actions_dim: int,
             actions_ub: List[float] = None,
             actions_lb: List[float] = None,
-            norm_obs: bool = True,
             device:str="cuda",
             dtype=torch.float32,
-            is_eval:bool=False,
-            epsilon:float=1e-8,
             debug:bool=False):
 
         super().__init__()
 
-        self._normalize_obs = norm_obs
+        # self._normalize_obs = norm_obs
 
         self._debug = debug
 
@@ -45,12 +42,12 @@ class DummyAgent(nn.Module):
         self._torch_dtype = dtype
 
         self.running_norm = None
-        if self._normalize_obs:
-            self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
-                                    device=device, dtype=dtype, 
-                                    freeze_stats=is_eval,
-                                    debug=self._debug)
-            self.running_norm.type(dtype) # ensuring correct dtype for whole module
+        # if self._normalize_obs:
+        #     self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
+        #                             device=device, dtype=dtype, 
+        #                             freeze_stats=is_eval,
+        #                             debug=self._debug)
+        #     self.running_norm.type(dtype) # ensuring correct dtype for whole module
 
     def get_impl_path(self):
         import os 

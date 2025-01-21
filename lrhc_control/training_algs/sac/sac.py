@@ -42,7 +42,7 @@ class SAC(SActorCriticAlgoBase):
                 
         else:
             actions = self._sample_random_actions()
-                
+        
         # perform a step of the (vectorized) env and retrieve trajectory
         env_step_ok = self._env.step(actions)
         
@@ -65,7 +65,7 @@ class SAC(SActorCriticAlgoBase):
         # otherwise obs is be a view and will be overridden in the call to step
         # with next_obs!!!
 
-        if not self._override_agent_action:
+        if not self._override_agent_actions:
             actions, _, mean = self._agent.get_action(x=obs)
             actions = actions.detach()
             

@@ -1,4 +1,5 @@
 from lrhc_control.agents.sactor_critic.sac import SACAgent
+from lrhc_control.agents.dummies.dummy import DummyAgent
 
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
@@ -188,9 +189,19 @@ class SActorCriticAlgoBase(ABC):
         except:
             pass
         
-        self._override_agent_action=False
-        if self._eval:
-            self._override_agent_action=custom_args["override_agent_actions"]
+        self._override_agent_actions=False
+        if "override_agent_actions" in custom_args["override_agent_actions"]:
+            self._override_agent_actions=custom_args["override_agent_actions"]
+
+        if self._override_agent_actions: # force evaluation mode
+            Journal.log(self.__class__.__name__,
+                "setup",
+                "will force evaluation mode since override_agent_actions was set to true",
+                LogType.INFO,
+                throw_when_excep = True)
+            self._eval=True
+            self._load_qf=False
+            self._det_eval=False
 
         self._run_name = run_name
         from datetime import datetime
@@ -234,27 +245,36 @@ class SActorCriticAlgoBase(ABC):
             add_weight_norm=True
         if "compression_ratio" in self._hyperparameters:
             compression_ratio=self._hyperparameters["compression_ratio"]
-        self._agent = SACAgent(obs_dim=self._env.obs_dim(),
-                    obs_ub=self._env.get_obs_ub().flatten().tolist(),
-                    obs_lb=self._env.get_obs_lb().flatten().tolist(),
+        
+        if not self._override_agent_actions:
+            self._agent = SACAgent(obs_dim=self._env.obs_dim(),
+                        obs_ub=self._env.get_obs_ub().flatten().tolist(),
+                        obs_lb=self._env.get_obs_lb().flatten().tolist(),
+                        actions_dim=self._env.actions_dim(),
+                        actions_ub=self._env.get_actions_ub().flatten().tolist(),
+                        actions_lb=self._env.get_actions_lb().flatten().tolist(),
+                        rescale_obs=rescale_obs,
+                        norm_obs=norm_obs,
+                        compression_ratio=compression_ratio,
+                        device=self._torch_device,
+                        dtype=self._dtype,
+                        is_eval=self._eval,
+                        load_qf=self._load_qf,
+                        debug=self._debug,
+                        layer_width_actor=layer_width_actor,
+                        layer_width_critic=layer_width_critic,
+                        n_hidden_layers_actor=n_hidden_layers_actor,
+                        n_hidden_layers_critic=n_hidden_layers_critic,
+                        torch_compile=use_torch_compile,
+                        add_weight_norm=add_weight_norm)
+        else: # we use a fake agent
+            self._agent = DummyAgent(obs_dim=self._env.obs_dim(),
                     actions_dim=self._env.actions_dim(),
                     actions_ub=self._env.get_actions_ub().flatten().tolist(),
                     actions_lb=self._env.get_actions_lb().flatten().tolist(),
-                    rescale_obs=rescale_obs,
-                    norm_obs=norm_obs,
-                    compression_ratio=compression_ratio,
                     device=self._torch_device,
                     dtype=self._dtype,
-                    is_eval=self._eval,
-                    load_qf=self._load_qf,
-                    debug=self._debug,
-                    layer_width_actor=layer_width_actor,
-                    layer_width_critic=layer_width_critic,
-                    n_hidden_layers_actor=n_hidden_layers_actor,
-                    n_hidden_layers_critic=n_hidden_layers_critic,
-                    torch_compile=use_torch_compile,
-                    add_weight_norm=add_weight_norm)
-        
+                    debug=self._debug)
         # loging actual widths and layers in case they were override inside agent init
         self._hyperparameters["actor_lwidth"]=self._agent.layer_width_actor()
         self._hyperparameters["actor_n_hlayers"]=self._agent.n_hidden_layers_actor()
@@ -269,7 +289,7 @@ class SActorCriticAlgoBase(ABC):
                         dtype=torch.float32, fill_value=0.0, device="cpu")
 
         # load model if necessary 
-        if self._eval: # load pretrained model
+        if self._eval and (not self._override_agent_actions): # load pretrained model
             if model_path is None:
                 msg = f"No model path provided in eval mode! Was this intentional? \
                     No jnt remapping will be available and a randomly init agent will be used."
@@ -367,8 +387,8 @@ class SActorCriticAlgoBase(ABC):
         self._random_normal = torch.full_like(self._random_uniform,fill_value=0.0)
         # for efficiency)
         
-        self._actions_override=None
-        if self._override_agent_action:
+        self._actions_override=None            
+        if self._override_agent_actions:
             from lrhc_control.utils.shared_data.training_env import Actions
             self._actions_override = Actions(namespace=ns+"_override",
             n_envs=self._num_envs,
@@ -691,8 +711,8 @@ class SActorCriticAlgoBase(ABC):
         # initalize some debug data
         self._collection_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
-        
         self._collection_t = -1.0
+
         self._env_step_fps = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         self._env_step_rt_factor = torch.full((self._db_data_size, 1), 

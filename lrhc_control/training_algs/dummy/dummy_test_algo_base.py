@@ -99,30 +99,31 @@ class DummyTestAlgoBase(ABC):
     def setup(self,
             run_name: str,
             ns: str,
-            n_eval_timesteps: int,
             custom_args: Dict = {},
             verbose: bool = False,
             drop_dir_name: str = None,
             eval: bool = True,
             load_qf: bool = False,
             model_path: str = None,
+            n_eval_timesteps: int = None,
             comment: str = "",
             dump_checkpoints: bool = False,
             norm_obs: bool = False,
             rescale_obs: bool = True):
-
-        self._init_params(tot_tsteps=n_eval_timesteps)
         
+        if n_eval_timesteps is None:
+            n_eval_timesteps=1e6
+        self._init_params(tot_tsteps=n_eval_timesteps)
         self._init_dbdata()
 
         self._verbose = verbose
 
         self._ns=ns # only used for shared mem stuff
-    
-        self._override_agent_action=custom_args["override_agent_actions"]
 
+        # agent actions override
+        self._override_agent_actions=custom_args["override_agent_actions"]
         self._actions_override=None
-        if self._override_agent_action:
+        if self._override_agent_actions:
             from lrhc_control.utils.shared_data.training_env import Actions
             actions = self._env.get_actions()
             self._actions_override = Actions(namespace=ns+"_override",
@@ -288,10 +289,6 @@ class DummyTestAlgoBase(ABC):
             db_info_names = list(self._env.custom_db_info.keys())
             for db_info in db_info_names:
                 hf.create_dataset(db_info, data=self._env.custom_db_info[db_info])
-            
-            # other data
-            hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())
-            hf.create_dataset('running_std_obs', data=self._running_std_obs.numpy())
         
         info = f"done."
         Journal.log(self.__class__.__name__,
@@ -573,6 +570,7 @@ class DummyTestAlgoBase(ABC):
         self._custom_env_data = {}
         db_data_names = list(self._env.custom_db_data.keys())
         for dbdatan in db_data_names: # loop thorugh custom data
+
             self._custom_env_data[dbdatan] = {}
 
             max = self._env.custom_db_data[dbdatan].get_max()
@@ -606,12 +604,6 @@ class DummyTestAlgoBase(ABC):
                 min_over_envs.shape[0], 
                 min_over_envs.shape[1]), 
                 dtype=torch.float32, fill_value=0.0, device="cpu")
-            
-        # other data
-        self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
-        self._running_std_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
-                    dtype=torch.float32, fill_value=0.0, device="cpu")
         
     def _init_params(self,
             tot_tsteps: int,
