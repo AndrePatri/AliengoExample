@@ -15,14 +15,14 @@ from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 import math
 
 from lrhc_control.utils.math_utils import check_capsize
-from lrhc_control.envs.linvel_env_baseline import LinVelTrackBaseline
+from lrhc_control.envs.variable_flights_baseline import VariableFlightsBaseline
 
 from typing import Dict
-class FakePosEnvBaseline(LinVelTrackBaseline):
+
+class FakePosEnvVariableFlights(VariableFlightsBaseline):
 
     def __init__(self,
             namespace: str,
-            actions_dim: int = 10,
             verbose: bool = False,
             vlevel: VLevel = VLevel.V1,
             use_gpu: bool = True,
@@ -36,9 +36,9 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
         self._min_distance=self._max_distance-0.01
         self._max_vref=1.0 # [m/s]
         self._max_dt=self._max_distance/ self._max_vref
-        LinVelTrackBaseline.__init__(self, 
+
+        VariableFlightsBaseline.__init__(self, 
             namespace=namespace,
-            actions_dim=actions_dim, # twist + contact flags
             verbose=verbose,
             vlevel=vlevel,
             use_gpu=use_gpu,
@@ -47,19 +47,19 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms,
             env_opts=env_opts)
-        
-        self.custom_db_info["max_distance"] = self._max_distance
-        self.custom_db_info["min_distance"] = self._min_distance
-        self.custom_db_info["max_vref"] = self._max_vref
-        self.custom_db_info["max_dt"] = self._max_dt
+
+        self._env_opts["max_distance"] = self._max_distance
+        self._env_opts["min_distance"] = self._min_distance
+        self._env_opts["max_vref"] = self._max_vref
+        self._env_opts["max_dt"] = self._max_dt
 
     def get_file_paths(self):
-        paths=LinVelTrackBaseline.get_file_paths(self)
+        paths=VariableFlightsBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
         return paths
     
     def _custom_post_init(self):
-        LinVelTrackBaseline._custom_post_init(self)
+        VariableFlightsBaseline._custom_post_init(self)
         
         # position targets to be reached (wrt robot's pos at ep start)
         self._p_trgt_w=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2].detach().clone()

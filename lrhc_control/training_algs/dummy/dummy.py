@@ -31,7 +31,7 @@ class Dummy(DummyTestAlgoBase):
         obs = self._env.get_obs(clone=True) # we beed cloned obs (they are modified upon env stepping by the
         # env itself
 
-        if not self._override_agent_action:
+        if not self._override_agent_actions:
             actions = self._agent.get_action(x=obs)
             actions = actions.detach()
         else:

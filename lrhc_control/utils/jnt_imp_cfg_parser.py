@@ -99,58 +99,47 @@ class JntImpConfigParser:
 if __name__ == "__main__":
     import tempfile
     import os
+
     # Define the temporary YAML configuration content
     yaml_content = """
 motor_pd:
-  j_arm*_1: [500, 10]
-  j_arm*_2: [500, 10]
-  j_arm*_3: [500, 10]
-  j_arm*_4: [500, 10]
-  j_arm*_5: [100, 5]
-  j_arm*_6: [100, 5]
-  j_arm*_7: [100, 5]
-  hip_yaw_*: [3000, 30]
-  hip_pitch_*: [3000, 30]
-  knee_pitch_*: [3000, 30]
-  ankle_pitch_*: [1000, 10]
-  ankle_yaw_*: [300, 10]
-  neck_pitch: [10, 1]
-  neck_yaw: [10, 1]
-  torso_yaw: [1000, 30]
-  j_wheel_*: [0, 30]
+  "*arm*": [500, 10]
+  "hip_yaw_*": [3000, 30]
+  "hip_pitch_*": [3000, 30]
+  "knee_pitch_*": [3000, 30]
+  "ankle_pitch_*": [1000, 10]
+  "ankle_yaw_*": [300, 10]
+  "neck_pitch": [10, 1]
+  "neck_yaw": [10, 1]
+  "torso_yaw": [1000, 30]
+  "j_wheel_*": [0, 30]
 
 startup_motor_pd:
-  j_arm*_1: [200, 5]
-  j_arm*_2: [200, 5]
-  j_arm*_3: [200, 5]
-  j_arm*_4: [200, 5]
-  j_arm*_5: [200, 5]
-  j_arm*_6: [50, 5]
-  j_arm*_7: [50, 5]
-  hip_yaw_*: [1000, 10]
-  hip_pitch_*: [1000, 10]
-  knee_pitch_*: [1000, 10]
-  ankle_pitch_*: [500, 10]
-  ankle_yaw_*: [150, 5]
-  neck_pitch: [10, 1]
-  neck_yaw: [10, 1]
-  torso_yaw: [500, 10]
-  j_wheel_*: [0, 30]
+  "*arm*": [200, 5]
+  "hip_yaw_*": [1000, 10]
+  "hip_pitch_*": [1000, 10]
+  "knee_pitch_*": [1000, 10]
+  "ankle_pitch_*": [500, 10]
+  "ankle_yaw_*": [150, 5]
+  "neck_pitch": [10, 1]
+  "neck_yaw": [10, 1]
+  "torso_yaw": [500, 10]
+  "j_wheel_*": [0, 30]
     """
-    
+
     # Create a temporary file to store the YAML content
     with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml") as temp_file:
         temp_file.write(yaml_content.encode('utf-8'))
         temp_file_path = temp_file.name
-    
+
     # Define the joint names for testing
     joint_names = [
-        'j_arm_1', 'j_arm_123_5','j_arm_7', 'hip_yaw_1', 'ankle_pitch_4', 'c', 
-        'unknown_joint', 'j_wheel_1'
+        'j_arm_1', 'j_arm_123_5', 'j_arm_7', 'hip_yaw_1', 'ankle_pitch_4', 'neck_yaw',
+        'unknown_joint', 'j_wheel_1', 'forearm_yaw'
     ]
-    
+
     # Create an instance of JntImpConfigParser with the temporary YAML file
-    backend="torch"
+    backend = "torch"
     parser = JntImpConfigParser(
         config_file=temp_file_path,
         joint_names=joint_names,
@@ -169,16 +158,16 @@ startup_motor_pd:
     )
 
     # Print the resulting gain matrix with specified formatting
-    if parser.backend=="numpy":
+    if parser.backend == "numpy":
         import numpy as np
         np.set_printoptions(precision=3, suppress=True)
-    elif parser.backend=="torch":
+    elif parser.backend == "torch":
         import torch
-        torch.set_printoptions(precision=3,sci_mode=False)
+        torch.set_printoptions(precision=3, sci_mode=False)
     print("Gain Matrix:")
     print(joint_names)
     print(parser.get_pd_gains())
-    print("Startup gain Matrix:")
+    print("Startup Gain Matrix:")
     print(joint_names)
     print(parser_startup.get_pd_gains())
 

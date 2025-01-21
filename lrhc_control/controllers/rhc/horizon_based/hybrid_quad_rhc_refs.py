@@ -128,7 +128,8 @@ class HybridQuadRhcRefs(RhcRefs):
             n_cols=self.flight_settings.n_cols,
             read=False)
 
-    def step(self, q_full: np.ndarray = None,
+    def step(self, qstate: np.ndarray = None,
+        vstate: np.ndarray = None,
         force_norm: np.ndarray = None):
 
         if self.is_running():
@@ -144,10 +145,10 @@ class HybridQuadRhcRefs(RhcRefs):
             self.flight_settings.synch_all(read=True, retry=True,
                         row_index=self.robot_index,
                         row_index_view=self.robot_index_view)
-            self._set_contact_phases(q_full=q_full)
+            self._set_contact_phases(q_full=qstate)
 
             # updated internal references with latest available ones
-            q_base=q_full[3:7,0:1] # quaternion
+            q_base=qstate[3:7,0:1] # quaternion
             self._apply_refs_to_tasks(q_base=q_base)
             
             # if self._use_force_feedback:
@@ -212,7 +213,7 @@ class HybridQuadRhcRefs(RhcRefs):
             # self._flight_info=None
             if flight_info is not None:
                 pos=flight_info[0]
-                length=len(flight_info[1])
+                length=flight_info[1]
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
                     col_index=i, # contact i
@@ -262,7 +263,7 @@ class HybridQuadRhcRefs(RhcRefs):
             # self._flight_info=None
             if self._flight_info is not None:
                 pos=self._flight_info[0]
-                length=len(self._flight_info[1])
+                length=self._flight_info[1]
                 self.flight_info.write_retry(pos, 
                     row_index=self.robot_index,
                     col_index=i,

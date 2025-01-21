@@ -1,4 +1,5 @@
 from lrhc_control.agents.sactor_critic.sac import SACAgent
+from lrhc_control.agents.dummies.dummy import DummyAgent
 
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
@@ -17,6 +18,8 @@ import shutil
 import time
 
 import wandb
+import h5py
+import numpy as np
 
 from EigenIPC.PyEigenIPC import LogType
 from EigenIPC.PyEigenIPC import Journal
@@ -41,6 +44,8 @@ class SActorCriticAlgoBase(ABC):
         self._eval = False
         self._det_eval = True
 
+        self._full_env_db=False
+
         self._agent = None 
         
         self._debug = debug
@@ -62,7 +67,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._episodic_reward_metrics = self._env.ep_rewards_metrics()
         
-        tot_tsteps=200e6
+        tot_tsteps=100e6
         self._init_params(tot_tsteps=tot_tsteps)
         
         self._init_dbdata()
@@ -172,6 +177,9 @@ class SActorCriticAlgoBase(ABC):
 
         self._dump_checkpoints = dump_checkpoints
         
+        if "full_env_db" in custom_args:
+            self._full_env_db=custom_args["full_env_db"]
+        
         self._eval = eval
         self._load_qf=False
         if self._eval:
@@ -181,9 +189,19 @@ class SActorCriticAlgoBase(ABC):
         except:
             pass
         
-        self._override_agent_action=False
-        if self._eval:
-            self._override_agent_action=custom_args["override_agent_actions"]
+        self._override_agent_actions=False
+        if "override_agent_actions" in custom_args["override_agent_actions"]:
+            self._override_agent_actions=custom_args["override_agent_actions"]
+
+        if self._override_agent_actions: # force evaluation mode
+            Journal.log(self.__class__.__name__,
+                "setup",
+                "will force evaluation mode since override_agent_actions was set to true",
+                LogType.INFO,
+                throw_when_excep = True)
+            self._eval=True
+            self._load_qf=False
+            self._det_eval=False
 
         self._run_name = run_name
         from datetime import datetime
@@ -218,31 +236,50 @@ class SActorCriticAlgoBase(ABC):
 
         use_torch_compile=False
         add_weight_norm=False
+        compression_ratio=-1.0
         if "use_torch_compile" in self._hyperparameters and \
             self._hyperparameters["use_torch_compile"]:
             use_torch_compile=True
         if "add_weight_norm" in self._hyperparameters and \
             self._hyperparameters["add_weight_norm"]:
             add_weight_norm=True
-        self._agent = SACAgent(obs_dim=self._env.obs_dim(),
-                    obs_ub=self._env.get_obs_ub().flatten().tolist(),
-                    obs_lb=self._env.get_obs_lb().flatten().tolist(),
+        if "compression_ratio" in self._hyperparameters:
+            compression_ratio=self._hyperparameters["compression_ratio"]
+        
+        if not self._override_agent_actions:
+            self._agent = SACAgent(obs_dim=self._env.obs_dim(),
+                        obs_ub=self._env.get_obs_ub().flatten().tolist(),
+                        obs_lb=self._env.get_obs_lb().flatten().tolist(),
+                        actions_dim=self._env.actions_dim(),
+                        actions_ub=self._env.get_actions_ub().flatten().tolist(),
+                        actions_lb=self._env.get_actions_lb().flatten().tolist(),
+                        rescale_obs=rescale_obs,
+                        norm_obs=norm_obs,
+                        compression_ratio=compression_ratio,
+                        device=self._torch_device,
+                        dtype=self._dtype,
+                        is_eval=self._eval,
+                        load_qf=self._load_qf,
+                        debug=self._debug,
+                        layer_width_actor=layer_width_actor,
+                        layer_width_critic=layer_width_critic,
+                        n_hidden_layers_actor=n_hidden_layers_actor,
+                        n_hidden_layers_critic=n_hidden_layers_critic,
+                        torch_compile=use_torch_compile,
+                        add_weight_norm=add_weight_norm)
+        else: # we use a fake agent
+            self._agent = DummyAgent(obs_dim=self._env.obs_dim(),
                     actions_dim=self._env.actions_dim(),
                     actions_ub=self._env.get_actions_ub().flatten().tolist(),
                     actions_lb=self._env.get_actions_lb().flatten().tolist(),
-                    rescale_obs=rescale_obs,
-                    norm_obs=norm_obs,
                     device=self._torch_device,
                     dtype=self._dtype,
-                    is_eval=self._eval,
-                    load_qf=self._load_qf,
-                    debug=self._debug,
-                    layer_width_actor=layer_width_actor,
-                    layer_width_critic=layer_width_critic,
-                    n_hidden_layers_actor=n_hidden_layers_actor,
-                    n_hidden_layers_critic=n_hidden_layers_critic,
-                    torch_compile=use_torch_compile,
-                    add_weight_norm=add_weight_norm)
+                    debug=self._debug)
+        # loging actual widths and layers in case they were override inside agent init
+        self._hyperparameters["actor_lwidth"]=self._agent.layer_width_actor()
+        self._hyperparameters["actor_n_hlayers"]=self._agent.n_hidden_layers_actor()
+        self._hyperparameters["critic_lwidth"]=self._agent.layer_width_critic()
+        self._hyperparameters["critic_n_hlayers"]=self._agent.n_hidden_layers_critic()
 
         if self._agent.running_norm is not None:
             # some db data for the agent
@@ -252,7 +289,7 @@ class SActorCriticAlgoBase(ABC):
                         dtype=torch.float32, fill_value=0.0, device="cpu")
 
         # load model if necessary 
-        if self._eval: # load pretrained model
+        if self._eval and (not self._override_agent_actions): # load pretrained model
             if model_path is None:
                 msg = f"No model path provided in eval mode! Was this intentional? \
                     No jnt remapping will be available and a randomly init agent will be used."
@@ -280,6 +317,9 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
         self._hyperparameters["sub_reward_names"]=self._env.sub_rew_names()
+        self._hyperparameters["sub_trunc_names"]=self._env._get_sub_trunc_names()
+        self._hyperparameters["sub_term_names"]=self._env._get_sub_term_names()
+
         self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
 
         # reset environment
@@ -290,6 +330,9 @@ class SActorCriticAlgoBase(ABC):
         # create dump directory + copy important files for debug
         self._init_drop_dir(drop_dir_name)
         self._hyperparameters["drop_dir"]=self._drop_dir
+
+        # add env options to hyperparameters
+        self._hyperparameters.update(self._env_opts) 
 
         # seeding + deterministic behavior for reproducibility
         self._set_all_deterministic()
@@ -344,8 +387,8 @@ class SActorCriticAlgoBase(ABC):
         self._random_normal = torch.full_like(self._random_uniform,fill_value=0.0)
         # for efficiency)
         
-        self._actions_override=None
-        if self._override_agent_action:
+        self._actions_override=None            
+        if self._override_agent_actions:
             from lrhc_control.utils.shared_data.training_env import Actions
             self._actions_override = Actions(namespace=ns+"_override",
             n_envs=self._num_envs,
@@ -367,6 +410,8 @@ class SActorCriticAlgoBase(ABC):
 
         self._replay_bf_full = False
         self._validation_bf_full = False
+        self._bpos=0
+        self._bpos_val=0
 
         self._is_done = False
         self._setup_done = True
@@ -385,6 +430,8 @@ class SActorCriticAlgoBase(ABC):
 
         self._dtype = self._env.dtype()
 
+        self._env_opts=self._env.env_opts()
+
         self._num_envs = self._env.n_envs()
         self._obs_dim = self._env.obs_dim()
         self._actions_dim = self._env.actions_dim()
@@ -402,13 +449,13 @@ class SActorCriticAlgoBase(ABC):
 
         # main algo settings
 
-        self._collection_freq=1
+        self._collection_freq=5
         self._update_freq=1
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 4096
+        self._batch_size = 8192
 
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
@@ -427,18 +474,18 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
-
+                
         self._lr_policy = 1e-3
         self._lr_q = 5e-4
 
-        self._discount_factor = 0.99
+        self._discount_factor = 0.995
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
         self._trgt_net_freq = 1
 
         self._autotune = True
-        self._trgt_avrg_entropy_per_action=-2.5 # the more negative, the more deterministic the policy
+        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
         self._target_entropy = self._trgt_avrg_entropy_per_action*self._env.actions_dim()
         self._log_alpha = None
         self._alpha = 0.2
@@ -450,18 +497,21 @@ class SActorCriticAlgoBase(ABC):
         if self._bnorm_vecfreq == 0:
             self._bnorm_vecfreq=self._collection_freq
 
-        self._n_expl_envs = 0.0 # n of random envs on which noisy actions will be applied
+        self._n_expl_env_perc=0.0 # [0, 1]
+        self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
-        self._noise_freq = 50
+        self._noise_freq = 25
         self._noise_duration = 5 # should be less than _noise_freq
 
+        self._env_actions_ub=self._env.get_actions_ub()
+        self._env_actions_lb=self._env.get_actions_lb()
         self._is_continuous_actions_bool=self._env.is_action_continuous()
         self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
-        self._is_discrete_actions_bool=~self._is_continuous_actions
+        self._is_discrete_actions_bool=self._env.is_action_discrete()
         self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
         
-        self._continuous_act_expl_noise_std=0.01
-        self._discrete_act_expl_noise_std=0.5
+        self._continuous_act_expl_noise_std=0.05 
+        self._discrete_act_expl_noise_std=1.0
 
         self._a_optimizer = None
         
@@ -514,12 +564,14 @@ class SActorCriticAlgoBase(ABC):
         self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
         self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
 
-        self._db_vecstep_frequency = 128 # log db data every n (vectorized) SUB timesteps
+        self._db_vecstep_frequency = 32 # log db data every n (vectorized) SUB timesteps
         self._db_vecstep_frequency=round(self._db_vecstep_frequency/self._env_n_action_reps) # correcting with actions reps 
         # correct db vecstep frequency to ensure it's a multiple of self._collection_freq
         self._db_vecstep_frequency=(self._db_vecstep_frequency//self._collection_freq)*self._collection_freq
-        if self._bnorm_vecfreq == 0:
+        if self._db_vecstep_frequency == 0:
             self._db_vecstep_frequency=self._collection_freq
+
+        self._env_db_checkpoints_vecfreq=250*self._db_vecstep_frequency # detailed db data from envs
 
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
@@ -528,7 +580,6 @@ class SActorCriticAlgoBase(ABC):
         self._validation_buffer_size_vec = self._validation_buffer_size_nominal//self._num_envs
         self._validation_buffer_size = self._validation_buffer_size_vec*self._num_envs
         self._validation_batch_size = int(self._batch_size*self._validation_ratio)
-        
         self._validation_db_vecstep_freq=self._db_vecstep_frequency
         if self._eval: # no need for validation transitions during evaluation
             self._validate=False
@@ -660,8 +711,8 @@ class SActorCriticAlgoBase(ABC):
         # initalize some debug data
         self._collection_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
-        
         self._collection_t = -1.0
+
         self._env_step_fps = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
@@ -693,7 +744,7 @@ class SActorCriticAlgoBase(ABC):
                     dtype=torch.int32, fill_value=0, device="cpu")
         self._elapsed_min = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0, device="cpu")        
-
+        
         self._ep_tsteps_env_distribution = torch.full((self._db_data_size, self._num_db_envs, 1), 
                     dtype=torch.int32, fill_value=-1, device="cpu")
 
@@ -927,7 +978,7 @@ class SActorCriticAlgoBase(ABC):
             path = path + "_checkpoint" + str(self._log_it_counter)
         info = f"Saving model to {path}"
         Journal.log(self.__class__.__name__,
-            "done",
+            "_save_model",
             info,
             LogType.INFO,
             throw_when_excep = True)
@@ -942,11 +993,95 @@ class SActorCriticAlgoBase(ABC):
         # torch.save(self._agent.parameters(), path) # only save agent parameters
         info = f"Done."
         Journal.log(self.__class__.__name__,
-            "done",
+            "_save_model",
             info,
             LogType.INFO,
             throw_when_excep = True)
+    
+    def _dump_env_checkpoints(self):
+
+        path = self._env_db_checkpoints_fname+str(self._log_it_counter)
+
+        if path is not None:
+            info = f"Saving env db checkpoint data to {path}"
+            Journal.log(self.__class__.__name__,
+                "_dump_env_checkpoints",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+
+            with h5py.File(path+".hdf5", 'w') as hf:
+
+                for key, value in self._hyperparameters.items():
+                    if value is None:
+                        value = "None"
+        
+                # full training envs
+                sub_rew_full=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._db_env_selector)
+                tot_rew_full=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._db_env_selector)
+
+                if self._n_expl_envs > 0:
+                    sub_rew_full_expl=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._expl_env_selector)
+                    tot_rew_full_expl=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._expl_env_selector)
+                if self._env.n_demo_envs() > 0:
+                    sub_rew_full_demo=self._episodic_reward_metrics.get_full_episodic_subrew(env_selector=self._demo_env_selector)
+                    tot_rew_full_demo=self._episodic_reward_metrics.get_full_episodic_totrew(env_selector=self._demo_env_selector)
+
+                ep_vec_freq=self._episodic_reward_metrics.ep_vec_freq() # assuming all db data was collected with the same ep_vec_freq
+
+                hf.attrs['sub_reward_names'] = self._reward_names
+                hf.attrs['log_iteration'] = self._log_it_counter
+                hf.attrs['n_timesteps_done'] = self._n_timesteps_done[self._log_it_counter]
+                hf.attrs['n_policy_updates'] = self._n_policy_updates[self._log_it_counter]
+                hf.attrs['elapsed_min'] = self._elapsed_min[self._log_it_counter]
+                hf.attrs['ep_vec_freq'] = ep_vec_freq
+
+                # first dump custom db data names
+                db_data_names = list(self._env.custom_db_data.keys())
+                for db_dname in db_data_names:
+                    episodic_data_names = self._env.custom_db_data[db_dname].data_names()
+                    var_name = db_dname
+                    hf.attrs[var_name+"_data_names"] = episodic_data_names
+                            
+                for ep_idx in range(ep_vec_freq): # create separate datasets for each episode
+                    ep_prefix=f'ep_{ep_idx}_'
+
+                    # rewards
+                    hf.create_dataset(ep_prefix+'sub_rew', 
+                        data=sub_rew_full[ep_idx, :, :, :])
+                    hf.create_dataset(ep_prefix+'tot_rew', 
+                        data=tot_rew_full[ep_idx, :, :, :])
+                    if self._n_expl_envs > 0:
+                        hf.create_dataset(ep_prefix+'sub_rew_expl', 
+                            data=sub_rew_full_expl[ep_idx, :, :, :])
+                        hf.create_dataset(ep_prefix+'tot_rew_expl', 
+                            data=tot_rew_full_expl[ep_idx, :, :, :])
+                    if self._env.n_demo_envs() > 0:
+                        hf.create_dataset(ep_prefix+'sub_rew_demo', 
+                            data=sub_rew_full_demo)
+                        hf.create_dataset(ep_prefix+'tot_rew_demo', 
+                            data=tot_rew_full_demo[ep_idx, :, :, :])
                     
+                    # dump all custom env data
+                    db_data_names = list(self._env.custom_db_data.keys())
+                    for db_dname in db_data_names:
+                        episodic_data=self._env.custom_db_data[db_dname]
+                        var_name = db_dname
+                        hf.create_dataset(ep_prefix+var_name, 
+                            data=episodic_data.get_full_episodic_data(env_selector=self._db_env_selector)[ep_idx, :, :, :])
+                        if self._n_expl_envs > 0:
+                            hf.create_dataset(ep_prefix+var_name+"_expl", 
+                                data=episodic_data.get_full_episodic_data(env_selector=self._expl_env_selector)[ep_idx, :, :, :])
+                        if self._env.n_demo_envs() > 0:
+                            hf.create_dataset(ep_prefix+var_name+"_demo", 
+                                data=episodic_data.get_full_episodic_data(env_selector=self._demo_env_selector)[ep_idx, :, :, :])
+                
+            Journal.log(self.__class__.__name__,
+                "_dump_env_checkpoints",
+                "done.",
+                LogType.INFO,
+                throw_when_excep = True)
+        
     def done(self):
         
         if not self._is_done:
@@ -956,6 +1091,9 @@ class SActorCriticAlgoBase(ABC):
             
             self._dump_dbinfo_to_file()
             
+            if self._full_env_db:
+                self._dump_env_checkpoints()
+
             if self._shared_algo_data is not None:
                 self._shared_algo_data.write(dyn_info_name=["is_done"],
                     val=[1.0])
@@ -966,8 +1104,6 @@ class SActorCriticAlgoBase(ABC):
             self._is_done = True
 
     def _dump_dbinfo_to_file(self):
-
-        import h5py
 
         info = f"Dumping debug info at {self._dbinfo_drop_fname}"
         Journal.log(self.__class__.__name__,
@@ -986,7 +1122,7 @@ class SActorCriticAlgoBase(ABC):
             
             # rewards
             hf.create_dataset('sub_reward_names', data=self._reward_names, 
-                dtype='S20') 
+                dtype='S40') 
             hf.create_dataset('sub_rew_max', data=self._sub_rew_max.numpy())
             hf.create_dataset('sub_rew_avrg', data=self._sub_rew_avrg.numpy())
             hf.create_dataset('sub_rew_min', data=self._sub_rew_min.numpy())
@@ -1186,7 +1322,14 @@ class SActorCriticAlgoBase(ABC):
         else:
             self._drop_dir = drop_dir_name + "/" + f"{self.__class__.__name__}/" + self._run_name + "/" + self._unique_id
         os.makedirs(self._drop_dir)
-
+        
+        self._env_db_checkpoints_dropdir=None
+        self._env_db_checkpoints_fname=None
+        if self._full_env_db>0:
+            self._env_db_checkpoints_dropdir=self._drop_dir+"/env_db_checkpoints"
+            self._env_db_checkpoints_fname = self._env_db_checkpoints_dropdir + \
+                "/" + self._unique_id + "_env_db_checkpoint"
+            os.makedirs(self._env_db_checkpoints_dropdir)
         # model
         if not self._eval or (self._model_path is None):
             self._model_path = self._drop_dir + "/" + self._unique_id + "_model"
@@ -1273,6 +1416,7 @@ class SActorCriticAlgoBase(ABC):
             self._sub_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._db_env_selector)
             self._sub_rew_min_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min_over_envs(env_selector=self._db_env_selector)
             
+
             # fill env custom db metrics (only for debug environments)
             db_data_names = list(self._env.custom_db_data.keys())
             for dbdatan in db_data_names:
@@ -1328,6 +1472,10 @@ class SActorCriticAlgoBase(ABC):
         if self._dump_checkpoints and \
             (self._vec_transition_counter % self._m_checkpoint_freq == 0):
             self._save_model(is_checkpoint=True)
+
+        if self._full_env_db and \
+            (self._vec_transition_counter % self._env_db_checkpoints_vecfreq == 0):
+            self._dump_env_checkpoints()
 
         if self._vec_transition_counter == self._total_timesteps_vec:
             self.done()           
@@ -1650,15 +1798,15 @@ class SActorCriticAlgoBase(ABC):
     def _perturb_some_actions(self,
             actions: torch.Tensor):
         
-        if self._is_continuous_actions.any(): # if there are any continuous actions
+        if self._is_continuous_actions_bool.any(): # if there are any continuous actions
             self._perturb_actions(actions,
                 action_idxs=self._is_continuous_actions, 
                 env_idxs=self._expl_env_selector.to(actions.device),
                 normal=True, # use normal for continuous
                 scaling=self._continuous_act_expl_noise_std)
-        if (~self._is_continuous_actions).any(): # actions to be treated as discrete
+        if self._is_discrete_actions_bool.any(): # actions to be treated as discrete
             self._perturb_actions(actions,
-                action_idxs=~self._is_continuous_actions, 
+                action_idxs=self._is_discrete_actions, 
                 env_idxs=self._expl_env_selector.to(actions.device),
                 normal=False, # use uniform distr for discrete
                 scaling=self._discrete_act_expl_noise_std)
@@ -1683,10 +1831,16 @@ class SActorCriticAlgoBase(ABC):
         
         env_indices = env_idxs.reshape(-1,1)  # Get indices of True environments
         action_indices = action_idxs.reshape(1,-1) # Get indices of True actions
+        action_indices_flat=action_indices.flatten()
+
+        perturbation=noise[env_indices, action_indices]*self._action_scale[:, action_indices_flat]*scaling
+        perturbed_actions=actions[env_indices, action_indices]+perturbation
+        perturbed_actions.clamp_(self._env_actions_lb[:, action_indices_flat], 
+                self._env_actions_ub[:, action_indices_flat]) # enforce actions bounds
 
         actions[env_indices, action_indices]=\
-            actions[env_indices, action_indices]+noise[env_indices, action_indices]*self._action_scale[:,action_indices]*scaling
-    
+            perturbed_actions
+
     def _update_batch_norm(self, bsize: int = None):
 
         if bsize is None:

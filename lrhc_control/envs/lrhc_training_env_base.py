@@ -22,7 +22,7 @@ from lrhc_control.utils.shared_data.training_env import SubRewards
 from lrhc_control.utils.shared_data.training_env import Actions
 from lrhc_control.utils.shared_data.training_env import Terminations, SubTerminations
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
-from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter
+from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter,RandomTruncCounter
 
 from lrhc_control.utils.episodic_rewards import EpisodicRewards
 from lrhc_control.utils.episodic_data import EpisodicData
@@ -41,7 +41,7 @@ from perf_sleep.pyperfsleep import PerfSleep
 from abc import abstractmethod, ABC
 
 import os
-from typing import List
+from typing import List, Dict
 
 class LRhcTrainingEnvBase(ABC):
 
@@ -70,12 +70,16 @@ class LRhcTrainingEnvBase(ABC):
             act_membf_size: int = 3,
             use_random_safety_reset: bool = True,
             random_reset_freq: int = None, # [n episodes]
+            use_random_trunc: bool = False, # to help remove temporal correlation between envs
+            random_trunc_freq: int = None,
+            random_trunc_freq_delta: int = 0,
             vec_ep_freq_metrics_db: int = 1,
             use_action_smoothing: bool = False,
             smoothing_horizon_c: float = 0.01,
             smoothing_horizon_d: float = 0.1,
-            n_demo_envs_perc: float = 0.0):
-        
+            n_demo_envs_perc: float = 0.0,
+            env_opts: Dict = {}):
+    
         self._n_demo_envs_perc=n_demo_envs_perc
 
         self._vec_ep_freq_metrics_db = vec_ep_freq_metrics_db # update single env metrics every
@@ -84,6 +88,7 @@ class LRhcTrainingEnvBase(ABC):
         self._this_path = os.path.abspath(__file__)
 
         self._use_random_safety_reset = use_random_safety_reset
+        self._use_random_trunc= use_random_trunc
 
         self.custom_db_data = None
         
@@ -95,10 +100,6 @@ class LRhcTrainingEnvBase(ABC):
         if self._action_repeat <=0: 
             self._action_repeat = 1
         self._substep_dt=1.0 # dt [s] between each substep
-        try:
-            self._substep_dt=self._env_opts["substep_dt"]
-        except:
-            pass
         sim_data = {}
         sim_info_shared = SharedEnvInfo(namespace=namespace,
                     is_server=False,
@@ -136,6 +137,12 @@ class LRhcTrainingEnvBase(ABC):
         if self._random_rst_freq is None or self._random_rst_freq <=0:
             self._use_random_safety_reset=False
             self._random_rst_freq=-1
+
+        self._random_trunc_freq=random_trunc_freq
+        self._random_trunc_freq_delta=random_trunc_freq_delta
+        if self._random_trunc_freq is None or self._random_trunc_freq <=0:
+            self._use_random_trunc=False
+            self._random_trunc_freq=-1
 
         self._namespace = namespace
         self._with_gpu_mirror = True
@@ -178,6 +185,7 @@ class LRhcTrainingEnvBase(ABC):
         self._ep_timeout_counter = None
         self._task_rand_counter = None
         self._rand_safety_reset_counter = None
+        self._rand_trunc_counter = None
 
         self._obs = None
         self._obs_ub = None
@@ -198,6 +206,32 @@ class LRhcTrainingEnvBase(ABC):
         self._episodic_rewards_metrics = None
         
         self._timeout = timeout_ms
+
+        # base env options (can be added in _custom_post_init or after initialization)
+        self._env_opts={}
+        self._env_opts.update(env_opts)
+        self._env_opts["n_demo_envs_perc"]=self._n_demo_envs_perc
+        self._env_opts["vec_ep_freq_metrics_db"]=self._vec_ep_freq_metrics_db
+        self._env_opts["use_random_safety_reset"]=self._use_random_safety_reset
+        self._env_opts["use_random_trunc"]=self._use_random_trunc
+        self._env_opts["action_repeat"]=self._action_repeat
+        self._env_opts["substep_dt"]=self._substep_dt
+        self._env_opts["use_act_mem_bf"]=self._use_act_mem_bf
+        self._env_opts["act_membf_size"]=self._act_membf_size
+        self._env_opts["use_action_smoothing"]=self._use_action_smoothing
+        self._env_opts["smoothing_horizon_c"]=self._smoothing_horizon_c
+        self._env_opts["smoothing_horizon_d"]=self._smoothing_horizon_d
+        self._env_opts["override_agent_refs"]=self._override_agent_refs
+        self._env_opts["episode_timeout_lb"]=self._episode_timeout_lb
+        self._env_opts["episode_timeout_ub"]=self._episode_timeout_ub
+        self._env_opts["n_steps_task_rand_lb"]=self._n_steps_task_rand_lb
+        self._env_opts["n_steps_task_rand_ub"]=self._n_steps_task_rand_ub
+        self._env_opts["random_rst_freq"]=self._random_rst_freq
+        self._env_opts["random_trunc_freq"]=self._random_trunc_freq
+
+        self._full_db=False
+        if "full_env_db" in self._env_opts:
+            self._full_db=self._env_opts["full_env_db"]
 
         self._attach_to_shared_mem()
 
@@ -250,6 +284,9 @@ class LRhcTrainingEnvBase(ABC):
                 "__init__",
                 f"Demo env. indexes are [{demo_idxs_str}]",
                 LogType.INFO)
+    
+    def env_opts(self):
+        return self._env_opts
     
     def demo_env_idxs(self, get_bool: bool=False):
         if get_bool:
@@ -514,14 +551,26 @@ class LRhcTrainingEnvBase(ABC):
     
     def _post_step(self):
         
-        self._ep_timeout_counter.increment() # first increment counters
-        self._task_rand_counter.increment()
-        
+        # first increment counters
+        self._ep_timeout_counter.increment() # episode timeout
+        self._task_rand_counter.increment() # task randomization
+        if self._rand_trunc_counter is not None: # random truncations (for removing temp. correlations)
+            self._rand_trunc_counter.increment()
+
         # check truncation and termination conditions 
-        self._check_truncations() 
+        self._check_truncations() # defined in child env
         self._check_terminations()
         terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
         truncated = self._truncations.get_torch_mirror(gpu=self._use_gpu)
+        ignore_ep_end=None
+        if self._rand_trunc_counter is not None:
+            ignore_ep_end=self._rand_trunc_counter.time_limits_reached()
+            if self._use_gpu:
+                ignore_ep_end=ignore_ep_end.cuda()
+            
+            truncated = torch.logical_or(truncated, 
+                ignore_ep_end) # add truncation (sub truncations defined in child env
+            # remain untouched)
         
         episode_finished = torch.logical_or(terminated,
                             truncated)
@@ -547,9 +596,14 @@ class LRhcTrainingEnvBase(ABC):
         # actual data from the step and not after reset)
         if self._is_debug:
             self._debug() # copies db data on shared memory
-            self._update_custom_db_data(episode_finished=episode_finished_cpu)
+            ignore_ep_end_cpu=ignore_ep_end if not self._use_gpu else ignore_ep_end.cpu()
+            self._update_custom_db_data(episode_finished=episode_finished_cpu, 
+                    ignore_ep_end=ignore_ep_end_cpu # ignore data if random trunc
+                    )           
             self._episodic_rewards_metrics.update(rewards = self._sub_rewards.get_torch_mirror(gpu=False),
-                            ep_finished=episode_finished_cpu)
+                    ep_finished=episode_finished_cpu,
+                    ignore_ep_end=ignore_ep_end_cpu # ignore data if random trunc
+                    )
 
         # remotely reset envs
         to_be_reset=self._to_be_reset()
@@ -576,6 +630,13 @@ class LRhcTrainingEnvBase(ABC):
         # synchronize and reset counters for finished episodes
         self._ep_timeout_counter.reset(to_be_reset=episode_finished_cpu)
         self._task_rand_counter.reset(to_be_reset=episode_finished_cpu)
+        if self._rand_trunc_counter is not None:
+            # only reset when safety truncation was is triggered   
+            self._rand_trunc_counter.reset(to_be_reset=self._rand_trunc_counter.time_limits_reached(),
+                randomize_limits=True, # we need to randomize otherwise the other counters will synchronize
+                # with the episode counters
+                randomize_offsets=False # always restart at 0
+                )
         # safety reset counter is only when it reches its reset interval (just to keep
         # the counter bounded)
         if self._rand_safety_reset_counter is not None and self._use_random_safety_reset:
@@ -613,19 +674,28 @@ class LRhcTrainingEnvBase(ABC):
             actual_actions[:, ~self._is_continuous_actions]=self._action_smoother_discrete.get()
 
     def _update_custom_db_data(self,
-                    episode_finished):
+                    episode_finished,
+                    ignore_ep_end):
 
         # update defaults
         self.custom_db_data["RhcRefsFlag"].update(new_data=self._rhc_refs.contact_flags.get_torch_mirror(gpu=False), 
-                                    ep_finished=episode_finished) # before potentially resetting the flags, get data
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end) # before potentially resetting the flags, get data
         self.custom_db_data["Actions"].update(new_data=self._actions.get_torch_mirror(gpu=False), 
-                                    ep_finished=episode_finished)
-        self.custom_db_data["SubTerminations"].update(new_data=self._sub_terminations.get_torch_mirror(gpu=False), 
-                                    ep_finished=episode_finished)
-        self.custom_db_data["SubTruncations"].update(new_data=self._sub_truncations.get_torch_mirror(gpu=False), 
-                                    ep_finished=episode_finished)
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["Obs"].update(new_data=self._obs.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
         
-        self._get_custom_db_data(episode_finished=episode_finished)
+        self.custom_db_data["SubTerminations"].update(new_data=self._sub_terminations.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["SubTruncations"].update(new_data=self._sub_truncations.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+        
+        self._get_custom_db_data(episode_finished=episode_finished, ignore_ep_end=ignore_ep_end)
 
     def reset_custom_db_data(self, keep_track: bool = False):
         # to be called periodically to reset custom db data stat. collection 
@@ -1050,16 +1120,22 @@ class LRhcTrainingEnvBase(ABC):
         # used to hold substep rewards (not super mem. efficient)
         self._is_substep_rew = torch.zeros((self._substep_rewards.shape[1],),dtype=torch.bool,device=device)
         self._is_substep_rew.fill_(True) # default to all substep rewards
+   
         self._episodic_rewards_metrics = EpisodicRewards(reward_tensor=self._sub_rewards.get_torch_mirror(),
                                         reward_names=self._get_rewards_names(),
                                         max_episode_length=self._episode_timeout_ub,
-                                        ep_vec_freq=self._vec_ep_freq_metrics_db)
+                                        ep_vec_freq=self._vec_ep_freq_metrics_db,
+                                        store_transitions=self._full_db,
+                                        max_ep_duration=self._max_ep_length())
         self._episodic_rewards_metrics.set_constant_data_scaling(scaling=self._get_reward_scaling())
         
     def _get_reward_scaling(self):
         # to be overridden by child (default to no scaling)
         return 1
-        
+    
+    def _max_ep_length(self):
+        return self._episode_timeout_ub
+    
     def _init_infos(self):
 
         self.custom_db_data = {}
@@ -1067,14 +1143,27 @@ class LRhcTrainingEnvBase(ABC):
         rhc_latest_contact_ref = self._rhc_refs.contact_flags.get_torch_mirror()
         contact_names = self._rhc_refs.rob_refs.contact_names()
         stepping_data = EpisodicData("RhcRefsFlag", rhc_latest_contact_ref, contact_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=stepping_data)
         # log also action data
         actions = self._actions.get_torch_mirror()
         action_names = self._get_action_names()
         action_data = EpisodicData("Actions", actions, action_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         self._add_custom_db_info(db_data=action_data)
+        
+        # and observations
+        observations = self._obs.get_torch_mirror()
+        observations_names = self._get_obs_names()
+        obs_data = EpisodicData("Obs", observations, observations_names,
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+        self._add_custom_db_info(db_data=obs_data)
 
         # log sub-term and sub-truncations data
         t_scaling=1 # 1 so that we log an interpretable data in terms of why the episode finished
@@ -1085,13 +1174,17 @@ class LRhcTrainingEnvBase(ABC):
         sub_termination_names = self.sub_term_names()
     
         sub_term_data = EpisodicData("SubTerminations", sub_term, sub_termination_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         sub_term_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_term_data)
         sub_trunc = self._sub_truncations.get_torch_mirror()
         sub_truncations_names = self.sub_trunc_names()
         sub_trunc_data = EpisodicData("SubTruncations", sub_trunc, sub_truncations_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db)
+            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
         sub_trunc_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_info(db_data=sub_trunc_data)
 
@@ -1331,6 +1424,20 @@ class LRhcTrainingEnvBase(ABC):
                             with_gpu_mirror=False) # handles step counter through episodes and through envs
         self._task_rand_counter.run()
         self._task_rand_counter.sync_counters(other_counter=self._ep_timeout_counter)
+        if self._use_random_trunc:
+            self._rand_trunc_counter=RandomTruncCounter(namespace=self._namespace,
+                            n_envs=self._n_envs,
+                            n_steps_lb=self._random_trunc_freq-self._random_trunc_freq_delta,
+                            n_steps_ub=self._random_trunc_freq,
+                            randomize_offsets_at_startup=True,
+                            is_server=True,
+                            verbose=self._verbose,
+                            vlevel=self._vlevel,
+                            safe=True,
+                            force_reconnection=True,
+                            with_gpu_mirror=False)
+            self._rand_trunc_counter.run()
+            # self._rand_trunc_counter.sync_counters(other_counter=self._ep_timeout_counter)
         if self._use_random_safety_reset:
             self._rand_safety_reset_counter=SafetyRandResetsCounter(namespace=self._namespace,
                             n_envs=self._n_envs,
@@ -1345,7 +1452,8 @@ class LRhcTrainingEnvBase(ABC):
                             with_gpu_mirror=False)
             self._rand_safety_reset_counter.run()
             # self._rand_safety_reset_counter.sync_counters(other_counter=self._ep_timeout_counter)
-            
+        
+
         # debug data servers
         traing_env_param_dict = {}
         traing_env_param_dict["use_gpu"] = self._use_gpu
@@ -1623,6 +1731,9 @@ class LRhcTrainingEnvBase(ABC):
     def is_action_continuous(self):
         return self._is_continuous_actions
     
+    def is_action_discrete(self):
+        return ~self._is_continuous_actions
+
     @abstractmethod
     def _pre_step(self):
         pass

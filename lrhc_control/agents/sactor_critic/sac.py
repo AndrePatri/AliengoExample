@@ -1,6 +1,7 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 from torch.distributions.normal import Normal
 
@@ -29,6 +30,7 @@ class SACAgent(nn.Module):
             load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
+            compression_ratio: float = - 1.0, # > 0; if [0, 1] compression, >1 "expansion"
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,
@@ -38,6 +40,15 @@ class SACAgent(nn.Module):
 
         self._use_torch_compile=torch_compile
 
+        self._layer_width_actor=layer_width_actor
+        self._layer_width_critic=layer_width_critic
+        self._n_hidden_layers_actor=n_hidden_layers_actor
+        self._n_hidden_layers_critic=n_hidden_layers_critic
+
+        if compression_ratio > 0.0:
+            self._layer_width_actor=int(compression_ratio*obs_dim)
+            self._layer_width_critic=int(compression_ratio*(obs_dim+actions_dim))
+        
         if add_weight_norm:
             Journal.log(self.__class__.__name__,
                 "__init__",
@@ -112,8 +123,8 @@ class SACAgent(nn.Module):
                     actions_lb=actions_lb,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_actor,
-                    n_hidden_layers=n_hidden_layers_actor,
+                    layer_width=self._layer_width_actor,
+                    n_hidden_layers=self._n_hidden_layers_actor,
                     add_weight_norm=add_weight_norm
                     )
 
@@ -123,30 +134,30 @@ class SACAgent(nn.Module):
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf1_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             
             self.qf2 = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
             self.qf2_target = CriticQ(obs_dim=obs_dim,
                     actions_dim=actions_dim,
                     device=device,
                     dtype=dtype,
-                    layer_width=layer_width_critic,
-                    n_hidden_layers=n_hidden_layers_critic,
+                    layer_width=self._layer_width_critic,
+                    n_hidden_layers=self._n_hidden_layers_critic,
                     add_weight_norm=add_weight_norm)
         
             self.qf1_target.load_state_dict(self.qf1.state_dict())
@@ -168,13 +179,25 @@ class SACAgent(nn.Module):
             self.qf2_target = torch.compile(self.qf2_target)
             self.running_norm=torch.compile(self.running_norm)
 
-        msg=f"Created SAC agent with actor [{layer_width_actor}, {n_hidden_layers_actor}]\
-        and critic [{layer_width_critic}, {n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
+        msg=f"Created SAC agent with actor [{self._layer_width_actor}, {self._n_hidden_layers_actor}]\
+        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
         Journal.log(self.__class__.__name__,
             "__init__",
             msg,
             LogType.INFO)
-        
+    
+    def layer_width_actor(self):
+        return self._layer_width_actor
+
+    def n_hidden_layers_actor(self):
+        return self._n_hidden_layers_actor
+
+    def layer_width_critic(self):
+        return self._layer_width_critic
+
+    def n_hidden_layers_critic(self):
+        return self._n_hidden_layers_critic
+
     def get_impl_path(self):
         import os 
         return os.path.abspath(__file__)
@@ -264,9 +287,12 @@ class CriticQ(nn.Module):
         self._actions_dim = actions_dim
         self._q_net_dim = self._obs_dim + self._actions_dim
 
+        self._first_hidden_layer_width=self._q_net_dim # fist layer fully connected and of same dim
+        # as input
+
         # Input layer
         layers = [llayer_init(
-            layer=nn.Linear(self._q_net_dim, layer_width),
+            layer=nn.Linear(self._q_net_dim, self._first_hidden_layer_width),
             init_type="kaiming_uniform",
             nonlinearity="leaky_relu",
             a_leaky_relu=self._lrelu_slope,
@@ -274,9 +300,22 @@ class CriticQ(nn.Module):
             dtype=self._torch_dtype,
             add_weight_norm=add_weight_norm
         ), nn.LeakyReLU(negative_slope=self._lrelu_slope)]
-
+        
         # Hidden layers
-        for _ in range(n_hidden_layers - 1):
+        layers.extend([
+            llayer_init(
+                layer=nn.Linear(self._first_hidden_layer_width, layer_width),
+                init_type="kaiming_uniform",
+                nonlinearity="leaky_relu",
+                a_leaky_relu=self._lrelu_slope,
+                device=self._torch_device,
+                dtype=self._torch_dtype,
+                add_weight_norm=add_weight_norm
+            ),
+            nn.LeakyReLU(negative_slope=self._lrelu_slope)
+        ])
+
+        for _ in range(n_hidden_layers - 2):
             layers.extend([
                 llayer_init(
                     layer=nn.Linear(layer_width, layer_width),
@@ -334,6 +373,8 @@ class Actor(nn.Module):
         self._obs_dim = obs_dim
         self._actions_dim = actions_dim
         
+        self._first_hidden_layer_width=self._obs_dim # fist layer fully connected and of same dim
+    
         # Action scale and bias
         if actions_ub is None:
             actions_ub = [1] * actions_dim
@@ -377,7 +418,7 @@ class Actor(nn.Module):
         self.LOG_STD_MIN = -5
 
         # Input layer followed by hidden layers
-        layers = [llayer_init(nn.Linear(self._obs_dim, layer_width), 
+        layers = [llayer_init(nn.Linear(self._obs_dim, self._first_hidden_layer_width), 
                     init_type="kaiming_uniform",
                     nonlinearity="leaky_relu",
                     a_leaky_relu=self._lrelu_slope,
@@ -385,7 +426,21 @@ class Actor(nn.Module):
                     dtype=self._torch_dtype,
                     add_weight_norm=add_weight_norm),
             nn.LeakyReLU(negative_slope=self._lrelu_slope)]
-        for _ in range(n_hidden_layers - 1):
+    
+        # Hidden layers
+        # first hidden optionally uses _first_hidden_layer_width
+        layers.extend([
+            llayer_init(nn.Linear(self._first_hidden_layer_width, layer_width), 
+                init_type="kaiming_uniform",
+                nonlinearity="leaky_relu",
+                a_leaky_relu=self._lrelu_slope,
+                device=self._torch_device,
+                dtype=self._torch_dtype,
+                add_weight_norm=add_weight_norm),
+            nn.LeakyReLU(negative_slope=self._lrelu_slope)
+        ])
+        
+        for _ in range(n_hidden_layers - 2):
             layers.extend([
                 llayer_init(nn.Linear(layer_width, layer_width), 
                     init_type="kaiming_uniform",

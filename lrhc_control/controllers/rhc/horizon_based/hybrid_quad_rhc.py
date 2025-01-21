@@ -203,7 +203,7 @@ class HybridQuadRhc(RHController):
         
         self._kin_dyn = casadi_kin_dyn.CasadiKinDyn(self.urdf) # used for getting joint names 
         self._assign_controller_side_jnt_names(jnt_names=self._get_robot_jnt_names())
-
+        
         self._init_robot_homer()
 
         # handle fixed joints
@@ -704,38 +704,39 @@ class HybridQuadRhc(RHController):
 
         xig, _ = self._set_ig()
 
-        qv_state, a_state=self._set_is_open()
+        q_state, v_state, a_state=self._set_is_open()
 
         # robot_state=xig[:, 0]
         # # open loop update:
         # self._prb.setInitialState(x0=robot_state) # (xig has been shifted, so node 0
         # # is node 1 in the last opt solution)
 
-        return qv_state, a_state
+        return q_state, v_state, a_state
     
     def _update_closed_loop(self):
         
         # set initial guess for controller
         xig, _ = self._set_ig()
         # set initial state
-        qv_state=None
+        q_state=None
+        v_state=None
         a_state=None
         if self._custom_opts["adaptive_is"]:
             # adaptive closed loop
-            qv_state, a_state=self._set_is_adaptive()
+            q_state, v_state, a_state=self._set_is_adaptive()
         elif self._custom_opts["fully_closed"]:
-            qv_state, a_state=self._set_is_full()
+            q_state, v_state, a_state=self._set_is_full()
         elif self._custom_opts["closed_partial"]:
-            qv_state, a_state=self._set_is_partial()
+            q_state, v_state, a_state=self._set_is_partial()
         else:
             Journal.log(self.__class__.__name__,
                     "_update_closed_loop",
                     "Neither adaptive_is, fully_closed, or closed_partial.",
                     LogType.EXCEP,
                     throw_when_excep = False)
-            qv_state, a_state=self._set_is()
+            q_state, v_state, a_state=self._set_is()
 
-        return qv_state, a_state
+        return q_state, v_state, a_state
     
     def _set_is_open(self):
         
@@ -767,10 +768,12 @@ class HybridQuadRhc(RHController):
             ub=v_jnts, nodes=0)
         
         # return state used for feedback
-        qv_state=np.concatenate((q_full_root, q_jnts, twist_root, v_jnts),
+        q_state=np.concatenate((q_full_root, q_jnts),
+                axis=0)
+        v_state=np.concatenate((twist_root, v_jnts),
                 axis=0)
         
-        return (qv_state, None)
+        return (q_state, v_state, None)
     
     def _set_is_full(self):
         
@@ -820,12 +823,14 @@ class HybridQuadRhc(RHController):
                 nodes=0)
 
         # return state used for feedback
-        qv_state=np.concatenate((q_full_root, q_jnts, v_root, omega, v_jnts),
+        q_state=np.concatenate((q_full_root, q_jnts),
+                axis=0)
+        v_state=np.concatenate((v_root, omega, v_jnts),
                 axis=0)
         a_state=np.concatenate((a_root, a_jnts),
                 axis=0)
         
-        return (qv_state, a_state)
+        return (q_state, v_state, a_state)
     
     def _set_is_partial(self):
         
@@ -897,12 +902,14 @@ class HybridQuadRhc(RHController):
                 nodes=0)
 
         # return state used for feedback
-        qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
+        q_state=np.concatenate((p_root, q_root, q_jnts),
+                axis=0)
+        v_state=np.concatenate((v_root, omega, v_jnts),
                 axis=0)
         a_state=np.concatenate((a_root, a_jnts),
                 axis=0)
         
-        return (qv_state, a_state)
+        return (q_state, v_state, a_state)
     
     def _set_is_adaptive(self):
         
@@ -1018,12 +1025,14 @@ class HybridQuadRhc(RHController):
                 nodes=0)
             
         # return state used for feedback
-        qv_state=np.concatenate((p_root, q_root, q_jnts, v_root, omega, v_jnts),
+        q_state=np.concatenate((p_root, q_root, q_jnts),
+                axis=0)
+        v_state=np.concatenate((v_root, omega, v_jnts),
                 axis=0)
         a_state=np.concatenate((a_root, a_jnts),
                 axis=0)
         
-        return (qv_state, a_state)
+        return (q_state, v_state, a_state)
 
     def _solve(self):
         
@@ -1034,12 +1043,14 @@ class HybridQuadRhc(RHController):
         
     def _min_solve(self):
         # minimal solve version -> no debug 
-        robot_state=None
+        robot_qstate=None
+        robot_vstate=None
+        robot_astate=None
         if self._open_loop:
-            robot_state, _ =self._update_open_loop() # updates the TO ig and 
+            robot_qstate, robot_vstate, robot_astate = self._update_open_loop() # updates the TO ig and 
             # initial conditions using data from the solution itself
         else: 
-            robot_state, _ =self._update_closed_loop() # updates the TO ig and 
+            robot_qstate, robot_vstate, robot_astate = self._update_closed_loop() # updates the TO ig and 
             # initial conditions using robot measurements
     
         self._pm.shift() # shifts phases of one dt
@@ -1054,7 +1065,7 @@ class HybridQuadRhc(RHController):
                     robot_idxs=self.controller_index_np,
                     contact_name=None).reshape(self.n_contacts,3)
                 force_norm=np.linalg.norm(contact_forces, axis=1)
-            self.rhc_refs.step(q_full=robot_state,
+            self.rhc_refs.step(qstate=robot_qstate, vstate=robot_vstate,
                 force_norm=force_norm)
         else:
             self.rhc_refs.step()
@@ -1070,11 +1081,14 @@ class HybridQuadRhc(RHController):
 
         self._timer_start = time.perf_counter()
 
+        robot_qstate=None
+        robot_vstate=None
+        robot_astate=None
         if self._open_loop:
-            self._update_open_loop() # updates the TO ig and 
+            robot_qstate, robot_vstate, robot_astate = self._update_open_loop() # updates the TO ig and 
             # initial conditions using data from the solution itself
         else: 
-            self._update_closed_loop() # updates the TO ig and 
+            robot_qstate, robot_vstate, robot_astate = self._update_closed_loop() # updates the TO ig and 
             # initial conditions using robot measurements
 
         self._prb_update_time = time.perf_counter() 
@@ -1084,7 +1098,7 @@ class HybridQuadRhc(RHController):
         if self._refs_in_hor_frame:
             # q_base=self.robot_state.root_state.get(data_type="q", 
             #     robot_idxs=self.controller_index).reshape(-1, 1)
-            q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
+            # q_full=self._get_full_q_from_sol(node_idx=1).reshape(-1, 1)
             # using internal base pose from rhc. in case of closed loop, it will be the meas state
             force_norm=None
             if self._custom_opts["use_force_feedback"]:
@@ -1092,7 +1106,7 @@ class HybridQuadRhc(RHController):
                     robot_idxs=self.controller_index_np,
                     contact_name=None).reshape(self.n_contacts,3)
                 force_norm=np.linalg.norm(contact_forces, axis=1)
-            self.rhc_refs.step(q_full=q_full,
+            self.rhc_refs.step(qstate=robot_qstate, vstate=robot_vstate,
                 force_norm=force_norm)
         else:
             self.rhc_refs.step()

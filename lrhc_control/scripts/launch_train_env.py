@@ -71,17 +71,21 @@ if __name__ == "__main__":
     parser.add_argument('--use_cpu',action='store_true', help='If set, all the training (data included) will be performed on CPU')
     parser.add_argument('--db',action='store_true', help='Whether to enable local data logging for the algorithm (reward metrics, etc.)')
     parser.add_argument('--env_db',action='store_true', help='Whether to enable env db data logging on shared mem (e.g. reward metrics are not available for reading anymore)')
+    parser.add_argument('--full_env_db',action='store_true', help='Whether to enable detailed episodic data storage (data over single transitions)')
     parser.add_argument('--rmdb',action='store_true', help='Whether to enable remote debug (e.g. data logging on remote servers)')
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
-    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
-    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
-    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=4)
+    parser.add_argument('--compression_ratio', type=float,
+        help='If e.g. 0.8, the fist layer will be of dimension [input_features_size x (input_features_size*compression_ratio)]', default=-1.0)
+    parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=128)
+    parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=256)
+    parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=3)
     parser.add_argument('--critic_n_hlayers', type=int, help='Critic network size', default=4)
 
     parser.add_argument('--env_fname', type=str, default="linvel_env_baseline", help='Training env file name (without extension)')
     parser.add_argument('--env_classname', type=str, default="LinVelTrackBaseline", help='Training env class name')
+
 
     args = parser.parse_args()
     args_dict = vars(args)
@@ -115,7 +119,8 @@ if __name__ == "__main__":
             use_gpu=not args.use_cpu,
             debug=args.env_db,
             override_agent_refs=args.override_agent_refs,
-            timeout_ms=args.timeout_ms)
+            timeout_ms=args.timeout_ms,
+            env_opts=args_dict)
     if not env.is_ready(): # something went wrong
         exit()
 

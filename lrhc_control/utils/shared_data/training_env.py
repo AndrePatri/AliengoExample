@@ -834,17 +834,17 @@ class SimpleCounters(SharedDataBase):
                 self.get()[:, :]=self.get()+random_step_offsets # add random offsets from 0 to the mean counter duration
 
         else:
-            n_to_be_reset = torch.sum(to_be_reset.squeeze()).item()
+            n_to_be_reset = torch.sum(to_be_reset.flatten()).item()
             if not n_to_be_reset == 0:
-                self.get()[to_be_reset.squeeze() , :] = 0
+                self.get()[to_be_reset.flatten() , :] = 0
                 if randomize_limits and (not self._n_steps_lb==self._n_steps_ub):
-                    self._n_steps[to_be_reset.squeeze() , :] = torch.randint(low=self._n_steps_lb, high=self._n_steps_ub, size=(n_to_be_reset, 1),
+                    self._n_steps[to_be_reset.flatten() , :] = torch.randint(low=self._n_steps_lb, high=self._n_steps_ub, size=(n_to_be_reset, 1),
                                                 dtype=torch.int32,device=self._torch_device)
                 
                 if randomize_offsets:
                     random_step_offsets=torch.randint(low=0, high=self._n_steps_mean, size=(n_to_be_reset, 1),
                                     dtype=torch.int32,device=self._torch_device)
-                    self.get()[to_be_reset.squeeze(), :]=self.get()[to_be_reset.squeeze(), :]+random_step_offsets # add random offsets from 0 to the mean counter duration
+                    self.get()[to_be_reset.flatten(), :]=self.get()[to_be_reset.flatten(), :]+random_step_offsets # add random offsets from 0 to the mean counter duration
         
         self._write()
 
@@ -938,6 +938,36 @@ class SafetyRandResetsCounter(SimpleCounters):
                 force_reconnection=force_reconnection,
                 with_gpu_mirror=with_gpu_mirror)
 
+class RandomTruncCounter(SimpleCounters):
+
+    def __init__(self,
+                namespace: str,
+                n_steps_lb: int = None,
+                n_steps_ub: int = None,
+                randomize_offsets_at_startup: bool = True,
+                n_envs: int = None, 
+                is_server = False, 
+                verbose: bool = False, 
+                vlevel: VLevel = VLevel.V0,
+                safe: bool = True,
+                force_reconnection: bool = False,
+                with_gpu_mirror: bool = False):
+
+        basename = "RandomTruncCounter"
+
+        super().__init__(namespace=namespace,
+                basename=basename,
+                n_steps_lb=n_steps_lb,
+                n_steps_ub=n_steps_ub,
+                randomize_offsets_at_startup=randomize_offsets_at_startup,
+                n_envs=n_envs, 
+                is_server=is_server, 
+                verbose=verbose, 
+                vlevel=vlevel,
+                safe=safe,
+                force_reconnection=force_reconnection,
+                with_gpu_mirror=with_gpu_mirror)
+        
 if __name__ == "__main__":  
 
     def print_data(counter,i):

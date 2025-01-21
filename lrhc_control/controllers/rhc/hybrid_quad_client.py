@@ -38,7 +38,7 @@ class HybridQuadrupedClusterClient(LRhcClusterClient):
         self._codegen_dir_name = namespace
 
         self._timeout_ms = timeout_ms
-        
+
         super().__init__(namespace = namespace, 
                         urdf_xacro_path = urdf_xacro_path,
                         srdf_xacro_path = srdf_xacro_path,
@@ -52,7 +52,10 @@ class HybridQuadrupedClusterClient(LRhcClusterClient):
                         base_dump_dir=base_dump_dir,
                         codegen_override=codegen_override,
                         custom_opts=custom_opts)
-    
+
+        self._n_nodes = 31 if not ("n_nodes" in self._custom_opts) else self._custom_opts["n_nodes"]
+        self._dt = 0.05 if not ("cluster_dt" in self._custom_opts) else self._custom_opts["cluster_dt"]
+        
     def _xrdf_cmds(self):
         parts = self._urdf_path.split('/')
         urdf_descr_root_path = '/'.join(parts[:-2])
@@ -82,9 +85,9 @@ class HybridQuadrupedClusterClient(LRhcClusterClient):
                 config_path = self._paths.CONFIGPATH,
                 robot_name=self._namespace,
                 codegen_dir=codegen_dir,
-                n_nodes=31, 
-                dt=0.03,
-                max_solver_iter = 1,
+                n_nodes=self._n_nodes, 
+                dt=self._dt,
+                max_solver_iter = 1, # rti
                 open_loop = self._open_loop,
                 verbose = self._verbose, 
                 debug = self._debug)
