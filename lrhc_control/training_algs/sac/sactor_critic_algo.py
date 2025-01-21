@@ -449,13 +449,13 @@ class SActorCriticAlgoBase(ABC):
 
         # main algo settings
 
-        self._collection_freq=5
-        self._update_freq=1
+        self._collection_freq=1
+        self._update_freq=5
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
-        self._batch_size = 8192
+        self._batch_size = 16392
 
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps

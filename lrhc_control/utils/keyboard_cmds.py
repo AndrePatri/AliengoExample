@@ -469,13 +469,20 @@ class AgentRefsFromKeyboard:
         
         import time
 
+        self.agent_refs.run()
+        
         if read_from_stdin:
             from control_cluster_bridge.utilities.keyboard_listener_stdin import KeyListenerStdin
 
-            listener=KeyListenerStdin(on_press=self._on_press, 
+            with KeyListenerStdin(on_press=self._on_press, 
                 on_release=self._on_release, 
-                release_timeout=release_timeout)
-            listener.start()
+                release_timeout=release_timeout) as listener:
+                
+                while not listener.done:
+                    self._synch() 
+                    self._write_to_shared_mem()
+                    time.sleep(0.01)  # Keep the main thread alive
+                listener.stop()
 
         else:
 
@@ -484,17 +491,15 @@ class AgentRefsFromKeyboard:
                                 on_release=self._on_release)
             listener.start()
 
-        
-        self.agent_refs.run()
-        while True:
-            try:
-                self._synch() 
-                self._write_to_shared_mem() # writes latest refs to shared mem
-                time.sleep(0.01)
-            except KeyboardInterrupt:
-                break
-        listener.stop()
-        listener.join()
+            while True:
+                try:
+                    self._synch() 
+                    self._write_to_shared_mem() # writes latest refs to shared mem
+                    time.sleep(0.01)
+                except KeyboardInterrupt:
+                    break
+            listener.stop()
+            listener.join()
 
 class AgentActionsFromKeyboard:
 
