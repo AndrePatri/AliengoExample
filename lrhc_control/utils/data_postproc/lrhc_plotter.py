@@ -386,17 +386,19 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--env_db',action='store_true', help='')
+    parser.add_argument('--env_idx',type=int, help='', default=None)
+    parser.add_argument('--data_path',type=str, help='full path to dataset to plot')
 
     args = parser.parse_args()
 
+    path = args.data_path
+
     if not args.env_db:
         # load training data
-        path = "/root/training_data/d2025_01_07_h15_m09_s10-FakePosEnvBaseline/d2025_01_07_h15_m09_s10-FakePosEnvBaselinedb_info.hdf5"
-
         plotter = LRHCPlotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
         attributes = plotter.list_attributes()
-        plotter.load_data(dataset_names=datasets)
+        plotter.load_data(dataset_names=datasets, env_idx=args.env_idx)
         plotter.load_attributes()
         print("\nDataset names:")
         print(datasets)
@@ -708,12 +710,10 @@ if __name__ == "__main__":
 
     else:
         # load env db data
-        path = "/root/training_data/d2025_01_20_h15_m57_s18-FakePosEnvBaseline_env_db_checkpoint50.hdf5"
-
         plotter = LRHCPlotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
         attributes = plotter.list_attributes()
-        plotter.load_data(dataset_names=datasets, env_idx=0)
+        plotter.load_data(dataset_names=datasets, env_idx=args.env_idx)
         plotter.load_attributes()
         print("\nDataset names:")
         print(datasets)
