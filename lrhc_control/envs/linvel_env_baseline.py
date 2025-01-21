@@ -36,6 +36,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         env_name = "LinVelTrack"
         device = "cuda" if use_gpu else "cpu"
 
+        # debug metrics
+        vec_ep_freq_metrics_db=1 # [n_eps]
+
         # counters settings
         episode_timeout_lb = 2048 # episode timeouts (including env substepping when action_repeat>1)
         episode_timeout_ub = 2048
@@ -46,7 +49,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # to remove temporal correlations between envs
         random_trunc_freq_delta=2*episode_timeout_ub # to randomize trunc frequency
 
-        self._single_task_ref_per_episode=False # if True, the task ref is constant over the episode (ie
+        self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
         # episodes are truncated when task is changed)
         if not self._single_task_ref_per_episode:
             random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
@@ -255,7 +258,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     smoothing_horizon_d=self._action_smoothing_horizon_d,
                     n_demo_envs_perc=n_demo_envs_perc,
                     env_opts=env_opts,
-                    vec_ep_freq_metrics_db=1)
+                    vec_ep_freq_metrics_db=vec_ep_freq_metrics_db)
 
     def _custom_post_init(self):
 
@@ -1008,10 +1011,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         action_names[3] = "roll_omega_cmd"
         action_names[4] = "pitch_omega_cmd"
         action_names[5] = "yaw_omega_cmd"
-        action_names[6] = "contact_0"
-        action_names[7] = "contact_1"
-        action_names[8] = "contact_2"
-        action_names[9] = "contact_3"
+
+        next_idx=6
+        for i in range(len(self._contact_names)):
+            contact=self._contact_names[i]
+            action_names[next_idx] = f"contact_flag_{contact}"
+            next_idx+=1
 
         return action_names
     

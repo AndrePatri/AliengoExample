@@ -102,19 +102,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         
         # flight params (length)
         if self._control_flength:
-            idx=self._actions_map["contact_len_start"]
+            idx=self._actions_map["flight_len_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=3
             self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (apex)
         if self._control_fapex:
-            idx=self._actions_map["contact_apex_start"]
+            idx=self._actions_map["flight_apex_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (end)
         if self._control_fend:
-            idx=self._actions_map["contact_end_start"]
+            idx=self._actions_map["flight_end_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
@@ -128,19 +128,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         action_to_be_applied = self.get_actual_actions()
         
         if self._control_flength:
-            idx=self._actions_map["contact_len_start"]
+            idx=self._actions_map["flight_len_start"]
             flen_now=self._rhc_refs.flight_settings.get(data_type="len", gpu=self._use_gpu)
             flen_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=flen_now, data_type="len", gpu=self._use_gpu)
 
         if self._control_fapex:
-            idx=self._actions_map["contact_apex_start"]
+            idx=self._actions_map["flight_apex_start"]
             fapex_now=self._rhc_refs.flight_settings.get(data_type="apex_dpos", gpu=self._use_gpu)
             fapex_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fapex_now, data_type="apex_dpos", gpu=self._use_gpu)
             
         if self._control_fend:
-            idx=self._actions_map["contact_end_start"]
+            idx=self._actions_map["flight_end_start"]
             fend_now=self._rhc_refs.flight_settings.get(data_type="end_dpos", gpu=self._use_gpu)
             fend_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fend_now, data_type="end_dpos", gpu=self._use_gpu)
@@ -161,29 +161,29 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         action_names[4] = "pitch_omega_cmd"
         action_names[5] = "yaw_omega_cmd"
 
-        action_names[6] = "contact_0"
-        action_names[7] = "contact_1"
-        action_names[8] = "contact_2"
-        action_names[9] = "contact_3"
+        next_idx=6
+        for i in range(len(self._contact_names)):
+            contact=self._contact_names[i]
+            action_names[next_idx] = f"contact_flag_{contact}"
+            next_idx+=1
 
-        next_idx=10
         if self._control_flength:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
-                action_names[next_idx+i] = f"contact_len_{contact}"
-            self._actions_map["contact_len_start"]=next_idx
+                action_names[next_idx+i] = f"flight_len_{contact}"
+            self._actions_map["flight_len_start"]=next_idx
             next_idx+=len(self._contact_names)
         if self._control_fapex:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
-                action_names[next_idx+i] = f"contact_apex_{contact}"
-            self._actions_map["contact_apex_start"]=next_idx
+                action_names[next_idx+i] = f"flight_apex_{contact}"
+            self._actions_map["flight_apex_start"]=next_idx
             next_idx+=len(self._contact_names)
         if self._control_fend:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
-                action_names[next_idx+i] = f"contact_end_{contact}"
-            self._actions_map["contact_end_start"]=next_idx
+                action_names[next_idx+i] = f"flight_end_{contact}"
+            self._actions_map["flight_end_start"]=next_idx
             next_idx+=len(self._contact_names)
 
         return action_names
