@@ -190,7 +190,7 @@ class SActorCriticAlgoBase(ABC):
             pass
         
         self._override_agent_actions=False
-        if "override_agent_actions" in custom_args["override_agent_actions"]:
+        if "override_agent_actions" in custom_args:
             self._override_agent_actions=custom_args["override_agent_actions"]
 
         if self._override_agent_actions: # force evaluation mode
