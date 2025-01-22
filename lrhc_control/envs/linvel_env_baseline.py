@@ -77,8 +77,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         # rewards
         self._reward_map={}
-        self._add_power_reward=False
-        self._add_CoT_reward=True
+        self._add_power_reward=True
+        self._add_CoT_reward=False
         self._use_rhc_avrg_vel_tracking=False
 
         # task tracking
