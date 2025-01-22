@@ -54,15 +54,25 @@ class FirstOrderFilter:
         self._coeff_km1 = (1 - self._kh2) / (1 + self._kh2)
 
     def update(self, 
-               refk: torch.Tensor = None):
+               refk: torch.Tensor,
+               idxs: torch.Tensor = None):
         
-        if refk is not None:
+        if idxs is None:
             self.refk[:, :] = refk
-        self.yk[:, :] = torch.add(torch.mul(self.ykm1, self._coeff_km1), 
-                            torch.mul(torch.add(self.refk, self.refkm1), 
-                                        self._coeff_ref))
-        self.refkm1[:, :] = self.refk
-        self.ykm1[:, :] = self.yk
+            self.yk[:, :] = torch.add(torch.mul(self.ykm1, self._coeff_km1), 
+                                torch.mul(torch.add(self.refk, self.refkm1), 
+                                            self._coeff_ref))
+            self.refkm1[:, :] = self.refk
+            self.ykm1[:, :] = self.yk
+        else:
+            flat_idx=idxs.flatten()
+            self.refk[flat_idx, :] = refk
+            self.yk[flat_idx, :] = torch.add(torch.mul(self.ykm1[flat_idx, :], self._coeff_km1[flat_idx, :]), 
+                                torch.mul(torch.add(self.refk[flat_idx, :], self.refkm1[flat_idx, :]), 
+                                            self._coeff_ref))
+            self.refkm1[flat_idx, :] = self.refk[flat_idx, :]
+            self.ykm1[flat_idx, :] = self.yk[flat_idx, :]
+
     
     def reset(self,
             idxs: torch.Tensor = None):
@@ -94,11 +104,18 @@ class FirstOrderFilter:
                                 device = self._torch_device, 
                                 dtype=self._torch_dtype)
             
-    def get(self, clone: bool = False):
-        out=self.yk
-        if clone:
-            out=out.clone()
-        return out
+    def get(self, clone: bool = False,
+            idxs: torch.Tensor = None):
+        if idxs is None:
+            out=self.yk
+            if clone:
+                out=out.clone()
+            return out
+        else:
+            out=self.yk[idxs.flatten(), :]
+            if clone:
+                out=out.clone()
+            return out
           
 if __name__ == "__main__":
 

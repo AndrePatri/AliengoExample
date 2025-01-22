@@ -8,6 +8,8 @@ from lrhc_control.utils.xrdf_gen import generate_srdf, generate_urdf
 from lrhc_control.utils.math_utils import quaternion_difference
 from lrhc_control.utils.custom_arg_parsing import extract_custom_xacro_args, merge_xacro_cmds
 
+from lrhc_control.utils.filtering import FirstOrderFilter
+
 from control_cluster_bridge.utilities.homing import RobotHomer
 from control_cluster_bridge.utilities.shared_data.jnt_imp_control import JntImpCntrlData
 
@@ -164,6 +166,11 @@ class LRhcEnvBase(ABC):
         self._robot_names=robot_names
         self._env_opts={}
         self._env_opts["deact_when_failure"]=True
+        self._env_opts["filter_jnt_vel"]=False
+        self._env_opts["filter_cutoff_freq"]=10.0 # [Hz]
+        self._env_opts["filter_sampling_rate"]=100 # rate at which state is filtered [Hz]
+        self._filter_step_ssteps_freq=None
+
         self._env_opts.update(env_opts)
 
         self.step_counter = 0 # global step counter
@@ -251,6 +258,7 @@ class LRhcEnvBase(ABC):
         self._root_alpha_base_loc = {}
 
         self._jnts_v = {}
+        self._jnt_vel_filter = {}
         self._jnts_v_default = {}
         self._jnts_eff = {}
         self._jnts_eff_default = {}
@@ -392,6 +400,24 @@ class LRhcEnvBase(ABC):
                                             safe=False)
             self._jnt_imp_cntrl_shared_data[robot_name].run()
 
+            self._jnt_vel_filter[robot_name]=None
+            if self._env_opts["filter_jnt_vel"]:
+                self._jnt_vel_filter[robot_name]=FirstOrderFilter(dt=1.0/self._env_opts["filter_sampling_rate"],
+                    filter_BW=self._env_opts["filter_cutoff_freq"],
+                    rows=self._num_envs,
+                    cols=len(self._robot_jnt_names(robot_name=robot_name)),
+                    device=self._device,
+                    dtype=self._dtype)
+                
+                physics_rate=1.0/self.physics_dt()
+                self._filter_step_ssteps_freq=int(physics_rate/self._env_opts["filter_sampling_rate"])
+                if self._filter_step_ssteps_freq <=0:
+                    Journal.log(self.__class__.__name__,
+                        "_setup",
+                        f"The filter_sampling_rate should be smaller that the physics rate ({physics_rate} Hz)",
+                        LogType.EXCEP,
+                        throw_when_excep=True)
+                
             for n in range(self._n_init_steps): # run some initialization steps
                 self._step_world()
             self._read_jnts_state_from_robot(robot_name=robot_name,
@@ -485,6 +511,13 @@ class LRhcEnvBase(ABC):
         if reset_cluster_counter:
             self.cluster_sim_step_counters[robot_name] = 0 
 
+    def _step_jnt_vel_filter(self,
+            robot_name: str, 
+            env_indxs: torch.Tensor = None):
+        
+        self._jnt_vel_filter[robot_name].update(refk=self.jnts_v(robot_name=robot_name, env_idxs=env_indxs), 
+            idxs=env_indxs)
+
     def _set_state_to_cluster(self, 
         robot_name: str, 
         env_indxs: torch.Tensor = None,
@@ -523,7 +556,11 @@ class LRhcEnvBase(ABC):
         # joints
         rhc_state.jnts_state.set(data=self.jnts_q(robot_name=robot_name, env_idxs=env_indxs), 
             data_type="q", robot_idxs = env_indxs, gpu=self._use_gpu)
-        rhc_state.jnts_state.set(data=self.jnts_v(robot_name=robot_name, env_idxs=env_indxs), 
+        
+        v_jnts=self.jnts_v(robot_name=robot_name, env_idxs=env_indxs)
+        if self._jnt_vel_filter[robot_name] is not None: # apply filtering
+            v_jnts=self._jnt_vel_filter[robot_name].get(idxs=env_indxs)
+        rhc_state.jnts_state.set(data=v_jnts, 
             data_type="v", robot_idxs = env_indxs, gpu=self._use_gpu) 
         rhc_state.jnts_state.set(data=self.jnts_eff(robot_name=robot_name, env_idxs=env_indxs), 
             data_type="eff", robot_idxs = env_indxs, gpu=self._use_gpu) 
@@ -568,14 +605,24 @@ class LRhcEnvBase(ABC):
         # cluster step logic here
         for i in range(len(self._robot_names)):
             robot_name = self._robot_names[i]
+
             if self._override_low_lev_controller:
                 # if overriding low-lev jnt imp. this has to run at the highest
                 # freq possible
                 start=time.perf_counter()
                 self._read_jnts_state_from_robot(robot_name=robot_name)
                 self.debug_data["time_to_get_states_from_env"]= time.perf_counter()-start
+                
                 self._write_state_to_jnt_imp(robot_name=robot_name)
                 self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
+
+            if self._jnt_vel_filter[robot_name] is not None and \
+                (self.cluster_sim_step_counters[robot_name]+1) % self._filter_step_ssteps_freq == 0:
+                # filter joint vel at a fixed frequency wrt sim steps
+                if not self._override_low_lev_controller:
+                    # we need a fresh sensor reading
+                    self._read_jnts_state_from_robot(robot_name=robot_name)
+                self._step_jnt_vel_filter(robot_name=robot_name, env_indxs=None)
 
             control_cluster = self.cluster_servers[robot_name]
             if control_cluster.is_cluster_instant(self.cluster_sim_step_counters[robot_name]):
@@ -636,6 +683,14 @@ class LRhcEnvBase(ABC):
                 self._read_jnts_state_from_robot(robot_name=robot_name)
                 self._write_state_to_jnt_imp(robot_name=robot_name)
                 self._apply_cmds_to_jnt_imp_control(robot_name=robot_name)
+
+            if self._jnt_vel_filter[robot_name] is not None and \
+                (self.cluster_sim_step_counters[robot_name]+1) % self._filter_step_ssteps_freq == 0:
+                # filter joint vel at a fixed frequency wrt sim steps
+                if not self._override_low_lev_controller:
+                    # we need a fresh sensor reading
+                    self._read_jnts_state_from_robot(robot_name=robot_name)
+                self._step_jnt_vel_filter(robot_name=robot_name, env_indxs=None)
 
             control_cluster = self.cluster_servers[robot_name]
             if control_cluster.is_cluster_instant(self.cluster_sim_step_counters[robot_name]):
@@ -719,6 +774,9 @@ class LRhcEnvBase(ABC):
         self._read_root_state_from_robot(robot_name=robot_name,
                 env_indxs=env_indxs)
         
+        if self._jnt_vel_filter[robot_name] is not None:
+            self._jnt_vel_filter[robot_name].reset(idxs=env_indxs)
+
         if reset_cluster: # reset controllers remotely
             self._reset_cluster(env_indxs=env_indxs,
                 robot_name=robot_name,
