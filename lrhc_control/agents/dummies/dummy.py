@@ -49,6 +49,18 @@ class DummyAgent(nn.Module):
         #                             debug=self._debug)
         #     self.running_norm.type(dtype) # ensuring correct dtype for whole module
 
+    def layer_width_actor(self):
+        return -1
+
+    def n_hidden_layers_actor(self):
+        return -1
+
+    def layer_width_critic(self):
+        return -1
+
+    def n_hidden_layers_critic(self):
+        return -1
+    
     def get_impl_path(self):
         import os 
         return os.path.abspath(__file__)

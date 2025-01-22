@@ -218,7 +218,10 @@ if __name__ == "__main__":
         else:
             break
     
-    if not args.eval:
+    eval=args.eval
+    if args.override_agent_actions:
+        eval=True
+    if not eval:
         while not exit_request:
             if not algo.learn():
                 break
