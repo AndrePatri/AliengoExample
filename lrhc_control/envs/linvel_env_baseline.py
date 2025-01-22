@@ -40,8 +40,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         vec_ep_freq_metrics_db=1 # [n_eps]
 
         # counters settings
-        episode_timeout_lb = 2048 # episode timeouts (including env substepping when action_repeat>1)
-        episode_timeout_ub = 2048
+        episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
+        episode_timeout_ub = 1024
         n_steps_task_rand_lb = 512 # agent task randomization freq
         n_steps_task_rand_ub = 512 
         random_reset_freq = 10 # a random reset once every n-episodes (per env)
@@ -78,7 +78,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # rewards
         self._reward_map={}
         self._add_power_reward=False
-        self._add_CoT_reward=True
+        self._add_CoT_reward=False
         self._use_rhc_avrg_vel_tracking=False
 
         # task tracking
@@ -137,7 +137,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._rhc_fail_idx_scale=1.0
         self._use_action_history = True # whether to add information on past actions to obs
         self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
-        self._actions_history_size=15 # [env substeps] !! add full action history over a window
+        self._actions_history_size=10 # [env substeps] !! add full action history over a window
         
         self._add_mpc_contact_f_to_obs=True # add estimate vertical contact f to obs
         self._add_fail_idx_to_obs=True # we need to obserse mpc failure idx to correlate it with terminations

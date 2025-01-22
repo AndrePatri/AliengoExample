@@ -87,8 +87,8 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         
         if not self._use_prob_based_stepping:
             self._is_continuous_actions[6:10]=False
-        v_cmd_max = 2*self.max_cmd_v
-        omega_cmd_max = 2*self.max_cmd_v
+        v_cmd_max = 2.5*self.max_cmd_v
+        omega_cmd_max = 2.5*self.max_cmd_v
         self._actions_lb[:, 0:3] = -v_cmd_max 
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
