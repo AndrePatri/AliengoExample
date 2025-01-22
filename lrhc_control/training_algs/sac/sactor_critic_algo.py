@@ -200,6 +200,7 @@ class SActorCriticAlgoBase(ABC):
                 LogType.INFO,
                 throw_when_excep = True)
             self._eval=True
+            self._validate=False
             self._load_qf=False
             self._det_eval=False
 
