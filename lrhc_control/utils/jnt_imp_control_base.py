@@ -5,6 +5,7 @@ from enum import Enum
 
 from lrhc_control.utils.urdf_limits_parser import UrdfLimitsParser
 from lrhc_control.utils.jnt_imp_cfg_parser import JntImpConfigParser
+from lrhc_control.utils.filtering import FirstOrderFilter
 
 import time
 
@@ -12,90 +13,6 @@ from EigenIPC.PyEigenIPC import LogType
 from EigenIPC.PyEigenIPC import Journal
 
 from abc import ABC, abstractmethod
-
-class FirstOrderFilter:
-
-    # a class implementing a simple first order filter
-
-    def __init__(self,
-            dt: float, 
-            filter_BW: float = 0.1, 
-            rows: int = 1, 
-            cols: int = 1, 
-            device: torch.device = torch.device("cpu"),
-            dtype = torch.double):
-        
-        self._torch_dtype = dtype
-
-        self._torch_device = device
-
-        self._dt = dt
-
-        self._rows = rows
-        self._cols = cols
-
-        self._filter_BW = filter_BW
-
-        import math 
-        self._gain = 2 * math.pi * self._filter_BW
-
-        self.yk = torch.zeros((self._rows, self._cols), device = self._torch_device, 
-                                dtype=self._torch_dtype)
-        self.ykm1 = torch.zeros((self._rows, self._cols), device = self._torch_device, 
-                                dtype=self._torch_dtype)
-        
-        self.refk = torch.zeros((self._rows, self._cols), device = self._torch_device, 
-                                dtype=self._torch_dtype)
-        self.refkm1 = torch.zeros((self._rows, self._cols), device = self._torch_device, 
-                                dtype=self._torch_dtype)
-        
-        self._kh2 = self._gain * self._dt / 2.0
-        self._coeff_ref = self._kh2 * 1/ (1 + self._kh2)
-        self._coeff_km1 = (1 - self._kh2) / (1 + self._kh2)
-
-    def update(self, 
-               refk: torch.Tensor = None):
-        
-        if refk is not None:
-            self.refk[:, :] = refk
-        self.yk[:, :] = torch.add(torch.mul(self.ykm1, self._coeff_km1), 
-                            torch.mul(torch.add(self.refk, self.refkm1), 
-                                        self._coeff_ref))
-        self.refkm1[:, :] = self.refk
-        self.ykm1[:, :] = self.yk
-    
-    def reset(self,
-            idxs: torch.Tensor = None):
-
-        if idxs is not None:
-            self.yk[:, :] = torch.zeros((self._rows, self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.ykm1[:, :] = torch.zeros((self._rows, self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.refk[:, :] = torch.zeros((self._rows, self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.refkm1[:, :] = torch.zeros((self._rows, self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-        else:
-            self.yk[idxs, :] = torch.zeros((idxs.shape[0], self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.ykm1[idxs, :] = torch.zeros((idxs.shape[0], self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.refk[idxs, :] = torch.zeros((idxs.shape[0], self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            self.refkm1[idxs, :] = torch.zeros((idxs.shape[0], self._cols), 
-                                device = self._torch_device, 
-                                dtype=self._torch_dtype)
-            
-    def get(self):
-        return self.yk
 
 class JntSafety:
 
