@@ -230,7 +230,9 @@ class LRHCPlotter:
             # Create custom legend with lines instead of dots
             legend_lines = [mlines.Line2D([0], [0], color=ax.get_lines()[i].get_color(), lw=4) for i in range(len(data_indexes))]
             legend = ax.legend(legend_lines, labels, ncol=2, handlelength=2)
-
+            # Set pickable property
+            for line in legend_lines:
+                line.set_picker(True)
             # legend = ax.legend(ncol=2, markerscale=2)
 
             legend.set_draggable(True)  # Make the legend draggable
@@ -897,10 +899,10 @@ if __name__ == "__main__":
                 data_labels=actions_names,
                 data_idxs=None)
             # contact actions
-            patterns=["*contact*"]
+            patterns=["*contact_flag*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
             plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - contact actions only", 
+                title=ep_prefix+"actions - contact flag actions only", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -908,6 +910,17 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
+            patterns=["*flight_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, actions_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
+                title=ep_prefix+"actions - flight params actions only", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=False,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+
             # sub terminations
             plotter.plot_data(dataset_name=ep_prefix+"SubTerminations", 
                 title=ep_prefix+"SubTerminations", 
