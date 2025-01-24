@@ -126,9 +126,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._task_pred_err_weights[0, 5] = 0.05
 
         # energy penalties
-        self._CoT_offset = 1.5
+        self._CoT_offset = 4.0
         self._CoT_scale = 5e-4
-        self._power_offset = 1.5
+        self._power_offset = 4.0
         self._power_scale = 5e-4
 
         # terminations
@@ -354,7 +354,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._is_substep_rew[self._reward_map["mech_pow"]]=True
         
         # reward clipping
-        self._reward_thresh_lb[:, :]=0 # (neg rewards can be nasty, especially if they all become negative)
+        self._reward_thresh_lb[:, :]=-1e6 # (neg rewards can be nasty, especially if they all become negative)
         self._reward_thresh_ub[:, :]=1e6
         # self._reward_thresh_lb[:, 1]=-1e6
         # self._reward_thresh_ub[:, 1]=1e6
