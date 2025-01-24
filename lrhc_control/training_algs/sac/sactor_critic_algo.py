@@ -316,15 +316,6 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["critic_lwidth"]=self._agent.layer_width_critic()
         self._hyperparameters["critic_n_hlayers"]=self._agent.n_hidden_layers_critic()
 
-        self._running_mean_obs=None
-        self._running_std_obs=None
-        if self._agent.running_norm is not None and not self._eval:
-            # some db data for the agent
-            self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
-                        dtype=torch.float32, fill_value=0.0, device="cpu")
-            self._running_std_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
-                        dtype=torch.float32, fill_value=0.0, device="cpu")
-
         # load model if necessary 
         if self._eval and (not self._override_agent_actions): # load pretrained model
             if model_path is None:
@@ -471,8 +462,8 @@ class SActorCriticAlgoBase(ABC):
 
         self._run_name = run_name
     
-        self._collection_freq=5
-        self._update_freq=25
+        self._collection_freq=1
+        self._update_freq=5
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
@@ -909,6 +900,15 @@ class SActorCriticAlgoBase(ABC):
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._policy_entropy_min=torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=torch.nan, device="cpu")            
+
+        self._running_mean_obs=None
+        self._running_std_obs=None
+        if self._agent.running_norm is not None and not self._eval:
+            # some db data for the agent
+            self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
+                        dtype=torch.float32, fill_value=0.0, device="cpu")
+            self._running_std_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
+                        dtype=torch.float32, fill_value=0.0, device="cpu")
 
     def _init_replay_buffers(self):
         
