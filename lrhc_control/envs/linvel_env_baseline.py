@@ -84,7 +84,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # task tracking
         self._use_relative_error=False # use relative vel error (wrt current task norm)
-        self._directional_tracking=True # whether to compute tracking rew based on reference direction
+        self._directional_tracking=False # whether to compute tracking rew based on reference direction
         self._use_fail_idx_weight=False # add weight based on mpc violation
         self._task_offset = 10.0
         self._task_scale = 3.0 # the higher, the more the exp reward is peaked
