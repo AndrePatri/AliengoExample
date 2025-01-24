@@ -34,6 +34,8 @@ class LRHCPlotter:
         self.attributes = {}  # Dictionary to store file-level attributes
         self.figures = []  # List to store figure objects
 
+        self.map_legend_to_ax = {}  # Will map legend lines to original lines.
+
     def list_datasets(self):
         """
         Retrieve and return all dataset names available in the HDF5 file.
@@ -198,6 +200,7 @@ class LRHCPlotter:
 
             data_indexes=list(range(0, n_data)) if data_idxs is None else data_idxs
             labels=[]
+            plt_lines=[]
             for i in range(len(data_indexes)):
                 idx=data_indexes[i]
                 valid_mask = np.isfinite(data[:, idx])
@@ -223,7 +226,8 @@ class LRHCPlotter:
                                 data_distr_min[valid_mask, idx], data_distr_max[valid_mask, idx],
                                 color=plt_line.get_color(), alpha=alpha, 
                                 label="min/max")
-                        
+                plt_lines.append(plt_line)
+
             ax.set_title(f"{title}")
             ax.set_xlabel(xlabel)
             ax.set_ylabel("Value")
@@ -236,8 +240,33 @@ class LRHCPlotter:
             # legend = ax.legend(ncol=2, markerscale=2)
 
             legend.set_draggable(True)  # Make the legend draggable
-
+            
             ax.grid(True)
+
+            # make legends pickable
+            pickradius=5
+            for legend_line, ax_line in zip(legend.get_lines(), plt_lines):
+                legend_line.set_picker(pickradius)  # Enable picking on the legend line.
+                self.map_legend_to_ax[legend_line] = ax_line
+            
+            def on_pick(event):
+                # On the pick event, find the original line corresponding to the legend
+                # proxy line, and toggle its visibility.
+                legend_line = event.artist
+
+                # Do nothing if the source of the event is not a legend line.
+                if legend_line not in self.map_legend_to_ax:
+                    return
+
+                ax_line = self.map_legend_to_ax[legend_line]
+                visible = not ax_line.get_visible()
+                ax_line.set_visible(visible)
+                # Change the alpha on the line in the legend, so we can see what lines
+                # have been toggled.
+                legend_line.set_alpha(1.0 if visible else 0.2)
+                fig.canvas.draw()
+            fig.canvas.mpl_connect('pick_event', on_pick)
+            
         else:
             # Heatmap histogram for multiple environments
             fig, axes = plt.subplots(n_data, 1, figsize=(10, 5 * n_data), sharex=True)
@@ -303,6 +332,7 @@ class LRHCPlotter:
         """
         Display all stored plots.
         """
+        
         for fig in self.figures:
             fig.show()
 
