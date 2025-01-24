@@ -65,12 +65,11 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters = {}
         self._wandb_d={}
 
-        self._episodic_reward_metrics = self._env.ep_rewards_metrics()
-        
-        tot_tsteps=100e6
-        self._init_params(tot_tsteps=tot_tsteps)
-        
-        self._init_dbdata()
+        # get params from env
+        self._get_params_from_env()
+
+        self._torch_device = torch.device("cpu") # defaults to cpu
+        self._torch_deterministic = True
 
         self._setup_done = False
 
@@ -86,6 +85,42 @@ class SActorCriticAlgoBase(ABC):
     def __del__(self):
 
         self.done()
+
+    def _get_params_from_env(self):
+
+        self._env_name = self._env.name()
+        self._episodic_reward_metrics = self._env.ep_rewards_metrics()
+        self._use_gpu = self._env.using_gpu()
+        self._dtype = self._env.dtype()
+        self._env_opts=self._env.env_opts()
+        self._num_envs = self._env.n_envs()
+        self._obs_dim = self._env.obs_dim()
+        self._actions_dim = self._env.actions_dim()
+        self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
+        self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
+        self._env_n_action_reps = self._env.n_action_reps()
+        self._env_actions_ub=self._env.get_actions_ub()
+        self._env_actions_lb=self._env.get_actions_lb()
+        self._is_continuous_actions_bool=self._env.is_action_continuous()
+        self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
+        self._is_discrete_actions_bool=self._env.is_action_discrete()
+        self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
+
+        # default to all debug envs
+        self._db_env_selector=torch.tensor(list(range(0, self._num_envs)), dtype=torch.int)
+        self._db_env_selector_bool=torch.full((self._num_envs, ), 
+                dtype=torch.bool, device="cpu",
+                fill_value=True)
+        # default to no expl envs
+        self._expl_env_selector=None
+        self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
+                fill_value=False)
+        self._pert_counter=0.0
+        # demo envs
+        self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
+        # (can be overridden thorugh the provided options)
+        self._demo_env_selector=self._env.demo_env_idxs()
+        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
 
     def learn(self):
   
@@ -171,12 +206,19 @@ class SActorCriticAlgoBase(ABC):
             norm_obs: bool = False,
             rescale_obs: bool = True):
 
+        tot_tsteps=100e6
+        if "tot_tsteps" in custom_args:
+            tot_tsteps=custom_args["tot_tsteps"]
+
         self._verbose = verbose
 
         self._ns=ns # only used for shared mem stuff
 
         self._dump_checkpoints = dump_checkpoints
         
+        self._init_algo_shared_data(static_params=self._hyperparameters) # can only handle dicts with
+        # numeric values
+
         if "full_env_db" in custom_args:
             self._full_env_db=custom_args["full_env_db"]
         
@@ -208,15 +250,6 @@ class SActorCriticAlgoBase(ABC):
         from datetime import datetime
         self._time_id = datetime.now().strftime('d%Y_%m_%d_h%H_m%M_s%S')
         self._unique_id = self._time_id + "-" + self._run_name
-
-        self._use_combined_exp_replay=False
-        try:
-            self._use_combined_exp_replay=self._hyperparameters["use_combined_exp_replay"]
-        except:
-            pass
-
-        self._init_algo_shared_data(static_params=self._hyperparameters) # can only handle dicts with
-        # numeric values
 
         self._hyperparameters["unique_run_id"]=self._unique_id
         self._hyperparameters.update(custom_args)
@@ -276,13 +309,16 @@ class SActorCriticAlgoBase(ABC):
                     device=self._torch_device,
                     dtype=self._dtype,
                     debug=self._debug)
+        
         # loging actual widths and layers in case they were override inside agent init
         self._hyperparameters["actor_lwidth"]=self._agent.layer_width_actor()
         self._hyperparameters["actor_n_hlayers"]=self._agent.n_hidden_layers_actor()
         self._hyperparameters["critic_lwidth"]=self._agent.layer_width_critic()
         self._hyperparameters["critic_n_hlayers"]=self._agent.n_hidden_layers_critic()
 
-        if self._agent.running_norm is not None:
+        self._running_mean_obs=None
+        self._running_std_obs=None
+        if self._agent.running_norm is not None and not self._eval:
             # some db data for the agent
             self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
                         dtype=torch.float32, fill_value=0.0, device="cpu")
@@ -313,7 +349,11 @@ class SActorCriticAlgoBase(ABC):
             # overwrite init params
             self._init_params(tot_tsteps=n_eval_timesteps,
                 run_name=self._run_name)
+        else:
+            self._init_params(tot_tsteps=tot_tsteps)
         
+        self._init_dbdata()
+
         # adding additional db info
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
@@ -429,27 +469,8 @@ class SActorCriticAlgoBase(ABC):
             tot_tsteps: int,
             run_name: str = "SACDefaultRunName"):
 
-        self._dtype = self._env.dtype()
-
-        self._env_opts=self._env.env_opts()
-
-        self._num_envs = self._env.n_envs()
-        self._obs_dim = self._env.obs_dim()
-        self._actions_dim = self._env.actions_dim()
-
-        self._run_name = run_name # default
-        self._env_name = self._env.name()
-        self._episode_timeout_lb, self._episode_timeout_ub = self._env.episode_timeout_bounds()
-        self._task_rand_timeout_lb, self._task_rand_timeout_ub = self._env.task_rand_timeout_bounds()
-        
-        self._env_n_action_reps = self._env.n_action_reps()
-        
-        self._use_gpu = self._env.using_gpu()
-        self._torch_device = torch.device("cpu") # defaults to cpu
-        self._torch_deterministic = True
-
-        # main algo settings
-
+        self._run_name = run_name
+    
         self._collection_freq=5
         self._update_freq=25
 
@@ -457,6 +478,30 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
+
+        self._lr_policy = 1e-3
+        self._lr_q = 1e-3
+
+        self._discount_factor = 0.995
+        self._smoothing_coeff = 0.005
+
+        self._policy_freq = 2
+        self._trgt_net_freq = 1
+
+        self._autotune = True
+        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
+        self._target_entropy = self._trgt_avrg_entropy_per_action*self._actions_dim
+        self._log_alpha = None
+        self._alpha = 0.2
+
+        self._a_optimizer = None
+
+        self._bnorm_bsize = 4096
+        self._bnorm_vecfreq_nom = 5 # wrt vec steps
+        # make sure _bnorm_vecfreq is a multiple of _collection_freq
+        self._bnorm_vecfreq = (self._bnorm_vecfreq_nom//self._collection_freq)*self._collection_freq
+        if self._bnorm_vecfreq == 0:
+            self._bnorm_vecfreq=self._collection_freq
 
         self._total_timesteps = int(tot_tsteps)
         self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
@@ -476,71 +521,25 @@ class SActorCriticAlgoBase(ABC):
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
                 
-        self._lr_policy = 1e-3
-        self._lr_q = 1e-3
-
-        self._discount_factor = 0.995
-        self._smoothing_coeff = 0.005
-
-        self._policy_freq = 2
-        self._trgt_net_freq = 1
-
-        self._autotune = True
-        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
-        self._target_entropy = self._trgt_avrg_entropy_per_action*self._env.actions_dim()
-        self._log_alpha = None
-        self._alpha = 0.2
-        
-        self._bnorm_bsize = 4096
-        self._bnorm_vecfreq_nom = 5 # wrt vec steps
-        # make sure _bnorm_vecfreq is a multiple of _collection_freq
-        self._bnorm_vecfreq = (self._bnorm_vecfreq_nom//self._collection_freq)*self._collection_freq
-        if self._bnorm_vecfreq == 0:
-            self._bnorm_vecfreq=self._collection_freq
-
         self._n_expl_env_perc=0.0 # [0, 1]
         self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 25
         self._noise_duration = 5 # should be less than _noise_freq
-
-        self._env_actions_ub=self._env.get_actions_ub()
-        self._env_actions_lb=self._env.get_actions_lb()
-        self._is_continuous_actions_bool=self._env.is_action_continuous()
-        self._is_continuous_actions=torch.where(self._is_continuous_actions_bool)[0]
-        self._is_discrete_actions_bool=self._env.is_action_discrete()
-        self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
         
         self._continuous_act_expl_noise_std=0.05 
         self._discrete_act_expl_noise_std=1.0
-
-        self._a_optimizer = None
         
         # debug
         self._m_checkpoint_freq_nom = 1e6 # n totoal timesteps after which a checkpoint model is dumped
         self._m_checkpoint_freq= self._m_checkpoint_freq_nom//self._num_envs
 
-        # default to all debug envs
-        self._db_env_selector=torch.tensor(list(range(0, self._num_envs)), dtype=torch.int)
-        self._db_env_selector_bool=torch.full((self._num_envs, ), 
-                dtype=torch.bool, device="cpu",
-                fill_value=True)
-
-        self._expl_env_selector=None
-        self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
-                fill_value=False)
-        self._pert_counter=0.0
-
+        # expl envs
         if self._n_expl_envs>0 and ((self._num_envs-self._n_expl_envs)>0): # log data only from envs which are not altered (e.g. by exploration noise)
             # computing expl env selector
             self._expl_env_selector = torch.randperm(self._num_envs, device="cpu")[:self._n_expl_envs]
             self._expl_env_selector_bool[self._expl_env_selector]=True
-            
-        # and db env. selector
-        self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
-        # (can be overridden thorugh the provided options)
-        self._demo_env_selector=self._env.demo_env_idxs()
-        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
+        # demo envs
         if self._demo_env_selector_bool is None:
             self._db_env_selector_bool[:]=~self._expl_env_selector_bool
         else: # we log db data separately for env which are neither for demo nor for random exploration
@@ -572,7 +571,7 @@ class SActorCriticAlgoBase(ABC):
         if self._db_vecstep_frequency == 0:
             self._db_vecstep_frequency=self._collection_freq
 
-        self._env_db_checkpoints_vecfreq=250*self._db_vecstep_frequency # detailed db data from envs
+        self._env_db_checkpoints_vecfreq=10*self._db_vecstep_frequency # detailed db data from envs
 
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
@@ -1455,8 +1454,10 @@ class SActorCriticAlgoBase(ABC):
 
             # other data
             if self._agent.running_norm is not None:
-                self._running_mean_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_mean()
-                self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
+                if self._running_mean_obs is not None:
+                    self._running_mean_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_mean()
+                if self._running_std_obs is not None:
+                    self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
 
             # write some episodic db info on shared mem
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
@@ -1658,8 +1659,10 @@ class SActorCriticAlgoBase(ABC):
 
                 if self._agent.running_norm is not None:
                     # adding info on running normalizer if used
-                    self._wandb_d.update({f"running_norm/mean": self._running_mean_obs[self._log_it_counter, :]})
-                    self._wandb_d.update({f"running_norm/std": self._running_std_obs[self._log_it_counter, :]})
+                    if self._running_mean_obs is not None:
+                        self._wandb_d.update({f"running_norm/mean": self._running_mean_obs[self._log_it_counter, :]})
+                    if self._running_std_obs is not None:
+                        self._wandb_d.update({f"running_norm/std": self._running_std_obs[self._log_it_counter, :]})
                 
                 self._wandb_d.update(self._custom_env_data_db_dict) 
                 
