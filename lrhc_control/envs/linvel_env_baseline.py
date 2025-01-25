@@ -100,11 +100,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_or_read_env_opt(env_opts, "use_rhc_avrg_vel_tracking", False)
 
         # task tracking
-        self._add_or_read_env_opt(env_opts, "use_relative_err", default=False) # use relative vel error (wrt current task norm)
-        self._add_or_read_env_opt(env_opts, "directional_tracking", default=False) # whether to compute tracking rew based on reference direction
+        self._add_or_read_env_opt(env_opts, "use_relative_error", default=False) # use relative vel error (wrt current task norm)
+        self._add_or_read_env_opt(env_opts, "directional_tracking", default=True) # whether to compute tracking rew based on reference direction
 
-        self._add_or_read_env_opt(env_opts, "use_relative_error", default=False)
-        self._add_or_read_env_opt(env_opts, "directional_tracking", default=False)
         self._add_or_read_env_opt(env_opts, "use_fail_idx_weight", default=False)
         self._add_or_read_env_opt(env_opts, "task_track_offset", default=10.0)
         self._add_or_read_env_opt(env_opts, "task_track_scale", default=3.0)
