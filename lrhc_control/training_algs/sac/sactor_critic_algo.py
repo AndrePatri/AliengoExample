@@ -479,7 +479,7 @@ class SActorCriticAlgoBase(ABC):
         self._trgt_net_freq = 1
 
         self._autotune = True
-        self._trgt_avrg_entropy_per_action=-5.0 # the more negative, the more deterministic the policy
+        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
         self._target_entropy = self._trgt_avrg_entropy_per_action*self._actions_dim
         self._log_alpha = None
         self._alpha = 0.2
