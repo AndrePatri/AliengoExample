@@ -1223,8 +1223,10 @@ class SActorCriticAlgoBase(ABC):
             
             # other data
             if self._agent.running_norm is not None:
-                hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())
-                hf.create_dataset('running_std_obs', data=self._running_std_obs.numpy())
+                if self._running_mean_obs is not None:
+                    hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())
+                if self._running_std_obs is not None:
+                    hf.create_dataset('running_std_obs', data=self._running_std_obs.numpy())
             
         info = f"done."
         Journal.log(self.__class__.__name__,
