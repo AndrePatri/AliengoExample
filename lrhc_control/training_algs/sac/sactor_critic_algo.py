@@ -339,7 +339,6 @@ class SActorCriticAlgoBase(ABC):
 
             # overwrite init params
             self._init_params(tot_tsteps=n_eval_timesteps,
-                run_name=self._run_name,
                 custom_args=custom_args)
         else:
             self._init_params(tot_tsteps=tot_tsteps,
@@ -460,10 +459,7 @@ class SActorCriticAlgoBase(ABC):
 
     def _init_params(self,
             tot_tsteps: int,
-            run_name: str = "SACDefaultRunName",
             custom_args: Dict = {}):
-
-        self._run_name = run_name
     
         self._collection_freq=1
         self._update_freq=5
