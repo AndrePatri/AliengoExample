@@ -44,15 +44,19 @@ if __name__ == "__main__":
     parser.add_argument('--run_name', type=str, default=None, help='Name of training run')
     parser.add_argument('--ns', type=str, help='Namespace to be used for shared memory')
     parser.add_argument('--drop_dir', type=str, help='Directory root where all run data will be dumped')
-    
-    # Replacing argparse.BooleanOptionalAction with 'store_true' and 'store_false' for Python 3.8 compatibility
     parser.add_argument('--dump_checkpoints',action='store_true', help='Whether to dump model checkpoints during training')
+
+    parser.add_argument('--demo_envs_perc', type=float, help='[0, 1]', default=0)
+    parser.add_argument('--expl_envs_perc', type=float, help='[0, 1]', default=0)
+
+    parser.add_argument('--action_repeat', type=int, help='Frame skipping (1-> no skip)', default=1)
+
     parser.add_argument('--demo_stop_thresh', type=float, default=None, 
         help='Performance hreshold above which demonstration envs should be deactivated.')
+    parser.add_argument('--tot_tsteps', type=int, help='Total number of timesteps to be collected', default=int(30e6))
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
     parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
     parser.add_argument('--add_weight_norm',action='store_true', help='Whether to add weight normalization to agent llayers')
-    parser.add_argument('--use_cer',action='store_true', help='Whether to use combined experience replay (not tested)')
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')
     parser.add_argument('--eval',action='store_true', help='Whether to perform an evaluation run')
@@ -86,7 +90,6 @@ if __name__ == "__main__":
     parser.add_argument('--env_fname', type=str, default="linvel_env_baseline", help='Training env file name (without extension)')
     parser.add_argument('--env_classname', type=str, default="LinVelTrackBaseline", help='Training env class name')
 
-
     args = parser.parse_args()
     args_dict = vars(args)
 
@@ -109,6 +112,7 @@ if __name__ == "__main__":
                 f"no mpath provided! Cannot load env. Either provide a mpath or run with --override_env",
                 LogType.EXCEP,
                 throw_when_excep = True)
+    
         env_path=os.path.join(args.mpath, env_fname+".py")
         env_module=import_env_module(env_path)
        
@@ -170,7 +174,6 @@ if __name__ == "__main__":
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
-            custom_args["use_combined_exp_replay"]=args.use_cer
         else:
             algo = PPO(env=env, 
                 debug=args.db, 

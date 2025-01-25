@@ -32,10 +32,10 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._max_distance=5.0 # [m]
-        self._min_distance=self._max_distance-0.01
-        self._max_vref=1.0 # [m/s]
-        self._max_dt=self._max_distance/ self._max_vref
+        self._add_or_read_env_opt(env_opts, "max_distance", default=5.0) # [m]
+        self._add_or_read_env_opt(env_opts, "min_distance", default=env_opts["max_distance"]-0.01) # [m]
+        self._add_or_read_env_opt(env_opts, "max_vref", default=1.0) # [m/s]
+        self._add_or_read_env_opt(env_opts, "max_dt", default=env_opts["max_distance"]/ env_opts["max_vref"])
 
         VariableFlightsBaseline.__init__(self, 
             namespace=namespace,
@@ -47,11 +47,6 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms,
             env_opts=env_opts)
-
-        self._env_opts["max_distance"] = self._max_distance
-        self._env_opts["min_distance"] = self._min_distance
-        self._env_opts["max_vref"] = self._max_vref
-        self._env_opts["max_dt"] = self._max_dt
 
     def get_file_paths(self):
         paths=VariableFlightsBaseline.get_file_paths(self)

@@ -135,7 +135,6 @@ class Gymnasium2LRHCEnv():
         self._truncations = None
         
         self.custom_db_data = {}
-        self.custom_db_info = {}
 
         self._episodic_rewards_metrics = None
 

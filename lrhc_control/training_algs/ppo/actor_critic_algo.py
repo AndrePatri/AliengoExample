@@ -195,7 +195,7 @@ class ActorCriticAlgoBase(ABC):
         if (self._debug):
             if self._remote_db:
                 job_type = "evaluation" if self._eval else "training"
-                full_run_config={**self._hyperparameters,**self._env.custom_db_info}
+                full_run_config={**self._hyperparameters,**self._env.env_opts()}
                 wandb.init(
                     project="LRHControl",
                     group=self._run_name,
@@ -416,9 +416,6 @@ class ActorCriticAlgoBase(ABC):
                 for subname in subnames:
                     var_name = db_dname + "_" + subname
                     hf.create_dataset(var_name, data=data[subname])
-            db_info_names = list(self._env.custom_db_info.keys())
-            for db_info in db_info_names:
-                hf.create_dataset(db_info, data=self._env.custom_db_info[db_info])
         
             # other data 
             hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())

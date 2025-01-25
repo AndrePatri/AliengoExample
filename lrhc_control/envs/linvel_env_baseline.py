@@ -36,120 +36,114 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         env_name = "LinVelTrack"
         device = "cuda" if use_gpu else "cpu"
 
-        # debug metrics
-        vec_ep_freq_metrics_db=1 # [n_eps]
-
+        self._add_or_read_env_opt(env_opts, "srew_drescaling", 
+            False)
+        
         # counters settings
-        episode_timeout_lb = 1024 # episode timeouts (including env substepping when action_repeat>1)
-        episode_timeout_ub = 1024
-        n_steps_task_rand_lb = 512 # agent task randomization freq
-        n_steps_task_rand_ub = 512 
-        random_reset_freq = 10 # a random reset once every n-episodes (per env)
-        random_trunc_freq = episode_timeout_ub*5 # [env timesteps], random truncations 
-        # to remove temporal correlations between envs
-        random_trunc_freq_delta=2*episode_timeout_ub # to randomize trunc frequency
+        self._add_or_read_env_opt(env_opts, "single_task_ref_per_episode", 
+            True # if True, the task ref is constant over the episode (ie
+            # episodes are truncated when task is changed) 
+            )
 
-        self._single_task_ref_per_episode=True # if True, the task ref is constant over the episode (ie
-        # episodes are truncated when task is changed)
-        if not self._single_task_ref_per_episode:
-            random_reset_freq=random_reset_freq/round(float(episode_timeout_lb)/float(n_steps_task_rand_lb))
+        self._add_or_read_env_opt(env_opts, "episode_timeout_lb", 
+            1024)
+        self._add_or_read_env_opt(env_opts, "episode_timeout_ub", 
+            1024)
+        self._add_or_read_env_opt(env_opts, "n_steps_task_rand_lb", 
+            512)
+        self._add_or_read_env_opt(env_opts, "n_steps_task_rand_ub", 
+            512)
+        self._add_or_read_env_opt(env_opts, "use_random_safety_reset", 
+            True)
+        self._add_or_read_env_opt(env_opts, "random_reset_freq", 
+            10) # a random reset once every n-episodes (per env)
+        self._add_or_read_env_opt(env_opts, "use_random_trunc", 
+            True)
+        self._add_or_read_env_opt(env_opts, "random_trunc_freq", 
+            env_opts["episode_timeout_ub"]*5) # to remove temporal correlations between envs
+        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+            env_opts["episode_timeout_ub"]*2)  # to randomize trunc frequency between envs
         
-        action_repeat = 1 # frame skipping (different agent action every action_repeat
+        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+            env_opts["episode_timeout_ub"]*2)
+        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+            env_opts["episode_timeout_ub"]*2)
+        
+        if not env_opts["single_task_ref_per_episode"]:
+            env_opts["random_reset_freq"]=env_opts["random_reset_freq"]/\
+                round(env_opts["episode_timeout_lb"])/float(env_opts["n_steps_task_rand_lb"])
+        
+        self._add_or_read_env_opt(env_opts, "action_repeat", 1) # frame skipping (different agent action every action_repeat
         # env substeps)
-
-        n_preinit_steps = 1 # n steps of the controllers to properly initialize everything
         
-        n_demo_envs_perc = 0.0 # demo environments
+        self._add_or_read_env_opt(env_opts, "n_preinit_steps", 1) # n steps of the controllers to properly initialize everything
         
-        self.max_cmd_v=1.5 # maximum cmd v for v actions (single component)
+        self._add_or_read_env_opt(env_opts, "vec_ep_freq_metrics_db", 1) # n eps over which debug metrics are reported
+        self._add_or_read_env_opt(env_opts, "demo_envs_perc", 0.0)
+        self._add_or_read_env_opt(env_opts, "max_cmd_v", 1.5) # maximum cmd v for v actions (single component)
 
         # action smoothing
-        self._enable_action_smoothing=False
-        self._action_smoothing_horizon_c=0.01
-        self._action_smoothing_horizon_d=0.03
+        self._add_or_read_env_opt(env_opts, "use_action_smoothing", False)
+        self._add_or_read_env_opt(env_opts, "smoothing_horizon_c", 0.01)
+        self._add_or_read_env_opt(env_opts, "smoothing_horizon_d", 0.03)
 
         # whether to smooth vel error signal
-        self._use_track_reward_smoother=False 
-        self._smoothing_horizon_vel_err=0.08
-        self._track_rew_smoother=None
+        self._add_or_read_env_opt(env_opts, "use_track_reward_smoother", False)
+        self._add_or_read_env_opt(env_opts, "smoothing_horizon_vel_err", 0.08)
+        self._add_or_read_env_opt(env_opts, "track_rew_smoother", None)
 
-        # other settings
-        
         # rewards
         self._reward_map={}
 
-        self._add_power_reward=False
-        self._add_CoT_reward=False
-        self._use_rhc_avrg_vel_tracking=False
+        self._add_or_read_env_opt(env_opts, "add_power_reward", False)
+        self._add_or_read_env_opt(env_opts, "add_CoT_reward", True)
+        self._add_or_read_env_opt(env_opts, "use_rhc_avrg_vel_tracking", False)
 
         # task tracking
-        self._use_relative_error=False # use relative vel error (wrt current task norm)
-        self._directional_tracking=True # whether to compute tracking rew based on reference direction
-        self._use_fail_idx_weight=False # add weight based on mpc violation
-        self._task_offset = 10.0
-        self._task_scale = 3.0 # the higher, the more the exp reward is peaked
-        self._task_err_weights = torch.full((1, 6), dtype=dtype, device=device,
-                            fill_value=0.0) 
-        if self._directional_tracking:
-            self._task_err_weights[0, 0] = 1.0 # frontal
-            self._task_err_weights[0, 1] = 0.05 # lateral
-            self._task_err_weights[0, 2] = 0.05 # vertical
-            self._task_err_weights[0, 3] = 0.05
-            self._task_err_weights[0, 4] = 0.05
-            self._task_err_weights[0, 5] = 0.05
-        else:
-            self._task_err_weights[0, 0] = 1.0
-            self._task_err_weights[0, 1] = 1.0
-            self._task_err_weights[0, 2] = 1.0
-            self._task_err_weights[0, 3] = 0.05
-            self._task_err_weights[0, 4] = 0.05
-            self._task_err_weights[0, 5] = 0.05
+        self._add_or_read_env_opt(env_opts, "use_relative_err", default=False) # use relative vel error (wrt current task norm)
+        self._add_or_read_env_opt(env_opts, "directional_tracking", default=False) # whether to compute tracking rew based on reference direction
+
+        self._add_or_read_env_opt(env_opts, "use_relative_error", default=False)
+        self._add_or_read_env_opt(env_opts, "directional_tracking", default=False)
+        self._add_or_read_env_opt(env_opts, "use_fail_idx_weight", default=False)
+        self._add_or_read_env_opt(env_opts, "task_track_offset", default=10.0)
+        self._add_or_read_env_opt(env_opts, "task_track_scale", default=3.0)
+        self._add_or_read_env_opt(env_opts, "task_track_front_weight", default=1.0)
+        self._add_or_read_env_opt(env_opts, "task_track_lat_weight", default=env_opts["task_track_front_weight"]/20.0)
+        self._add_or_read_env_opt(env_opts, "task_track_vert_weight", default=env_opts["task_track_front_weight"]/20.0)
+        self._add_or_read_env_opt(env_opts, "task_track_omega_weight", default=env_opts["task_track_front_weight"]/20.0)
 
         # task pred tracking
-        self._task_pred_offset = 0.0 # 10.0
-        self._task_pred_scale = 3.0
-        self._task_pred_err_weights = torch.full((1, 6), dtype=dtype, device=device,
-                            fill_value=0.0) 
-        if self._directional_tracking:
-            self._task_pred_err_weights[0, 0] = 1.0
-            self._task_pred_err_weights[0, 1] = 0.05
-            self._task_pred_err_weights[0, 2] = 0.05
-            self._task_pred_err_weights[0, 3] = 0.05
-            self._task_pred_err_weights[0, 4] = 0.05
-            self._task_pred_err_weights[0, 5] = 0.05
-        else:
-            self._task_pred_err_weights[0, 0] = 1.0
-            self._task_pred_err_weights[0, 1] = 1.0
-            self._task_pred_err_weights[0, 2] = 1.0
-            self._task_pred_err_weights[0, 3] = 0.05
-            self._task_pred_err_weights[0, 4] = 0.05
-            self._task_pred_err_weights[0, 5] = 0.05
+        self._add_or_read_env_opt(env_opts, "task_pred_track_offset", default=10.0)
+        self._add_or_read_env_opt(env_opts, "task_pred_track_scale", default=3.0)
 
         # energy penalties
-        self._CoT_offset = 1.5
-        self._CoT_scale = 5e-4
-        self._power_offset = 1.5
-        self._power_scale = 5e-4
+        self._add_or_read_env_opt(env_opts, "CoT_offset", default=4.0)
+        self._add_or_read_env_opt(env_opts, "CoT_scale", default=5e-4)
+        self._add_or_read_env_opt(env_opts, "power_offset", default=4.0)
+        self._add_or_read_env_opt(env_opts, "power_scale", default=5e-4)
 
         # terminations
-        self._add_term_mpc_capsize=False # add termination based on mpc capsizing prediction
+        self._add_or_read_env_opt(env_opts, "add_term_mpc_capsize", default=False) # add termination based on mpc capsizing prediction
 
         # observations
-        self._rhc_fail_idx_scale=1.0
-        self._use_action_history = True # whether to add information on past actions to obs
-        self._add_prev_actions_stats_to_obs = True # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
-        self._actions_history_size=10 # [env substeps] !! add full action history over a window
+        self._add_or_read_env_opt(env_opts, "rhc_fail_idx_scale", default=1.0)
+        self._add_or_read_env_opt(env_opts, "use_action_history", default=True) # whether to add information on past actions to obs
+        self._add_or_read_env_opt(env_opts, "add_prev_actions_stats_to_obs", default=True) # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
+        self._add_or_read_env_opt(env_opts, "actions_history_size", default=10) # [env substeps] !! add full action history over a window
         
-        self._add_mpc_contact_f_to_obs=True # add estimate vertical contact f to obs
-        self._add_fail_idx_to_obs=True # we need to obserse mpc failure idx to correlate it with terminations
+        self._add_or_read_env_opt(env_opts, "add_mpc_contact_f_to_obs", default=True) # add estimate vertical contact f to obs
+        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True) # we need to obserse mpc failure idx to correlate it with terminations
         
-        self._use_linvel_from_rhc=True # no lin vel meas available, we use est. from mpc
-        self._add_flight_info=True # add feedback info on pos and length of flight phases from mpc
-        self._add_flight_settings=True # add feedback info on flight params from mpc
+        self._add_or_read_env_opt(env_opts, "use_linvel_from_rhc", default=True) # no lin vel meas available, we use est. from mpc
+        self._add_or_read_env_opt(env_opts, "add_flight_info", default=True) # add feedback info on pos and length of flight phases from mpc
+        self._add_or_read_env_opt(env_opts, "add_flight_settings", default=True) # add feedback info on flight params from mpc
+        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
+        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
 
-        self._use_prob_based_stepping=False # interpret actions as stepping prob (never worked)
-        
-        self._add_rhc_cmds_to_obs=True # add the rhc cmds which are being applied now to the robot
+        self._add_or_read_env_opt(env_opts, "use_prob_based_stepping", default=False) # interpret actions as stepping prob (never worked)
+
+        self._add_or_read_env_opt(env_opts, "add_rhc_cmds_to_obs", default=True) # add the rhc cmds which are being applied now to the robot
 
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
@@ -189,46 +183,76 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs_dim=3 # normalized gravity vector in base frame
         obs_dim+=6 # meas twist in base frame
         obs_dim+=2*n_jnts # joint pos + vel
-        if self._add_mpc_contact_f_to_obs:
+        if env_opts["add_mpc_contact_f_to_obs"]:
             obs_dim+=3*self._n_contacts
         obs_dim+=6 # twist reference in base frame frame
-        if self._add_fail_idx_to_obs:
+        if env_opts["add_fail_idx_to_obs"]:
             obs_dim+=1 # rhc controller failure index
-        if self._add_term_mpc_capsize: 
+        if env_opts["add_term_mpc_capsize"]: 
             obs_dim+=3 # gravity vec from mpc
-        if self._use_rhc_avrg_vel_tracking:
+        if env_opts["use_rhc_avrg_vel_tracking"]:
             obs_dim+=6 # mpc avrg twist
-        if self._add_flight_info: # contact pos and len
+        if env_opts["add_flight_info"]: # contact pos and len
             obs_dim+=self._flight_info_size
-        if self._add_flight_settings:
+        if env_opts["add_flight_settings"]:
             obs_dim+=self._flight_setting_size
-        if self._add_rhc_cmds_to_obs:
+        if env_opts["add_rhc_cmds_to_obs"]:
             obs_dim+=3*n_jnts 
-        if self._use_action_history:
-            if self._add_prev_actions_stats_to_obs:
+        if env_opts["use_action_history"]:
+            if env_opts["add_prev_actions_stats_to_obs"]:
                 obs_dim+=3*actions_dim # previous agent actions statistics (mean, std + last action)
             else: # full action history
-                obs_dim+=self._actions_history_size*actions_dim
-        if self._enable_action_smoothing:
+                obs_dim+=env_opts["actions_history_size"]*actions_dim
+        if env_opts["use_action_smoothing"]:
             obs_dim+=actions_dim # it's better to also add the smoothed actions as obs
         
         # Agent task reference
-        self._use_pof0 = False # with some prob, references will be null
-        self._pof0 = 0.01
+        self._add_or_read_env_opt(env_opts, "use_pof0", default=False) # with some prob, references will be null
+        self._add_or_read_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
+        self._add_or_read_env_opt(env_opts, "max_ref", default=1.0)
 
-        self._twist_ref_lb = torch.full((1, 6), dtype=dtype, device=device,
+        # ready to init base class
+        self._this_child_path = os.path.abspath(__file__)
+        LRhcTrainingEnvBase.__init__(self,
+                    namespace=namespace,
+                    obs_dim=obs_dim,
+                    actions_dim=actions_dim,
+                    env_name=env_name,
+                    verbose=verbose,
+                    vlevel=vlevel,
+                    use_gpu=use_gpu,
+                    dtype=dtype,
+                    debug=debug,
+                    override_agent_refs=override_agent_refs,
+                    timeout_ms=timeout_ms,
+                    env_opts=env_opts)
+    
+    def _add_or_read_env_opt(self,
+            opts: Dict,
+            name: str,
+            default):
+
+        if not name in opts:
+            opts[name]=default
+
+    def _custom_post_init(self):
+
+        device = "cuda" if self._use_gpu else "cpu"
+
+        self._update_jnt_blacklist() # update blacklist for joints
+
+        self._twist_ref_lb = torch.full((1, 6), dtype=self._dtype, device=device,
                             fill_value=-1.5) 
-        self._twist_ref_ub = torch.full((1, 6), dtype=dtype, device=device,
+        self._twist_ref_ub = torch.full((1, 6), dtype=self._dtype, device=device,
                             fill_value=1.5)
         
-        # task reference parameters (specified in world frame)
-        self.max_ref=1.0
+        # task reference parameters (world frame)
         # lin vel
-        self._twist_ref_lb[0, 0] = -self.max_ref
-        self._twist_ref_lb[0, 1] = -self.max_ref
+        self._twist_ref_lb[0, 0] = -self._env_opts["max_ref"]
+        self._twist_ref_lb[0, 1] = -self._env_opts["max_ref"]
         self._twist_ref_lb[0, 2] = 0.0
-        self._twist_ref_ub[0, 0] = self.max_ref
-        self._twist_ref_ub[0, 1] = self.max_ref
+        self._twist_ref_ub[0, 0] = self._env_opts["max_ref"]
+        self._twist_ref_ub[0, 1] = self._env_opts["max_ref"]
         self._twist_ref_ub[0, 2] = 0.0
         # angular vel
         self._twist_ref_lb[0, 3] = 0.0
@@ -241,56 +265,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._twist_ref_offset = (self._twist_ref_ub + self._twist_ref_lb)/2.0
         self._twist_ref_scale = (self._twist_ref_ub - self._twist_ref_lb)/2.0
 
-        # ready to init base class
-        self._this_child_path = os.path.abspath(__file__)
-        LRhcTrainingEnvBase.__init__(self,
-                    namespace=namespace,
-                    obs_dim=obs_dim,
-                    actions_dim=actions_dim,
-                    episode_timeout_lb=episode_timeout_lb,
-                    episode_timeout_ub=episode_timeout_ub,
-                    n_steps_task_rand_lb=n_steps_task_rand_lb,
-                    n_steps_task_rand_ub=n_steps_task_rand_ub,
-                    random_reset_freq=random_reset_freq,
-                    use_random_safety_reset=True,
-                    random_trunc_freq=random_trunc_freq,
-                    random_trunc_freq_delta=random_trunc_freq_delta,
-                    use_random_trunc=True, # to help remove temporal correlations
-                    action_repeat=action_repeat,
-                    env_name=env_name,
-                    n_preinit_steps=n_preinit_steps,
-                    verbose=verbose,
-                    vlevel=vlevel,
-                    use_gpu=use_gpu,
-                    dtype=dtype,
-                    debug=debug,
-                    override_agent_refs=override_agent_refs,
-                    timeout_ms=timeout_ms,
-                    srew_drescaling=False,
-                    use_act_mem_bf=self._use_action_history,
-                    act_membf_size=self._actions_history_size,
-                    use_action_smoothing=self._enable_action_smoothing,
-                    smoothing_horizon_c=self._action_smoothing_horizon_c,
-                    smoothing_horizon_d=self._action_smoothing_horizon_d,
-                    n_demo_envs_perc=n_demo_envs_perc,
-                    env_opts=env_opts,
-                    vec_ep_freq_metrics_db=vec_ep_freq_metrics_db)
-
-    def _custom_post_init(self):
-
-        device = "cuda" if self._use_gpu else "cpu"
-
-        self._update_jnt_blacklist() # update blacklist for joints
-
         # adding some custom db info 
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=False)
         agent_twist_ref_data = EpisodicData("AgentTwistRefs", agent_twist_ref, 
             ["v_x", "v_y", "v_z", "omega_x", "omega_y", "omega_z"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
         rhc_fail_idx = EpisodicData("RhcFailIdx", self._rhc_fail_idx(gpu=False), ["rhc_fail_idx"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
         
@@ -302,7 +285,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         rhc_contact_f = EpisodicData("RhcContactForces", 
             self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=False), 
             f_names,
-            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
 
@@ -312,7 +295,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         power_db = EpisodicData("Power", 
             self._pow_db_data, 
             ["CoT", "W"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
         
@@ -320,25 +303,51 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_err_db = EpisodicData("TrackingError", 
             agent_twist_ref, 
             ["e_vx", "e_vy", "e_vz", "e_omegax", "e_omegay", "e_omegaz"],
-            ep_vec_freq=self._vec_ep_freq_metrics_db,
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
 
-        self._add_custom_db_info(db_data=agent_twist_ref_data)
-        self._add_custom_db_info(db_data=rhc_fail_idx)
-        self._add_custom_db_info(db_data=rhc_contact_f)
-        self._add_custom_db_info(db_data=power_db)
-        self._add_custom_db_info(db_data=task_err_db)
-
-        # add static db info 
-        self._env_opts["add_last_action_to_obs"] = self._add_prev_actions_stats_to_obs
-        self._env_opts["actions_history_size"] = self._actions_history_size
-        self._env_opts["use_pof0"] = self._use_pof0
-        self._env_opts["pof0"] = self._pof0
-        self._env_opts["action_repeat"] = self._action_repeat
-        self._env_opts["add_flight_info"] = self._add_flight_info
+        self._add_custom_db_data(db_data=agent_twist_ref_data)
+        self._add_custom_db_data(db_data=rhc_fail_idx)
+        self._add_custom_db_data(db_data=rhc_contact_f)
+        self._add_custom_db_data(db_data=power_db)
+        self._add_custom_db_data(db_data=task_err_db)
 
         # rewards
+        self._task_err_weights = torch.full((1, 6), dtype=self._dtype, device=device,
+                            fill_value=0.0) 
+        if self._env_opts["directional_tracking"]:
+            self._task_err_weights[0, 0] = self._env_opts["task_track_front_weight"] # frontal
+            self._task_err_weights[0, 1] = self._env_opts["task_track_lat_weight"] # lateral
+            self._task_err_weights[0, 2] = self._env_opts["task_track_vert_weight"] # vertical
+            self._task_err_weights[0, 3] = self._env_opts["task_track_omega_weight"]
+            self._task_err_weights[0, 4] = self._env_opts["task_track_omega_weight"]
+            self._task_err_weights[0, 5] = self._env_opts["task_track_omega_weight"]
+        else:
+            self._task_err_weights[0, 0] = self._env_opts["task_track_front_weight"]
+            self._task_err_weights[0, 1] = self._env_opts["task_track_front_weight"]
+            self._task_err_weights[0, 2] = self._env_opts["task_track_front_weight"]
+            self._task_err_weights[0, 3] = self._env_opts["task_track_omega_weight"]
+            self._task_err_weights[0, 4] = self._env_opts["task_track_omega_weight"]
+            self._task_err_weights[0, 5] = self._env_opts["task_track_omega_weight"]
+            
+        self._task_pred_err_weights = torch.full((1, 6), dtype=self._dtype, device=device,
+                            fill_value=0.0) 
+        if self._env_opts["directional_tracking"]:
+            self._task_pred_err_weights[0, 0] = self._env_opts["task_track_front_weight"]
+            self._task_pred_err_weights[0, 1] = self._env_opts["task_track_lat_weight"]
+            self._task_pred_err_weights[0, 2] = self._env_opts["task_track_vert_weight"]
+            self._task_pred_err_weights[0, 3] = self._env_opts["task_track_omega_weight"]
+            self._task_pred_err_weights[0, 4] = self._env_opts["task_track_omega_weight"]
+            self._task_pred_err_weights[0, 5] = self._env_opts["task_track_omega_weight"]
+        else:
+            self._task_pred_err_weights[0, 0] = self._env_opts["task_track_front_weight"]
+            self._task_pred_err_weights[0, 1] = self._env_opts["task_track_front_weight"]
+            self._task_pred_err_weights[0, 2] = self._env_opts["task_track_front_weight"]
+            self._task_pred_err_weights[0, 3] = self._env_opts["task_track_omega_weight"]
+            self._task_pred_err_weights[0, 4] = self._env_opts["task_track_omega_weight"]
+            self._task_pred_err_weights[0, 5] = self._env_opts["task_track_omega_weight"]
+
         self._power_penalty_weights = torch.full((1, self._n_jnts), dtype=self._dtype, device=device,
                             fill_value=1.0)
         self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
@@ -346,15 +355,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # _reward_map
         # which rewards are to be computed at substeps frequency?
         self._is_substep_rew[self._reward_map["task_error"]]=False
-        if self._use_rhc_avrg_vel_tracking:
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
             self._is_substep_rew[self._reward_map["rhc_avrg_vel_error"]]=False
-        if self._add_CoT_reward:
+        if self._env_opts["add_CoT_reward"]:
             self._is_substep_rew[self._reward_map["CoT"]]=True
-        if self._add_power_reward:
+        if self._env_opts["add_power_reward"]:
             self._is_substep_rew[self._reward_map["mech_pow"]]=True
         
         # reward clipping
-        self._reward_thresh_lb[:, :]=0 # (neg rewards can be nasty, especially if they all become negative)
+        self._reward_thresh_lb[:, :]=-1e6 # (neg rewards can be nasty, especially if they all become negative)
         self._reward_thresh_ub[:, :]=1e6
         # self._reward_thresh_lb[:, 1]=-1e6
         # self._reward_thresh_ub[:, 1]=1e6
@@ -364,16 +373,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._obs_threshold_ub = 1e3
 
         # actions
-        if not self._use_prob_based_stepping:
+        if not self._env_opts["use_prob_based_stepping"]:
             self._is_continuous_actions[6:10]=False
 
-        v_cmd_max = self.max_cmd_v
-        omega_cmd_max = self.max_cmd_v
+        v_cmd_max = self._env_opts["max_cmd_v"]
+        omega_cmd_max = self._env_opts["max_cmd_v"]
         self._actions_lb[:, 0:3] = -v_cmd_max 
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
         self._actions_ub[:, 3:6] = omega_cmd_max  
-        if self._use_prob_based_stepping:
+        if self._env_opts["use_prob_based_stepping"]:
             self._actions_lb[:, 6:10] = 0.0 # contact flags
             self._actions_ub[:, 6:10] = 1.0 
         else:
@@ -398,8 +407,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             "flight_pos"
             ]
         obs_ubs=[1.0,
-            5*self.max_cmd_v,
-            5*self.max_cmd_v,
+            5*v_cmd_max,
+            5*omega_cmd_max,
             2*torch.pi,
             30.0,
             2.0,
@@ -409,8 +418,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             200.0,
             self._n_nodes_rhc.mean().item()]
         obs_lbs=[-1.0,
-            -5*self.max_cmd_v,
-            -5*self.max_cmd_v,
+            -5*v_cmd_max,
+            -5*omega_cmd_max,
             -2*torch.pi,
             -30.0,
             -2.0,
@@ -432,8 +441,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     break
         
         # handle action memory buffer in obs
-        if self._use_action_history: # just history stats
-            if self._add_prev_actions_stats_to_obs:
+        if self._env_opts["use_action_history"]: # just history stats
+            if self._env_opts["add_prev_actions_stats_to_obs"]:
                 i=0
                 prev_actions_idx = next((i for i, s in enumerate(obs_names) if "_prev_act" in s), None)
                 prev_actions_mean_idx=next((i for i, s in enumerate(obs_names) if "_avrg_act" in s), None)
@@ -473,12 +482,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # aux data
         self._task_err_scaling = torch.zeros((self._n_envs, 1),dtype=self._dtype,device=device)
 
-        self._pof1_b = torch.full(size=(self._n_envs,1),dtype=self._dtype,device=device,fill_value=1-self._pof0)
+        self._pof1_b = torch.full(size=(self._n_envs,1),dtype=self._dtype,device=device,fill_value=1-self._env_opts["pof0"])
         self._bernoulli_coeffs = self._pof1_b.clone()
         self._bernoulli_coeffs[:, :] = 1.0
 
         # smoothing
-        if self._use_track_reward_smoother:
+        self._track_rew_smoother=None
+        if self._env_opts["use_track_reward_smoother"]:
             sub_reward_proxy=self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)[:, 0:1]
             smoothing_dt=self._substep_dt
             if not self._is_substep_rew[0]: # assuming first reward is tracking
@@ -487,7 +497,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 name=self.__class__.__name__+"VelErrorSmoother",
                 signal=sub_reward_proxy, # same dimension of vel error
                 update_dt=smoothing_dt,
-                smoothing_horizon=self._smoothing_horizon_vel_err,
+                smoothing_horizon=self._env_opts["smoothing_horizon_vel_err"],
                 target_smoothing=0.5,
                 debug=self._is_debug,
                 dtype=self._dtype,
@@ -505,22 +515,22 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         return aux_dirs
 
     def _get_reward_scaling(self):
-        if self._single_task_ref_per_episode:
-            return self._n_steps_task_rand_ub
+        if self._env_opts["single_task_ref_per_episode"]:
+            return self._env_opts["n_steps_task_rand_ub"]
         else:
-            return self._episode_timeout_ub
+            return self._env_opts["episode_timeout_ub"]
     
     def _max_ep_length(self):
-        if self._single_task_ref_per_episode:
-            return self._n_steps_task_rand_ub
+        if self._env_opts["single_task_ref_per_episode"]:
+            return self._env_opts["n_steps_task_rand_ub"]
         else:
-            return self._episode_timeout_ub
+            return self._env_opts["episode_timeout_ub"]
     
     def _check_sub_truncations(self):
         # overrides parent
         sub_truncations = self._sub_truncations.get_torch_mirror(gpu=self._use_gpu)
         sub_truncations[:, 0:1] = self._ep_timeout_counter.time_limits_reached()
-        if self._single_task_ref_per_episode:
+        if self._env_opts["single_task_ref_per_episode"]:
             sub_truncations[:, 1:2] = self._task_rand_counter.time_limits_reached()
     
     def _check_sub_terminations(self):
@@ -536,7 +546,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             output_t=self._is_capsized)
         sub_terminations[:, 1:2] = self._is_capsized
         
-        if self._add_term_mpc_capsize:
+        if self._env_opts["add_term_mpc_capsize"]:
             # check if robot is about to capsize accordin to MPC
             robot_q_pred = self._rhc_cmds.root_state.get(data_type="q",gpu=self._use_gpu)
             check_capsize(quat=robot_q_pred,max_angle=self._max_pitch_angle,
@@ -616,7 +626,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             gpu=self._use_gpu) 
         
         # contact flags
-        if self._use_prob_based_stepping:
+        if self._env_opts["use_prob_based_stepping"]:
             # encode actions as probs
             self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
             rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
@@ -664,7 +674,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         next_idx=0
         obs[:, next_idx:(next_idx+3)] = robot_gravity_norm_base_loc # norm. gravity vector in base frame
         next_idx+=3
-        if self._use_linvel_from_rhc:
+        if self._env_opts["use_linvel_from_rhc"]:
             obs[:, next_idx:(next_idx+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
         else:
             obs[:, next_idx:(next_idx+3)] = robot_twist_meas_base_loc[:, 0:3]
@@ -677,36 +687,36 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         next_idx+=self._n_jnts
         obs[:, next_idx:(next_idx+6)] = agent_twist_ref # high lev agent refs to be tracked
         next_idx+=6
-        if self._add_mpc_contact_f_to_obs:
+        if self._env_opts["add_mpc_contact_f_to_obs"]:
             n_forces=3*len(self._contact_names)
             obs[:, next_idx:(next_idx+n_forces)] = self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=self._use_gpu)
             next_idx+=n_forces
-        if self._add_fail_idx_to_obs:
+        if self._env_opts["add_fail_idx_to_obs"]:
             obs[:, next_idx:(next_idx+1)] = self._rhc_fail_idx(gpu=self._use_gpu)
             next_idx+=1
-        if self._add_term_mpc_capsize:
+        if self._env_opts["add_term_mpc_capsize"]:
             obs[:, next_idx:(next_idx+3)] = self._rhc_cmds.root_state.get(data_type="gn",gpu=self._use_gpu)
             next_idx+=3
-        if self._use_rhc_avrg_vel_tracking:
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc,base_loc=True)
             obs[:, next_idx:(next_idx+6)] = self._root_twist_avrg_rhc_base_loc
             next_idx+=6
-        if self._add_flight_info:
+        if self._env_opts["add_flight_info"]:
             obs[:, next_idx:(next_idx+self._flight_info_size)] = flight_info_now
             next_idx+=self._flight_info_size
-        if self._add_flight_settings:
+        if self._env_opts["add_flight_settings"]:
             obs[:, next_idx:(next_idx+self._flight_setting_size)] = flight_settings_now
             next_idx+=self._flight_setting_size
 
-        if self._add_rhc_cmds_to_obs:
+        if self._env_opts["add_rhc_cmds_to_obs"]:
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
             next_idx+=self._n_jnts
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_v_rhc_applied_next
             next_idx+=self._n_jnts
             obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_eff_rhc_applied_next
             next_idx+=self._n_jnts
-        if self._use_action_history:
-            if self._add_prev_actions_stats_to_obs: # just add last, std and mean to obs
+        if self._env_opts["use_action_history"]:
+            if self._env_opts["add_prev_actions_stats_to_obs"]: # just add last, std and mean to obs
                 obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=0) # last obs
                 next_idx+=self.actions_dim()
                 obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
@@ -714,11 +724,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
                 next_idx+=self.actions_dim()
             else: # add whole memory buffer to obs
-                for i in range(self._actions_history_size):
+                for i in range(self._env_opts["actions_history_size"]):
                     obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=i) # get all (n_envs x (obs_dim x horizon))
                     next_idx+=self.actions_dim()
 
-        if self._enable_action_smoothing: # adding smoothed actions
+        if self._env_opts["use_action_smoothing"]: # adding smoothed actions
             obs[:, next_idx:(next_idx+self.actions_dim())]=self.get_actual_actions()
             next_idx+=self.actions_dim()
 
@@ -837,7 +847,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     
     def _rhc_fail_idx(self, gpu: bool):
         rhc_fail_idx = self._rhc_status.rhc_fail_idx.get_torch_mirror(gpu=gpu)
-        return self._rhc_fail_idx_scale*rhc_fail_idx
+        return self._env_opts["rhc_fail_idx_scale"]*rhc_fail_idx
     
     def _compute_step_rewards(self):
         
@@ -845,7 +855,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # tracking reward
         task_error_fun = self._track_err_lin
-        if self._use_relative_error:
+        if self._env_opts["use_relative_error"]:
             task_error_fun = self._track_relative_err_lin
 
         agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu) # high level agent refs (hybrid twist)
@@ -853,14 +863,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         task_error = task_error_fun(task_meas=self._step_avrg_root_twist_base_loc, 
             task_ref=agent_task_ref_base_loc,
             weights=self._task_err_weights,
-            directional=self._directional_tracking)
+            directional=self._env_opts["directional_tracking"])
         
         # add to db metrics
         self._track_error_db[:, :]=task_error
 
         idx=self._reward_map["task_error"]
-        sub_rewards[:, idx:(idx+1)] =  self._task_offset*torch.exp(-self._task_scale*task_error)
-        if self._use_fail_idx_weight: # add weight based on fail idx
+        sub_rewards[:, idx:(idx+1)] =  self._env_opts["task_track_offset"]*torch.exp(-self._env_opts["task_track_scale"]*task_error)
+        if self._env_opts["use_fail_idx_weight"]: # add weight based on fail idx
             fail_idx=self._rhc_fail_idx(gpu=self._use_gpu)
             sub_rewards[:, idx:(idx+1)]=(1-fail_idx)*sub_rewards[:, idx:(idx+1)]
         if self._track_rew_smoother is not None: # smooth reward if required
@@ -868,35 +878,35 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             sub_rewards[:, idx:(idx+1)]=self._track_rew_smoother.get()
 
         # mpc vel tracking
-        if self._use_rhc_avrg_vel_tracking:
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc_next,base_loc=True) # get estimated avrg vel 
             # from MPC after stepping
             task_pred_error=task_error_fun(task_meas=self._root_twist_avrg_rhc_base_loc_next, 
                 task_ref=agent_task_ref_base_loc,
                 weights=self._task_pred_err_weights,
-                directional=self._directional_tracking)
+                directional=self._env_opts["directional_tracking"])
             idx=self._reward_map["rhc_avrg_vel_error"]
-            sub_rewards[:, idx:(idx+1)] = self._task_pred_offset*torch.exp(-self._task_pred_scale*task_pred_error)
+            sub_rewards[:, idx:(idx+1)] = self._env_opts["task_pred_track_offset"]*torch.exp(-self._env_opts["task_pred_track_scale"]*task_pred_error)
 
     def _compute_substep_rewards(self):
         
-        if self._add_CoT_reward or self._add_power_reward:
+        if self._env_opts["add_CoT_reward"] or self._env_opts["add_power_reward"]:
             jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
             jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
 
-            if self._add_CoT_reward:
+            if self._env_opts["add_CoT_reward"]:
                 agent_task_ref_base_loc = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
                 ref_norm=torch.norm(agent_task_ref_base_loc, dim=1, keepdim=True)
                 CoT=self._cost_of_transport(jnts_vel=jnts_vel,jnts_effort=jnts_effort,v_ref_norm=ref_norm, 
                     mass_weight=False # inessential scaling
                     )
                 idx=self._reward_map["CoT"]
-                self._substep_rewards[:, idx:(idx+1)] = self._CoT_offset*(1-self._CoT_scale*CoT)
+                self._substep_rewards[:, idx:(idx+1)] = self._env_opts["CoT_offset"]*(1-self._env_opts["CoT_scale"]*CoT)
 
-            if self._add_power_reward:
+            if self._env_opts["add_power_reward"]:
                 weighted_mech_power=self._mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort, drained=True)
                 idx=self._reward_map["mech_pow"]
-                self._substep_rewards[:, idx:(idx+1)] = self._power_offset*(1-self._power_scale*weighted_mech_power)
+                self._substep_rewards[:, idx:(idx+1)] = self._env_opts["power_offset"]*(1-self._env_opts["power_scale"]*weighted_mech_power)
         
     def _randomize_task_refs(self,
         env_indxs: torch.Tensor = None):
@@ -905,8 +915,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # (it will be rotated in base frame when provided to the agent and used for rew 
         # computation)
         
-        if self._use_pof0: # sample from bernoulli distribution
-            torch.bernoulli(input=self._pof1_b,out=self._bernoulli_coeffs) # by default bernoulli_coeffs are 1 if not _use_pof0
+        if self.self._env_opts["use_pof0"]: # sample from bernoulli distribution
+            torch.bernoulli(input=self._pof1_b,out=self._bernoulli_coeffs) # by default bernoulli_coeffs are 1 if not self._env_opts["use_pof0"]
         if env_indxs is None:
             random_uniform=torch.full_like(self._agent_twist_ref_current_w, fill_value=0.0)
             torch.nn.init.uniform_(random_uniform, a=-1, b=1)
@@ -953,7 +963,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         next_idx+=6
 
         # contact forces
-        if self._add_mpc_contact_f_to_obs:
+        if self._env_opts["add_mpc_contact_f_to_obs"]:
             i = 0
             for contact in self._contact_names:
                 obs_names[next_idx+i] = f"fc_{contact}_x_base_loc"
@@ -963,15 +973,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=3*len(self._contact_names)
 
         # data directly from MPC
-        if self._add_fail_idx_to_obs:
+        if self._env_opts["add_fail_idx_to_obs"]:
             obs_names[next_idx] = "rhc_fail_idx"
             next_idx+=1
-        if self._add_term_mpc_capsize:
+        if self._env_opts["add_term_mpc_capsize"]:
             obs_names[next_idx] = "gn_x_rhc_base_loc"
             obs_names[next_idx+1] = "gn_y_rhc_base_loc"
             obs_names[next_idx+2] = "gn_z_rhc_base_loc"
             next_idx+=3
-        if self._use_rhc_avrg_vel_tracking:
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
             obs_names[next_idx] = "linvel_x_avrg_rhc"
             obs_names[next_idx+1] = "linvel_y_avrg_rhc"
             obs_names[next_idx+2] = "linvel_z_avrg_rhc"
@@ -979,14 +989,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_names[next_idx+4] = "omega_y_avrg_rhc"
             obs_names[next_idx+5] = "omega_z_avrg_rhc"
             next_idx+=6
-        if self._add_flight_info:
+        if self._env_opts["add_flight_info"]:
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_len_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
-        if self._add_flight_settings:
+        if self._env_opts["add_flight_settings"]:
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_len_cmd_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
@@ -997,7 +1007,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs_names[next_idx+i] = "flight_end_cmd_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
 
-        if self._add_rhc_cmds_to_obs:
+        if self._env_opts["add_rhc_cmds_to_obs"]:
             for i in range(self._n_jnts): # jnt obs (pos):
                 obs_names[next_idx+i] = f"rhc_cmd_q_{jnt_names[i]}"
             next_idx+=self._n_jnts
@@ -1008,9 +1018,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs_names[next_idx+i] = f"rhc_cmd_eff_{jnt_names[i]}"
             next_idx+=self._n_jnts
         # previous actions info
-        if self._use_action_history:
+        if self._env_opts["use_action_history"]:
             action_names = self._get_action_names()
-            if self._add_prev_actions_stats_to_obs:
+            if self._env_opts["add_prev_actions_stats_to_obs"]:
                 for act_idx in range(self.actions_dim()):
                     obs_names[next_idx+act_idx] = action_names[act_idx]+f"_prev_act"
                 next_idx+=self.actions_dim()
@@ -1026,7 +1036,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                         obs_names[next_idx+act_idx] = action_names[act_idx]+f"_m{i+1}_act"
                     next_idx+=self.actions_dim()
 
-        if self._enable_action_smoothing:
+        if self._env_opts["use_action_smoothing"]:
             for smoothed_action in range(self.actions_dim()):
                 obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
             next_idx+=self.actions_dim()
@@ -1059,21 +1069,21 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         reward_names.append("task_error")
         self._reward_map["task_error"]=counter
         counter+=1
-        if self._add_power_reward and self._add_CoT_reward:
+        if self._env_opts["add_power_reward"] and self._env_opts["add_CoT_reward"]:
             Journal.log(self.__class__.__name__,
                     "__init__",
                     "Only one between CoT and power reward can be used!",
                     LogType.EXCEP,
                     throw_when_excep=True)
-        if self._add_CoT_reward:
+        if self._env_opts["add_CoT_reward"]:
             reward_names.append("CoT")
             self._reward_map["CoT"]=counter
             counter+=1
-        if self._add_power_reward:
+        if self._env_opts["add_power_reward"]:
             reward_names.append("mech_pow")
             self._reward_map["mech_pow"]=counter
             counter+=1
-        if self._use_rhc_avrg_vel_tracking:
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
             reward_names.append("rhc_avrg_vel_error")   
             self._reward_map["rhc_avrg_vel_error"]=counter
             counter+=1   
@@ -1083,7 +1093,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def _get_sub_trunc_names(self):
         sub_trunc_names = []
         sub_trunc_names.append("ep_timeout")
-        if self._single_task_ref_per_episode:
+        if self._env_opts["single_task_ref_per_episode"]:
             sub_trunc_names.append("task_ref_rand")
         return sub_trunc_names
 
@@ -1092,7 +1102,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         sub_term_names = []
         sub_term_names.append("rhc_failure")
         sub_term_names.append("robot_capsize")
-        if self._add_term_mpc_capsize:
+        if self._env_opts["add_term_mpc_capsize"]:
             sub_term_names.append("rhc_capsize")
 
         return sub_term_names

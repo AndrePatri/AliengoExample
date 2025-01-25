@@ -11,12 +11,9 @@ class EpisodicRewards(EpisodicData):
     def __init__(self,
             reward_tensor: torch.Tensor,
             reward_names: List[str] = None,
-            max_episode_length: int = 1,
             ep_vec_freq: int = None,
             store_transitions: bool = False, # also store detailed transition history
             max_ep_duration: int = -1):
-
-        self._max_episode_length = max_episode_length
         
         # separate ep data metrics for total reward
         self._tot_reward_episodic_stats=EpisodicData(name="TotReward",
@@ -32,7 +29,7 @@ class EpisodicRewards(EpisodicData):
                 store_transitions=store_transitions,
                 max_ep_duration=max_ep_duration)
 
-        self.set_constant_data_scaling(scaling=max_episode_length)
+        self.set_constant_data_scaling(scaling=max_ep_duration)
     
     def set_constant_data_scaling(self, scaling: int):
         # overrides parent

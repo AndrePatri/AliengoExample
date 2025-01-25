@@ -31,9 +31,9 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._control_flength=True
-        self._control_fapex=True
-        self._control_fend=False
+        self._add_or_read_env_opt(env_opts, "control_flength", default=True) 
+        self._add_or_read_env_opt(env_opts, "control_fapex", default=True) 
+        self._add_or_read_env_opt(env_opts, "control_fend", default=False) 
 
         self._actions_map={}
 
@@ -50,11 +50,11 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         robot_state_tmp.close()
         
         actions_dim=10 # base size
-        if self._control_flength:
+        if env_opts["control_flength"]:
             actions_dim+=n_contacts
-        if self._control_fapex:
+        if env_opts["control_fapex"]:
             actions_dim+=n_contacts
-        if self._control_fend:
+        if env_opts["control_fend"]:
             actions_dim+=n_contacts
 
         LinVelTrackBaseline.__init__(self,
@@ -69,10 +69,6 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             timeout_ms=timeout_ms,
             env_opts=env_opts)
 
-        self.custom_db_info["control_flength"] = self._control_flength
-        self.custom_db_info["control_fapex"] = self._control_fapex
-        self.custom_db_info["control_fend"] = self._control_fend
-
     def get_file_paths(self):
         paths=LinVelTrackBaseline.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
@@ -83,17 +79,17 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         LinVelTrackBaseline._custom_post_init(self)
 
         # actions bounds
-        actions=self._get_action_names() # also fills actions map
+        _=self._get_action_names() # also fills actions map
         
-        if not self._use_prob_based_stepping:
+        if not self._env_opts["use_prob_based_stepping"]:
             self._is_continuous_actions[6:10]=False
-        v_cmd_max = 2.5*self.max_cmd_v
-        omega_cmd_max = 2.5*self.max_cmd_v
+        v_cmd_max = 2.5*self._env_opts["max_cmd_v"]
+        omega_cmd_max = 2.5*self._env_opts["max_cmd_v"]
         self._actions_lb[:, 0:3] = -v_cmd_max 
         self._actions_ub[:, 0:3] = v_cmd_max  
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
         self._actions_ub[:, 3:6] = omega_cmd_max  
-        if self._use_prob_based_stepping:
+        if self._env_opts["use_prob_based_stepping"]:
             self._actions_lb[:, 6:10] = 0.0 # contact flags
             self._actions_ub[:, 6:10] = 1.0 
         else:
@@ -101,19 +97,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             self._actions_ub[:, 6:10] = 1.0 
         
         # flight params (length)
-        if self._control_flength:
+        if self._env_opts["control_flength"]:
             idx=self._actions_map["flight_len_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=3
             self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (apex)
-        if self._control_fapex:
+        if self._env_opts["control_fapex"]:
             idx=self._actions_map["flight_apex_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
         # flight params (end)
-        if self._control_fend:
+        if self._env_opts["control_fend"]:
             idx=self._actions_map["flight_end_start"]
             self._actions_lb[:, idx:(idx+self._n_contacts)]=0.0
             self._actions_ub[:, idx:(idx+self._n_contacts)]=0.5
@@ -127,19 +123,19 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
 
         action_to_be_applied = self.get_actual_actions()
         
-        if self._control_flength:
+        if self._env_opts["control_flength"]:
             idx=self._actions_map["flight_len_start"]
             flen_now=self._rhc_refs.flight_settings.get(data_type="len", gpu=self._use_gpu)
             flen_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=flen_now, data_type="len", gpu=self._use_gpu)
 
-        if self._control_fapex:
+        if self._env_opts["control_fapex"]:
             idx=self._actions_map["flight_apex_start"]
             fapex_now=self._rhc_refs.flight_settings.get(data_type="apex_dpos", gpu=self._use_gpu)
             fapex_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fapex_now, data_type="apex_dpos", gpu=self._use_gpu)
             
-        if self._control_fend:
+        if self._env_opts["control_fend"]:
             idx=self._actions_map["flight_end_start"]
             fend_now=self._rhc_refs.flight_settings.get(data_type="end_dpos", gpu=self._use_gpu)
             fend_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
@@ -165,21 +161,22 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
         for i in range(len(self._contact_names)):
             contact=self._contact_names[i]
             action_names[next_idx] = f"contact_flag_{contact}"
+            self._actions_map["contact_flag_start"]=next_idx
             next_idx+=1
 
-        if self._control_flength:
+        if self._env_opts["control_flength"]:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"flight_len_{contact}"
             self._actions_map["flight_len_start"]=next_idx
             next_idx+=len(self._contact_names)
-        if self._control_fapex:
+        if self._env_opts["control_fapex"]:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"flight_apex_{contact}"
             self._actions_map["flight_apex_start"]=next_idx
             next_idx+=len(self._contact_names)
-        if self._control_fend:
+        if self._env_opts["control_fend"]:
             for i in range(len(self._contact_names)):
                 contact=self._contact_names[i]
                 action_names[next_idx+i] = f"flight_end_{contact}"

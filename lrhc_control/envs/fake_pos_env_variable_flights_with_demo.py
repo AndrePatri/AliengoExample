@@ -6,10 +6,10 @@ from EigenIPC.PyEigenIPC import VLevel, LogType, Journal
 from lrhc_control.utils.gait_scheduler import QuadrupedGaitPatternGenerator, GaitScheduler
 from lrhc_control.utils.signal_smoother import ExponentialSignalSmoother
 
-from lrhc_control.envs.fake_pos_env_baseline import FakePosEnvBaseline
+from lrhc_control.envs.fake_pos_env_variable_flights import FakePosEnvVariableFlights
 from typing import Dict
 
-class FakePosEnvWithDemo(FakePosEnvBaseline):
+class FakePosEnvVariableFlightsWithDemo(FakePosEnvVariableFlights):
 
     def __init__(self,
             namespace: str,
@@ -21,17 +21,25 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
             override_agent_refs: bool = False,
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
-
+        
         if not "demo_envs_perc" in env_opts:
             env_opts["demo_envs_perc"]=0.1 # [0, 1]
-            
+
         self._add_or_read_env_opt(env_opts, "full_demo", 
             True)
         self._add_or_read_env_opt(env_opts, "smooth_twist_cmd", 
             True)
         self._add_or_read_env_opt(env_opts, "smoothing_horizon_twist", 
             0.08)
-
+        self._add_or_read_env_opt(env_opts, "use_default_flight_params", 
+            True)
+        self._add_or_read_env_opt(env_opts, "default_flen", 
+            20)
+        self._add_or_read_env_opt(env_opts, "default_fapex", 
+            0.15)
+        self._add_or_read_env_opt(env_opts, "default_fdend", 
+            0.0)
+        
         self._add_or_read_env_opt(env_opts, "stopping_thresh", 
             0.01)
         self._add_or_read_env_opt(env_opts, "walk_to_trot_thresh", 
@@ -42,7 +50,7 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
             2.5)
         self._add_or_read_env_opt(env_opts, "phase_period_trot", 
             2.0)
-            
+        
         # kyon no wheels
         # env_opts["stopping_thresh"]=0.01
         # env_opts["walk_to_trot_thresh"]=0.5
@@ -70,8 +78,8 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         # env_opts["walk_to_trot_thresh_omega"]=3.0
         # env_opts["phase_period_walk"]=3.5
         # env_opts["phase_period_trot"]=2.0
-        
-        FakePosEnvBaseline.__init__(self,
+
+        FakePosEnvVariableFlights.__init__(self,
             namespace=namespace,
             verbose=verbose,
             vlevel=vlevel,
@@ -93,7 +101,7 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         # (can be deactived externally)
 
     def get_file_paths(self):
-        paths=FakePosEnvBaseline.get_file_paths(self)
+        paths=FakePosEnvVariableFlights.get_file_paths(self)
         paths.append(os.path.abspath(__file__))        
         return paths
     
@@ -161,7 +169,7 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         )
 
     def _custom_post_step(self,episode_finished):
-        FakePosEnvBaseline._custom_post_step(self,episode_finished=episode_finished)
+        FakePosEnvVariableFlights._custom_post_step(self,episode_finished=episode_finished)
         # executed after checking truncations and terminations
         if self.demo_active():
             finished_and_demo=torch.logical_and(episode_finished.flatten(), self._demo_envs_idxs_bool)
@@ -181,7 +189,6 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
                 #     value=0.0)
             
             if self._twist_smoother is not None: # smoother only reset at terminations
-                
                 terminated_demo_idxs=self._env_to_gait_sched_mapping[terminated_and_demo]
                 if self._use_gpu:
                     self._twist_smoother.reset_all(to_be_reset=terminated_demo_idxs.cuda().flatten(),
@@ -190,14 +197,12 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
                     self._twist_smoother.reset_all(to_be_reset=terminated_demo_idxs.cpu().flatten(),
                         value=0.0)
 
-
     def _override_actions_with_demo(self):
         
         if self.demo_active():
             
             # get some data
             agent_action = self.get_actions()
-            
             agent_twist_ref_current = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
             # overwriting agent gait actions with the ones taken from the gait schedulers for 
@@ -250,3 +255,15 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
                     agent_action[self._demo_envs_idxs, 0:6]=agent_twist_ref_current[self._demo_envs_idxs, :]
                     
                 agent_action[stop_and_demo, 0:6]=0.0
+
+                if self._env_opts["use_default_flight_params"]:
+                    if self._env_opts["control_flength"]:
+                        start=self._actions_map["flight_len_start"]
+                        agent_action[self._demo_envs_idxs, start:(start+self._n_contacts)]=self._env_opts["default_flen"]
+                    if self._env_opts["control_fapex"]:
+                        start=self._actions_map["flight_apex_start"]
+                        agent_action[self._demo_envs_idxs, start:(start+self._n_contacts)]=self._env_opts["default_fapex"]
+                    if self._env_opts["control_fend"]:
+                        start=self._actions_map["flight_end_start"]
+                        agent_action[self._demo_envs_idxs, start:(start+self._n_contacts)]=self._env_opts["default_fdend"]
+
