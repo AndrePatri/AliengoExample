@@ -95,7 +95,7 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             self._dp_versor[:, :]=self._p_delta_w/self._dp_norm
 
             # we compute the twist refs for the agent depending of the position error
-            self._agent_twist_ref_current_w[:, 0:2]=self._dp_norm*self._dp_versor/self._max_dt
+            self._agent_twist_ref_current_w[:, 0:2]=self._dp_norm*self._dp_versor/self._env_opts["max_dt"]
         else:
             self._p_delta_w[env_indxs, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[env_indxs, 0:2] -\
                 self._p_trgt_w[env_indxs, :]
@@ -103,7 +103,7 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
             self._dp_norm[env_indxs, :]=self._p_delta_w[env_indxs, :].norm(dim=1,keepdim=True)+1e-6
             self._dp_versor[env_indxs, :]=self._p_delta_w[env_indxs, :]/self._dp_norm[env_indxs, :]
 
-            self._agent_twist_ref_current_w[env_indxs, 0:2]=self._dp_norm[env_indxs, :]*self._dp_versor[env_indxs, :]/self._max_dt
+            self._agent_twist_ref_current_w[env_indxs, 0:2]=self._dp_norm[env_indxs, :]*self._dp_versor[env_indxs, :]/self._env_opts["max_dt"]
 
     def _override_refs(self,
             env_indxs: torch.Tensor = None):
