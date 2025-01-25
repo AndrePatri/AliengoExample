@@ -32,10 +32,11 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._max_distance=5.0 # [m]
-        self._min_distance=self._max_distance-0.01
-        self._max_vref=1.0 # [m/s]
-        self._max_dt=self._max_distance/ self._max_vref
+        self._add_or_read_env_opt(env_opts, "max_distance", default=5.0) # [m]
+        self._add_or_read_env_opt(env_opts, "min_distance", default=env_opts["max_distance"]-0.01) # [m]
+        self._add_or_read_env_opt(env_opts, "max_vref", default=1.0) # [m/s]
+        self._add_or_read_env_opt(env_opts, "max_dt", default=env_opts["max_distance"]/ env_opts["max_vref"])
+
         LinVelTrackBaseline.__init__(self, 
             namespace=namespace,
             actions_dim=actions_dim, # twist + contact flags
@@ -47,11 +48,6 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             override_agent_refs=override_agent_refs,
             timeout_ms=timeout_ms,
             env_opts=env_opts)
-        
-        self.custom_db_info["max_distance"] = self._max_distance
-        self.custom_db_info["min_distance"] = self._min_distance
-        self.custom_db_info["max_vref"] = self._max_vref
-        self.custom_db_info["max_dt"] = self._max_dt
 
     def get_file_paths(self):
         paths=LinVelTrackBaseline.get_file_paths(self)
@@ -100,7 +96,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             self._dp_versor[:, :]=self._p_delta_w/self._dp_norm
 
             # we compute the twist refs for the agent depending of the position error
-            self._agent_twist_ref_current_w[:, 0:2]=self._dp_norm*self._dp_versor/self._max_dt
+            self._agent_twist_ref_current_w[:, 0:2]=self._dp_norm*self._dp_versor/self._env_opts["max_dt"]
         else:
             self._p_delta_w[env_indxs, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[env_indxs, 0:2] -\
                 self._p_trgt_w[env_indxs, :]
@@ -108,7 +104,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             self._dp_norm[env_indxs, :]=self._p_delta_w[env_indxs, :].norm(dim=1,keepdim=True)+1e-6
             self._dp_versor[env_indxs, :]=self._p_delta_w[env_indxs, :]/self._dp_norm[env_indxs, :]
 
-            self._agent_twist_ref_current_w[env_indxs, 0:2]=self._dp_norm[env_indxs, :]*self._dp_versor[env_indxs, :]/self._max_dt
+            self._agent_twist_ref_current_w[env_indxs, 0:2]=self._dp_norm[env_indxs, :]*self._dp_versor[env_indxs, :]/self._env_opts["max_dt"]
 
     def _override_refs(self,
             env_indxs: torch.Tensor = None):
@@ -135,7 +131,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
 
         # we randomize the reference in world frame
         if env_indxs is None:
-            self._trgt_d.uniform_(self._min_distance, self._max_distance)
+            self._trgt_d.uniform_(self._env_opts["min_distance"], self._env_opts["max_distance"])
             self._trgt_theta.uniform_(0.0, 2*torch.pi)
 
             self._p_trgt_w[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2] +\
@@ -147,7 +143,7 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
                 integer_idxs=torch.nonzero(env_indxs).flatten()
                 
                 trgt_d_selected=self._trgt_d[integer_idxs, :]
-                trgt_d_selected.uniform_(self._min_distance, self._max_distance)
+                trgt_d_selected.uniform_(self._env_opts["min_distance"], self._env_opts["max_distance"])
                 self._trgt_d[integer_idxs, :]=trgt_d_selected
 
                 trgt_theta_selected=self._trgt_theta[integer_idxs, :]

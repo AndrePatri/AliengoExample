@@ -339,9 +339,11 @@ class SActorCriticAlgoBase(ABC):
 
             # overwrite init params
             self._init_params(tot_tsteps=n_eval_timesteps,
-                run_name=self._run_name)
+                run_name=self._run_name,
+                custom_args=custom_args)
         else:
-            self._init_params(tot_tsteps=tot_tsteps)
+            self._init_params(tot_tsteps=tot_tsteps,
+                custom_args=custom_args)
         
         self._init_dbdata()
 
@@ -388,7 +390,7 @@ class SActorCriticAlgoBase(ABC):
         if (self._debug):
             if self._remote_db:
                 job_type = "evaluation" if self._eval else "training"
-                full_run_config={**self._hyperparameters,**self._env.custom_db_info}
+                full_run_config={**self._hyperparameters,**self._env.env_opts()}
                 wandb.init(
                     project="LRHControl",
                     group=self._run_name,
@@ -458,7 +460,8 @@ class SActorCriticAlgoBase(ABC):
 
     def _init_params(self,
             tot_tsteps: int,
-            run_name: str = "SACDefaultRunName"):
+            run_name: str = "SACDefaultRunName",
+            custom_args: Dict = {}):
 
         self._run_name = run_name
     
@@ -512,8 +515,10 @@ class SActorCriticAlgoBase(ABC):
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
                 
-        self._n_expl_env_perc=0.0 # [0, 1]
-        self._n_expl_envs = int(self._num_envs*self._n_expl_env_perc) # n of random envs on which noisy actions will be applied
+        self._expl_envs_perc=0.0 # [0, 1]
+        if "expl_envs_perc" in custom_args:
+            self._expl_envs_perc=custom_args["expl_envs_perc"]
+        self._n_expl_envs = int(self._num_envs*self._expl_envs_perc) # n of random envs on which noisy actions will be applied
         self._allow_expl_during_eval=False
         self._noise_freq = 25
         self._noise_duration = 5 # should be less than _noise_freq
@@ -530,6 +535,7 @@ class SActorCriticAlgoBase(ABC):
             # computing expl env selector
             self._expl_env_selector = torch.randperm(self._num_envs, device="cpu")[:self._n_expl_envs]
             self._expl_env_selector_bool[self._expl_env_selector]=True
+
         # demo envs
         if self._demo_env_selector_bool is None:
             self._db_env_selector_bool[:]=~self._expl_env_selector_bool
@@ -1217,9 +1223,6 @@ class SActorCriticAlgoBase(ABC):
                 for subname in subnames:
                     var_name = db_dname + "_" + subname
                     hf.create_dataset(var_name, data=data[subname])
-            db_info_names = list(self._env.custom_db_info.keys())
-            for db_info in db_info_names:
-                hf.create_dataset(db_info, data=self._env.custom_db_info[db_info])
             
             # other data
             if self._agent.running_norm is not None:
@@ -1465,7 +1468,7 @@ class SActorCriticAlgoBase(ABC):
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
             sub_returns[:, :]=self._episodic_reward_metrics.get_sub_rew_avrg()
             tot_returns=self._tot_returns.get_torch_mirror(gpu=False)
-            tot_returns[:, :]=self._episodic_reward_metrics.get_tot_rew_avrg_over_envs()
+            tot_returns[:, :]=self._episodic_reward_metrics.get_tot_rew_avrg()
             self._sub_returns.synch_all(read=False)
             self._tot_returns.synch_all(read=False)
             
