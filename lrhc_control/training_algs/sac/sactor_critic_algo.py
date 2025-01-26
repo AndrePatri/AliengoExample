@@ -402,7 +402,7 @@ class SActorCriticAlgoBase(ABC):
                     mode="online", # "online", "offline" or "disabled"
                     entity=None,
                     sync_tensorboard=True,
-                    config=full_ruself._hyperparametersn_config,
+                    config=self._hyperparameters,
                     monitor_gym=True,
                     save_code=True,
                     dir=self._drop_dir
