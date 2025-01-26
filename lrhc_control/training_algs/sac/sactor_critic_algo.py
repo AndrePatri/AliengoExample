@@ -206,7 +206,7 @@ class SActorCriticAlgoBase(ABC):
             norm_obs: bool = False,
             rescale_obs: bool = True):
 
-        tot_tsteps=100e6
+        tot_tsteps=int(100e6)
         if "tot_tsteps" in custom_args:
             tot_tsteps=custom_args["tot_tsteps"]
 
@@ -495,7 +495,7 @@ class SActorCriticAlgoBase(ABC):
             self._bnorm_vecfreq=self._collection_freq
 
         self._total_timesteps = int(tot_tsteps)
-        self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
+        # self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
         self._total_steps = self._total_timesteps_vec//self._collection_freq
         self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps
