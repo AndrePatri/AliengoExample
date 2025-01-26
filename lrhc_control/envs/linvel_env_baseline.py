@@ -36,112 +36,112 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         env_name = "LinVelTrack"
         device = "cuda" if use_gpu else "cpu"
 
-        self._add_or_read_env_opt(env_opts, "srew_drescaling", 
+        self._add_env_opt(env_opts, "srew_drescaling", 
             False)
         
         # counters settings
-        self._add_or_read_env_opt(env_opts, "single_task_ref_per_episode", 
+        self._add_env_opt(env_opts, "single_task_ref_per_episode", 
             True # if True, the task ref is constant over the episode (ie
             # episodes are truncated when task is changed) 
             )
 
-        self._add_or_read_env_opt(env_opts, "episode_timeout_lb", 
+        self._add_env_opt(env_opts, "episode_timeout_lb", 
             1024)
-        self._add_or_read_env_opt(env_opts, "episode_timeout_ub", 
+        self._add_env_opt(env_opts, "episode_timeout_ub", 
             1024)
-        self._add_or_read_env_opt(env_opts, "n_steps_task_rand_lb", 
+        self._add_env_opt(env_opts, "n_steps_task_rand_lb", 
             512)
-        self._add_or_read_env_opt(env_opts, "n_steps_task_rand_ub", 
+        self._add_env_opt(env_opts, "n_steps_task_rand_ub", 
             512)
-        self._add_or_read_env_opt(env_opts, "use_random_safety_reset", 
+        self._add_env_opt(env_opts, "use_random_safety_reset", 
             True)
-        self._add_or_read_env_opt(env_opts, "random_reset_freq", 
+        self._add_env_opt(env_opts, "random_reset_freq", 
             10) # a random reset once every n-episodes (per env)
-        self._add_or_read_env_opt(env_opts, "use_random_trunc", 
+        self._add_env_opt(env_opts, "use_random_trunc", 
             True)
-        self._add_or_read_env_opt(env_opts, "random_trunc_freq", 
+        self._add_env_opt(env_opts, "random_trunc_freq", 
             env_opts["episode_timeout_ub"]*5) # to remove temporal correlations between envs
-        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+        self._add_env_opt(env_opts, "random_trunc_freq_delta", 
             env_opts["episode_timeout_ub"]*2)  # to randomize trunc frequency between envs
         
-        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+        self._add_env_opt(env_opts, "random_trunc_freq_delta", 
             env_opts["episode_timeout_ub"]*2)
-        self._add_or_read_env_opt(env_opts, "random_trunc_freq_delta", 
+        self._add_env_opt(env_opts, "random_trunc_freq_delta", 
             env_opts["episode_timeout_ub"]*2)
         
         if not env_opts["single_task_ref_per_episode"]:
             env_opts["random_reset_freq"]=env_opts["random_reset_freq"]/\
                 round(env_opts["episode_timeout_lb"])/float(env_opts["n_steps_task_rand_lb"])
         
-        self._add_or_read_env_opt(env_opts, "action_repeat", 1) # frame skipping (different agent action every action_repeat
+        self._add_env_opt(env_opts, "action_repeat", 1) # frame skipping (different agent action every action_repeat
         # env substeps)
         
-        self._add_or_read_env_opt(env_opts, "n_preinit_steps", 1) # n steps of the controllers to properly initialize everything
+        self._add_env_opt(env_opts, "n_preinit_steps", 1) # n steps of the controllers to properly initialize everything
         
-        self._add_or_read_env_opt(env_opts, "vec_ep_freq_metrics_db", 1) # n eps over which debug metrics are reported
-        self._add_or_read_env_opt(env_opts, "demo_envs_perc", 0.0)
-        self._add_or_read_env_opt(env_opts, "max_cmd_v", 1.5) # maximum cmd v for v actions (single component)
+        self._add_env_opt(env_opts, "vec_ep_freq_metrics_db", 1) # n eps over which debug metrics are reported
+        self._add_env_opt(env_opts, "demo_envs_perc", 0.0)
+        self._add_env_opt(env_opts, "max_cmd_v", 1.5) # maximum cmd v for v actions (single component)
 
         # action smoothing
-        self._add_or_read_env_opt(env_opts, "use_action_smoothing", False)
-        self._add_or_read_env_opt(env_opts, "smoothing_horizon_c", 0.01)
-        self._add_or_read_env_opt(env_opts, "smoothing_horizon_d", 0.03)
+        self._add_env_opt(env_opts, "use_action_smoothing", False)
+        self._add_env_opt(env_opts, "smoothing_horizon_c", 0.01)
+        self._add_env_opt(env_opts, "smoothing_horizon_d", 0.03)
 
         # whether to smooth vel error signal
-        self._add_or_read_env_opt(env_opts, "use_track_reward_smoother", False)
-        self._add_or_read_env_opt(env_opts, "smoothing_horizon_vel_err", 0.08)
-        self._add_or_read_env_opt(env_opts, "track_rew_smoother", None)
+        self._add_env_opt(env_opts, "use_track_reward_smoother", False)
+        self._add_env_opt(env_opts, "smoothing_horizon_vel_err", 0.08)
+        self._add_env_opt(env_opts, "track_rew_smoother", None)
 
         # rewards
         self._reward_map={}
 
-        self._add_or_read_env_opt(env_opts, "add_power_reward", False)
-        self._add_or_read_env_opt(env_opts, "add_CoT_reward", True)
-        self._add_or_read_env_opt(env_opts, "use_rhc_avrg_vel_tracking", False)
+        self._add_env_opt(env_opts, "add_power_reward", False)
+        self._add_env_opt(env_opts, "add_CoT_reward", True)
+        self._add_env_opt(env_opts, "use_rhc_avrg_vel_tracking", False)
 
         # task tracking
-        self._add_or_read_env_opt(env_opts, "use_relative_error", default=False) # use relative vel error (wrt current task norm)
-        self._add_or_read_env_opt(env_opts, "directional_tracking", default=True) # whether to compute tracking rew based on reference direction
+        self._add_env_opt(env_opts, "use_relative_error", default=False) # use relative vel error (wrt current task norm)
+        self._add_env_opt(env_opts, "directional_tracking", default=True) # whether to compute tracking rew based on reference direction
 
-        self._add_or_read_env_opt(env_opts, "use_fail_idx_weight", default=False)
-        self._add_or_read_env_opt(env_opts, "task_track_offset", default=10.0)
-        self._add_or_read_env_opt(env_opts, "task_track_scale", default=3.0)
-        self._add_or_read_env_opt(env_opts, "task_track_front_weight", default=1.0)
-        self._add_or_read_env_opt(env_opts, "task_track_lat_weight", default=env_opts["task_track_front_weight"]/20.0)
-        self._add_or_read_env_opt(env_opts, "task_track_vert_weight", default=env_opts["task_track_front_weight"]/20.0)
-        self._add_or_read_env_opt(env_opts, "task_track_omega_weight", default=env_opts["task_track_front_weight"]/20.0)
+        self._add_env_opt(env_opts, "use_fail_idx_weight", default=False)
+        self._add_env_opt(env_opts, "task_track_offset", default=10.0)
+        self._add_env_opt(env_opts, "task_track_scale", default=3.0)
+        self._add_env_opt(env_opts, "task_track_front_weight", default=1.0)
+        self._add_env_opt(env_opts, "task_track_lat_weight", default=env_opts["task_track_front_weight"]/20.0)
+        self._add_env_opt(env_opts, "task_track_vert_weight", default=env_opts["task_track_front_weight"]/20.0)
+        self._add_env_opt(env_opts, "task_track_omega_weight", default=env_opts["task_track_front_weight"]/20.0)
 
         # task pred tracking
-        self._add_or_read_env_opt(env_opts, "task_pred_track_offset", default=10.0)
-        self._add_or_read_env_opt(env_opts, "task_pred_track_scale", default=3.0)
+        self._add_env_opt(env_opts, "task_pred_track_offset", default=10.0)
+        self._add_env_opt(env_opts, "task_pred_track_scale", default=3.0)
 
         # energy penalties
-        self._add_or_read_env_opt(env_opts, "CoT_offset", default=4.0)
-        self._add_or_read_env_opt(env_opts, "CoT_scale", default=5e-4)
-        self._add_or_read_env_opt(env_opts, "power_offset", default=4.0)
-        self._add_or_read_env_opt(env_opts, "power_scale", default=5e-4)
+        self._add_env_opt(env_opts, "CoT_offset", default=4.0)
+        self._add_env_opt(env_opts, "CoT_scale", default=5e-4)
+        self._add_env_opt(env_opts, "power_offset", default=4.0)
+        self._add_env_opt(env_opts, "power_scale", default=5e-4)
 
         # terminations
-        self._add_or_read_env_opt(env_opts, "add_term_mpc_capsize", default=False) # add termination based on mpc capsizing prediction
+        self._add_env_opt(env_opts, "add_term_mpc_capsize", default=False) # add termination based on mpc capsizing prediction
 
         # observations
-        self._add_or_read_env_opt(env_opts, "rhc_fail_idx_scale", default=1.0)
-        self._add_or_read_env_opt(env_opts, "use_action_history", default=True) # whether to add information on past actions to obs
-        self._add_or_read_env_opt(env_opts, "add_prev_actions_stats_to_obs", default=True) # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
-        self._add_or_read_env_opt(env_opts, "actions_history_size", default=10) # [env substeps] !! add full action history over a window
+        self._add_env_opt(env_opts, "rhc_fail_idx_scale", default=1.0)
+        self._add_env_opt(env_opts, "use_action_history", default=True) # whether to add information on past actions to obs
+        self._add_env_opt(env_opts, "add_prev_actions_stats_to_obs", default=True) # add actions std, mean + last action over a horizon to obs (if self._use_action_history True)
+        self._add_env_opt(env_opts, "actions_history_size", default=10) # [env substeps] !! add full action history over a window
         
-        self._add_or_read_env_opt(env_opts, "add_mpc_contact_f_to_obs", default=True) # add estimate vertical contact f to obs
-        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True) # we need to obserse mpc failure idx to correlate it with terminations
+        self._add_env_opt(env_opts, "add_mpc_contact_f_to_obs", default=True) # add estimate vertical contact f to obs
+        self._add_env_opt(env_opts, "add_fail_idx_to_obs", default=True) # we need to obserse mpc failure idx to correlate it with terminations
         
-        self._add_or_read_env_opt(env_opts, "use_linvel_from_rhc", default=True) # no lin vel meas available, we use est. from mpc
-        self._add_or_read_env_opt(env_opts, "add_flight_info", default=True) # add feedback info on pos and length of flight phases from mpc
-        self._add_or_read_env_opt(env_opts, "add_flight_settings", default=True) # add feedback info on flight params from mpc
-        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
-        self._add_or_read_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
+        self._add_env_opt(env_opts, "use_linvel_from_rhc", default=True) # no lin vel meas available, we use est. from mpc
+        self._add_env_opt(env_opts, "add_flight_info", default=True) # add feedback info on pos and length of flight phases from mpc
+        self._add_env_opt(env_opts, "add_flight_settings", default=True) # add feedback info on flight params from mpc
+        self._add_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
+        self._add_env_opt(env_opts, "add_fail_idx_to_obs", default=True)
 
-        self._add_or_read_env_opt(env_opts, "use_prob_based_stepping", default=False) # interpret actions as stepping prob (never worked)
+        self._add_env_opt(env_opts, "use_prob_based_stepping", default=False) # interpret actions as stepping prob (never worked)
 
-        self._add_or_read_env_opt(env_opts, "add_rhc_cmds_to_obs", default=True) # add the rhc cmds which are being applied now to the robot
+        self._add_env_opt(env_opts, "add_rhc_cmds_to_obs", default=True) # add the rhc cmds which are being applied now to the robot
 
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
@@ -205,9 +205,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=actions_dim # it's better to also add the smoothed actions as obs
         
         # Agent task reference
-        self._add_or_read_env_opt(env_opts, "use_pof0", default=False) # with some prob, references will be null
-        self._add_or_read_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
-        self._add_or_read_env_opt(env_opts, "max_ref", default=1.0)
+        self._add_env_opt(env_opts, "use_pof0", default=False) # with some prob, references will be null
+        self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
+        self._add_env_opt(env_opts, "max_ref", default=1.0)
 
         # ready to init base class
         self._this_child_path = os.path.abspath(__file__)
@@ -225,7 +225,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     timeout_ms=timeout_ms,
                     env_opts=env_opts)
     
-    def _add_or_read_env_opt(self,
+    def _add_env_opt(self,
             opts: Dict,
             name: str,
             default):

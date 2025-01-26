@@ -32,10 +32,10 @@ class FakePosEnvBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._add_or_read_env_opt(env_opts, "max_distance", default=5.0) # [m]
-        self._add_or_read_env_opt(env_opts, "min_distance", default=env_opts["max_distance"]-0.01) # [m]
-        self._add_or_read_env_opt(env_opts, "max_vref", default=1.0) # [m/s]
-        self._add_or_read_env_opt(env_opts, "max_dt", default=env_opts["max_distance"]/ env_opts["max_vref"])
+        self._add_env_opt(env_opts, "max_distance", default=5.0) # [m]
+        self._add_env_opt(env_opts, "min_distance", default=env_opts["max_distance"]-0.01) # [m]
+        self._add_env_opt(env_opts, "max_vref", default=1.0) # [m/s]
+        self._add_env_opt(env_opts, "max_dt", default=env_opts["max_distance"]/ env_opts["max_vref"])
 
         LinVelTrackBaseline.__init__(self, 
             namespace=namespace,
