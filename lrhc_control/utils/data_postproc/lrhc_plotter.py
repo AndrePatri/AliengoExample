@@ -1043,7 +1043,7 @@ if __name__ == "__main__":
                 data_idxs=None)
             
             plotter.plot_data(dataset_name=ep_prefix+"RhcRefsFlag", 
-                title=ep_prefix+"Rhc fail idx", 
+                title=ep_prefix+"Rhc refs flags", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
