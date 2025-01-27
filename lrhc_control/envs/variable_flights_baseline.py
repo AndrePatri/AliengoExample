@@ -31,9 +31,9 @@ class VariableFlightsBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
 
-        self._add_or_read_env_opt(env_opts, "control_flength", default=True) 
-        self._add_or_read_env_opt(env_opts, "control_fapex", default=True) 
-        self._add_or_read_env_opt(env_opts, "control_fend", default=False) 
+        self._add_env_opt(env_opts, "control_flength", default=True) 
+        self._add_env_opt(env_opts, "control_fapex", default=True) 
+        self._add_env_opt(env_opts, "control_fend", default=False) 
 
         self._actions_map={}
 

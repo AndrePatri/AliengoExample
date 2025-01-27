@@ -202,7 +202,7 @@ class SActorCriticAlgoBase(ABC):
             norm_obs: bool = False,
             rescale_obs: bool = True):
 
-        tot_tsteps=100e6
+        tot_tsteps=int(100e6)
         if "tot_tsteps" in custom_args:
             tot_tsteps=custom_args["tot_tsteps"]
 
@@ -307,10 +307,10 @@ class SActorCriticAlgoBase(ABC):
                     debug=self._debug)
         
         # loging actual widths and layers in case they were override inside agent init
-        self._hyperparameters["actor_lwidth"]=self._agent.layer_width_actor()
-        self._hyperparameters["actor_n_hlayers"]=self._agent.n_hidden_layers_actor()
-        self._hyperparameters["critic_lwidth"]=self._agent.layer_width_critic()
-        self._hyperparameters["critic_n_hlayers"]=self._agent.n_hidden_layers_critic()
+        self._hyperparameters["actor_lwidth_actual"]=self._agent.layer_width_actor()
+        self._hyperparameters["actor_n_hlayers_actual"]=self._agent.n_hidden_layers_actor()
+        self._hyperparameters["critic_lwidth_actual"]=self._agent.layer_width_critic()
+        self._hyperparameters["critic_n_hlayers_actual"]=self._agent.n_hidden_layers_critic()
 
         # load model if necessary 
         if self._eval and (not self._override_agent_actions): # load pretrained model
@@ -346,10 +346,11 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
         self._hyperparameters["sub_reward_names"]=self._env.sub_rew_names()
-        self._hyperparameters["sub_trunc_names"]=self._env._get_sub_trunc_names()
-        self._hyperparameters["sub_term_names"]=self._env._get_sub_term_names()
+        self._hyperparameters["sub_trunc_names"]=self._env.sub_trunc_names()
+        self._hyperparameters["sub_term_names"]=self._env.sub_term_names()
 
-        self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
+        if "allow_expl_during_eval" is self._hyperparameters:
+            self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
 
         # reset environment
         self._env.reset()
@@ -381,7 +382,6 @@ class SActorCriticAlgoBase(ABC):
         if (self._debug):
             if self._remote_db:
                 job_type = "evaluation" if self._eval else "training"
-                full_run_config={**self._hyperparameters,**self._env.env_opts()}
                 wandb.init(
                     project="LRHControl",
                     group=self._run_name,
@@ -394,7 +394,7 @@ class SActorCriticAlgoBase(ABC):
                     mode="online", # "online", "offline" or "disabled"
                     entity=None,
                     sync_tensorboard=True,
-                    config=full_run_config,
+                    config=self._hyperparameters,
                     monitor_gym=True,
                     save_code=True,
                     dir=self._drop_dir
@@ -486,7 +486,7 @@ class SActorCriticAlgoBase(ABC):
             self._bnorm_vecfreq=self._collection_freq
 
         self._total_timesteps = int(tot_tsteps)
-        self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
+        # self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
         self._total_timesteps_vec = self._total_timesteps // self._num_envs
         self._total_steps = self._total_timesteps_vec//self._collection_freq
         self._total_timesteps_vec = self._total_steps*self._collection_freq # correct to be a multiple of self._total_steps

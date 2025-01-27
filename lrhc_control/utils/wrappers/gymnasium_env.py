@@ -98,8 +98,6 @@ class Gymnasium2LRHCEnv():
         self._use_gpu = use_gpu
         self._torch_device = "cuda" if self._use_gpu else "cpu"
 
-       
-        
         self._verbose = verbose
         self._vlevel = vlevel
         self._is_debug = debug
@@ -152,6 +150,9 @@ class Gymnasium2LRHCEnv():
 
     def __del__(self):
         self.close()
+
+    def env_opts(self):
+        return {}
 
     def close(self):
         
@@ -274,12 +275,37 @@ class Gymnasium2LRHCEnv():
             dtype=torch.bool, device=self._torch_device,
             fill_value=True) 
 
+        self._demo_envs_idxs=None
+        self._demo_envs_idxs_bool=None
+        self._n_demo_envs=0.0
+    
+    def sub_term_names(self):
+        return [""]
+    
+    def sub_trunc_names(self):
+        return [""]
+
+    def demo_env_idxs(self, get_bool: bool=False):
+        if get_bool:
+            return self._demo_envs_idxs_bool
+        else:
+            return self._demo_envs_idxs
+
+    def demo_active(self):
+        return False
+
+    def n_demo_envs(self):
+        return self._n_demo_envs
+
     def get_observed_joints(self):
         return None
 
     def is_action_continuous(self):
         return self._is_continuous_actions
     
+    def is_action_discrete(self):
+        return ~self._is_continuous_actions
+
     def gym_env(self):
         return self._env
     
@@ -528,8 +554,9 @@ if __name__ == "__main__":
     parser.add_argument('--handle_final_obs',action='store_true', help='Whether to handle terminal obs properly')
 
     parser.add_argument('--sac',action='store_true', help='')
-    parser.add_argument('--use_cer',action='store_true', help='use combined experience replay')
     
+    parser.add_argument('--compression_ratio', type=float,
+        help='If e.g. 0.8, the fist layer will be of dimension [input_features_size x (input_features_size*compression_ratio)]', default=-1.0)
     parser.add_argument('--actor_lwidth', type=int, help='Actor network layer width', default=256)
     parser.add_argument('--critic_lwidth', type=int, help='Critic network layer width', default=512)
     parser.add_argument('--actor_n_hlayers', type=int, help='Actor network size', default=2)
@@ -569,7 +596,6 @@ if __name__ == "__main__":
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
-        custom_args_dict["use_combined_exp_replay"]=args.use_cer
     else:
         algo = PPO(env=env_wrapper, 
                 debug=args.db, 
@@ -579,13 +605,14 @@ if __name__ == "__main__":
     custom_args_dict.update(args_dict)
     custom_args_dict.update({"gymansium_env_type": env_type})
 
-    algo.setup(run_name=args.run_name,
+    algo.setup(run_name=env_type,
         ns=args.ns, 
         verbose=True,
         drop_dir_name=args.drop_dir,
         custom_args = custom_args_dict,
         comment=args.comment,
         eval=args.eval,
+        load_qf=False,
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,

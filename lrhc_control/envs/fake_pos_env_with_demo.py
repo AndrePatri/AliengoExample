@@ -25,22 +25,22 @@ class FakePosEnvWithDemo(FakePosEnvBaseline):
         if not "demo_envs_perc" in env_opts:
             env_opts["demo_envs_perc"]=0.1 # [0, 1]
             
-        self._add_or_read_env_opt(env_opts, "full_demo", 
+        self._add_env_opt(env_opts, "full_demo", 
             True)
-        self._add_or_read_env_opt(env_opts, "smooth_twist_cmd", 
+        self._add_env_opt(env_opts, "smooth_twist_cmd", 
             True)
-        self._add_or_read_env_opt(env_opts, "smoothing_horizon_twist", 
+        self._add_env_opt(env_opts, "smoothing_horizon_twist", 
             0.08)
 
-        self._add_or_read_env_opt(env_opts, "stopping_thresh", 
+        self._add_env_opt(env_opts, "stopping_thresh", 
             0.01)
-        self._add_or_read_env_opt(env_opts, "walk_to_trot_thresh", 
+        self._add_env_opt(env_opts, "walk_to_trot_thresh", 
             0.5)
-        self._add_or_read_env_opt(env_opts, "walk_to_trot_thresh_omega", 
+        self._add_env_opt(env_opts, "walk_to_trot_thresh_omega", 
             0.5)
-        self._add_or_read_env_opt(env_opts, "phase_period_walk", 
+        self._add_env_opt(env_opts, "phase_period_walk", 
             2.5)
-        self._add_or_read_env_opt(env_opts, "phase_period_trot", 
+        self._add_env_opt(env_opts, "phase_period_trot", 
             2.0)
             
         # kyon no wheels
