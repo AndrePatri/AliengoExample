@@ -32,7 +32,6 @@ class DummyTestAlgoBase(ABC):
             env, 
             debug = False,
             remote_db = False,
-            anomaly_detect = False,
             seed: int = 1):
 
         self._env = env 
@@ -42,8 +41,6 @@ class DummyTestAlgoBase(ABC):
         
         self._debug = debug
         self._remote_db = remote_db
-
-        self._anomaly_detect = anomaly_detect
 
         self._writer = None
         
@@ -172,10 +169,6 @@ class DummyTestAlgoBase(ABC):
         self._init_drop_dir(drop_dir_name)
         self._hyperparameters["drop_dir"]=self._drop_dir
 
-        # seeding + deterministic behavior for reproducibility
-        self._set_all_deterministic()
-        torch.autograd.set_detect_anomaly(self._anomaly_detect)
-
         if (self._debug):
             if self._remote_db:
                 job_type = "dummy"
@@ -293,18 +286,6 @@ class DummyTestAlgoBase(ABC):
             info,
             LogType.INFO,
             throw_when_excep = True)
-
-    def _set_all_deterministic(self):
-        import random
-        random.seed(self._seed)
-        random.seed(self._seed) # python seed
-        torch.manual_seed(self._seed)
-        torch.backends.cudnn.deterministic = self._torch_deterministic
-        # torch.backends.cudnn.benchmark = not self._torch_deterministic
-        # torch.use_deterministic_algorithms(True)
-        # torch.use_deterministic_algorithms(mode=True) # will throw excep. when trying to use non-det. algos
-        import numpy as np
-        np.random.seed(self._seed)
 
     def drop_dir(self):
         return self._drop_dir
@@ -620,7 +601,6 @@ class DummyTestAlgoBase(ABC):
         
         self._use_gpu = self._env.using_gpu()
         self._torch_device = torch.device("cpu") # defaults to cpu
-        self._torch_deterministic = True
 
         # main algo settings
         self._total_timesteps = int(tot_tsteps)

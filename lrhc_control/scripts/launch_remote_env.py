@@ -5,6 +5,7 @@ import inspect
 
 from lrhc_control.utils.rt_factor import RtFactor
 from lrhc_control.utils.custom_arg_parsing import generate_custom_arg_dict
+from lrhc_control.utils.determinism import deterministic_run
 
 from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
 
@@ -19,15 +20,6 @@ def import_env_module(env_path):
     env_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(env_module)
     return env_module
-
-def set_seed(args):
-    import random
-    random.seed(args.seed) # python seed
-    import torch
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = True
-    import numpy as np
-    np.random.seed(args.seed)
 
 if __name__ == '__main__':
 
@@ -79,14 +71,14 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
+    deterministic_run(seed=args.seed, torch_det_algos=False)
+
     default_init_duration=2.0 # [s]
     default_init_tsteps=int(default_init_duration/args.physics_dt)
     init_tsteps=args.init_timesteps 
     if init_tsteps is None:
         init_tsteps=default_init_tsteps
     
-    set_seed(args=args) # deterministic run setting
-
     # Ensure custom_args_names, custom_args_vals, and custom_args_dtype have the same length
     custom_opt = generate_custom_arg_dict(args=args)
 

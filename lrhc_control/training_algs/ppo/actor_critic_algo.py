@@ -30,7 +30,6 @@ class ActorCriticAlgoBase(ABC):
             env, 
             debug = False,
             remote_db = False,
-            anomaly_detect = False,
             seed: int = 1):
 
         self._env = env 
@@ -41,8 +40,6 @@ class ActorCriticAlgoBase(ABC):
         
         self._debug = debug
         self._remote_db = remote_db
-
-        self._anomaly_detect = anomaly_detect
 
         self._optimizer = None
 
@@ -172,10 +169,6 @@ class ActorCriticAlgoBase(ABC):
         # create dump directory + copy important files for debug
         self._init_drop_dir(drop_dir_name)
         self._hyperparameters["drop_dir"]=self._drop_dir
-
-        # seeding + deterministic behavior for reproducibility
-        self._set_all_deterministic()
-        torch.autograd.set_detect_anomaly(self._anomaly_detect)
 
         if not self._eval:
             self._optimizer = optim.Adam(self._agent.parameters(), 
@@ -442,18 +435,6 @@ class ActorCriticAlgoBase(ABC):
         self._agent.load_state_dict(torch.load(model_path, 
                             map_location=self._torch_device))
         self._switch_training_mode(False)
-
-    def _set_all_deterministic(self):
-        import random
-        random.seed(self._seed)
-        random.seed(self._seed) # python seed
-        torch.manual_seed(self._seed)
-        torch.backends.cudnn.deterministic = self._torch_deterministic
-        # torch.backends.cudnn.benchmark = not self._torch_deterministic
-        # torch.use_deterministic_algorithms(True)
-        # torch.use_deterministic_algorithms(mode=True) # will throw excep. when trying to use non-det. algos
-        import numpy as np
-        np.random.seed(self._seed)
 
     def drop_dir(self):
         return self._drop_dir
@@ -865,7 +846,6 @@ class ActorCriticAlgoBase(ABC):
         
         self._use_gpu = self._env.using_gpu()
         self._torch_device = torch.device("cpu") # defaults to cpu
-        self._torch_deterministic = True
 
         # policy rollout and return comp./adv estimation
         self._total_timesteps = int(tot_tsteps) # total timesteps to be collected (including sub envs)

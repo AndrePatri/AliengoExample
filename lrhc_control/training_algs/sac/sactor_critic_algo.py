@@ -35,7 +35,6 @@ class SActorCriticAlgoBase(ABC):
             env, 
             debug = False,
             remote_db = False,
-            anomaly_detect = False,
             seed: int = 1):
 
         self._env = env 
@@ -50,8 +49,6 @@ class SActorCriticAlgoBase(ABC):
         
         self._debug = debug
         self._remote_db = remote_db
-
-        self._anomaly_detect = anomaly_detect
 
         self._writer = None
         
@@ -69,7 +66,6 @@ class SActorCriticAlgoBase(ABC):
         self._get_params_from_env()
 
         self._torch_device = torch.device("cpu") # defaults to cpu
-        self._torch_deterministic = True
 
         self._setup_done = False
 
@@ -366,10 +362,6 @@ class SActorCriticAlgoBase(ABC):
 
         # add env options to hyperparameters
         self._hyperparameters.update(self._env_opts) 
-
-        # seeding + deterministic behavior for reproducibility
-        self._set_all_deterministic()
-        torch.autograd.set_detect_anomaly(self._anomaly_detect)
 
         if not self._eval:
             self._qf_optimizer = optim.Adam(list(self._agent.qf1.parameters()) + list(self._agent.qf2.parameters()), 
@@ -1297,18 +1289,6 @@ class SActorCriticAlgoBase(ABC):
             self._to_agent_jnt_remap = [observed_joints.index(element) for element in required_joints]
         
         self._env.set_jnts_remapping(remapping= self._to_agent_jnt_remap)
-
-    def _set_all_deterministic(self):
-        import random
-        random.seed(self._seed)
-        random.seed(self._seed) # python seed
-        torch.manual_seed(self._seed)
-        torch.backends.cudnn.deterministic = self._torch_deterministic
-        # torch.backends.cudnn.benchmark = not self._torch_deterministic
-        # torch.use_deterministic_algorithms(True)
-        # torch.use_deterministic_algorithms(mode=True) # will throw excep. when trying to use non-det. algos
-        import numpy as np
-        np.random.seed(self._seed)
 
     def drop_dir(self):
         return self._drop_dir
