@@ -349,9 +349,10 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["sub_trunc_names"]=self._env.sub_trunc_names()
         self._hyperparameters["sub_term_names"]=self._env.sub_term_names()
 
-        if "allow_expl_during_eval" is self._hyperparameters:
+        self._allow_expl_during_eval=False
+        if "allow_expl_during_eval" in self._hyperparameters:
             self._allow_expl_during_eval=self._hyperparameters["allow_expl_during_eval"]
-
+    
         # reset environment
         self._env.reset()
         if self._eval:
@@ -454,7 +455,7 @@ class SActorCriticAlgoBase(ABC):
             custom_args: Dict = {}):
     
         self._collection_freq=1
-        self._update_freq=5
+        self._update_freq=10
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
@@ -462,9 +463,9 @@ class SActorCriticAlgoBase(ABC):
         self._batch_size = 8192
 
         self._lr_policy = 1e-3
-        self._lr_q = 1e-3
+        self._lr_q = 5e-4
 
-        self._discount_factor = 0.99
+        self._discount_factor = 0.995
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
@@ -507,7 +508,6 @@ class SActorCriticAlgoBase(ABC):
         if "expl_envs_perc" in custom_args:
             self._expl_envs_perc=custom_args["expl_envs_perc"]
         self._n_expl_envs = int(self._num_envs*self._expl_envs_perc) # n of random envs on which noisy actions will be applied
-        self._allow_expl_during_eval=False
         self._noise_freq = 25
         self._noise_duration = 5 # should be less than _noise_freq
         
