@@ -358,6 +358,7 @@ class RhcToVizBridgeBase(ABC):
                 self._is_running=False
             # Register the handler for SIGINT (Control+C)
             signal.signal(signal.SIGINT, signal_handler)
+            # signal.signal(signal.SIGTERM, signal_handler)
 
         if sim_time is not None:
             self._sim_time_trgt=sim_time

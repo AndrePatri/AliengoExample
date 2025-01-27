@@ -5,10 +5,10 @@ import time
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description="Set CPU affinity for the script.")
+    parser = argparse.ArgumentParser(description="")
     parser.add_argument('--ros_bridge_dt', type=float, default=0.01, help='Update interval in seconds for ros topics, default is 0.01')
     parser.add_argument('--bag_sdt', type=float, default=90.0, help='sim time dt over which each bag will run')
-    parser.add_argument('--abort_wallmin', type=float, default=5.0, help='abort bridge if no response wihtin this timeout')
+    parser.add_argument('--abort_wallmin', type=float, default=5.0, help='abort bridge if no response wihtin this timeout [min]')
     parser.add_argument('--dump_dt_min', type=float, default=60.0, help='wait these min before dumping a new bag')
 
     parser.add_argument('--ns', type=str, help='Namespace to be used for cluster shared memory')
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     if args.is_training:
         if not args.use_shared_drop_dir:
             args.use_shared_drop_dir=True
-
+    
     bag_dumper=RosBagDumper(ns=args.ns,
             remap_ns=args.remap_ns,
             ros_bridge_dt=args.ros_bridge_dt,
