@@ -226,17 +226,19 @@ class FakePosEnvVariableFlightsWithDemo(FakePosEnvVariableFlights):
             # default to walk
             walk_signal=self._gait_scheduler_walk.get_signal(clone=True)[self._env_to_gait_sched_mapping[self._demo_envs_idxs_bool], :]
             is_contact_walk=walk_signal>self._gait_scheduler_walk.threshold()
-            agent_action[self._demo_envs_idxs, 6:10] = 2.0*is_contact_walk-1.0
+            
+            start=self._actions_map["contact_flag_start"]
+            agent_action[self._demo_envs_idxs, start:start+self._n_contacts] = 2.0*is_contact_walk-1.0
 
             if fast_and_demo.any():
                 # for fast enough refs, trot
                 trot_signal=self._gait_scheduler_trot.get_signal(clone=True)[self._env_to_gait_sched_mapping[fast_and_demo], :]
                 is_contact_trot=trot_signal>self._gait_scheduler_trot.threshold()
-                agent_action[fast_and_demo, 6:10] = 2.0*is_contact_trot-1.0
+                agent_action[fast_and_demo, start:start+self._n_contacts] = 2.0*is_contact_trot-1.0
             
             if stop_and_demo.any():
                 # keep contact
-                agent_action[stop_and_demo, 6:10] = 1.0
+                agent_action[stop_and_demo, start:start+self._n_contacts] = 1.0
 
             if self._env_opts["full_demo"]:
                 # overwriting agent's twist action with the identity wrt the reference (both 

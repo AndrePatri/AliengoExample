@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--dump_checkpoints',action='store_true', help='Whether to dump model checkpoints during training')
 
-    parser.add_argument('--demo_envs_perc', type=float, help='[0, 1]', default=0)
+    parser.add_argument('--demo_envs_perc', type=float, help='[0, 1]', default=0.0)
     parser.add_argument('--demo_stop_thresh', type=float, default=None, 
         help='Performance hreshold above which demonstration envs should be deactivated.')
     
