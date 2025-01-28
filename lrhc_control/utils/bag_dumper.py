@@ -54,7 +54,7 @@ class RosBagDumper():
         self._env_idx=env_idx
         self._use_static_idx=use_static_idx
 
-        self._timeout_ms=240000
+        self._timeout_ms=4800000 # has to be very big (otherwise we risk timeout)
         self._dump_path=dump_path
         self._verbose=verbose
         self._debug=debug
