@@ -35,9 +35,7 @@ class SAC(SActorCriticAlgoBase):
         if self._vec_transition_counter > self._warmstart_vectimesteps:
             actions, _, _ = self._agent.get_action(x=obs)
             actions = actions.detach()
-            if self._n_expl_envs>0 and \
-                (self._vec_transition_counter % self._noise_freq == 0 or \
-                self._pert_counter>0):
+            if self._n_expl_envs>0 and self._time_to_randomize_actions():
                 self._perturb_some_actions(actions=actions)
                 
         else:
@@ -54,7 +52,7 @@ class SAC(SActorCriticAlgoBase):
                 next_terminal=self._env.get_terminations(clone=False)) 
 
         return env_step_ok
-    
+
     def _collect_eval_transition(self):
         
         # experience collection
@@ -72,10 +70,10 @@ class SAC(SActorCriticAlgoBase):
             if self._det_eval: # use mean instead of stochastic policy
                 actions[:, :] = mean.detach()
 
-            if self._allow_expl_during_eval and self._n_expl_envs>0 and \
-                (self._vec_transition_counter % self._noise_freq == 0 or \
-                self._pert_counter>0):
-                self._perturb_some_actions(actions=actions)
+            if self._allow_expl_during_eval:
+                if self._n_expl_envs>0:  
+                    if self._time_to_randomize_actions():
+                        self._perturb_some_actions(actions=actions)
 
         else:
 
@@ -112,6 +110,11 @@ class SAC(SActorCriticAlgoBase):
             self._qf_trgt.synch_all(read=False,retry=False)
 
         return env_step_ok
+    
+    def _time_to_randomize_actions(self):
+        its_time=(self._vec_transition_counter % self._noise_freq == 0 or \
+                self._pert_counter>0)
+        return its_time
     
     def _update_policy(self):
         
