@@ -152,7 +152,7 @@ class SActorCriticAlgoBase(ABC):
 
             self._post_step()
         
-        return True
+        return not self.is_done()
 
     def eval(self):
 
@@ -169,7 +169,7 @@ class SActorCriticAlgoBase(ABC):
         
         self._post_step()
 
-        return True
+        return not self.is_done()
     
     @abstractmethod
     def _collect_transition(self)->bool:
