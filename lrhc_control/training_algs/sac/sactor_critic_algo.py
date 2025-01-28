@@ -455,7 +455,7 @@ class SActorCriticAlgoBase(ABC):
             custom_args: Dict = {}):
     
         self._collection_freq=1
-        self._update_freq=10
+        self._update_freq=5
 
         self._replay_buffer_size_nominal = int(4e6) # 32768
         self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
@@ -472,7 +472,7 @@ class SActorCriticAlgoBase(ABC):
         self._trgt_net_freq = 1
 
         self._autotune = True
-        self._trgt_avrg_entropy_per_action=-1.0 # the more negative, the more deterministic the policy
+        self._trgt_avrg_entropy_per_action=-1.5 # the more negative, the more deterministic the policy
         self._target_entropy = self._trgt_avrg_entropy_per_action*self._actions_dim
         self._log_alpha = None
         self._alpha = 0.2
