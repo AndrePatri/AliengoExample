@@ -1,4 +1,3 @@
-
 import signal
 import time
 
@@ -162,39 +161,24 @@ class RosBagDumper():
             with_gpu_mirror=False,
             with_torch_view=False)
         self._bag_req.run()
-
-        self._training_done=False
     
     def _init(self):
 
         self._term_trigger.run()
         self._bridge.init(update_dt=self._ros_bridge_dt)
     
-    def _stop_now(self, signum, frame):
-        Journal.log(self.__class__.__name__,
-            "_stop_now",
-            f"Received {signum}. Exiting run()",
-            LogType.WARN)
-        self._training_done = True
-        self.close()
-
     def run(self):
-        import signal
-        
-        signal.signal(signal.SIGINT, self._stop_now) 
-        signal.signal(signal.SIGTERM, self._stop_now)
-
-        while not self._training_done:
+        traing_done=False
+        while not traing_done:
             try:
                 # continue publishing state on topics
                 if self._is_training: # check if training is done
-                    self._training_done=self.training_done()
+                    traing_done=self.training_done()
                 start_time=time.monotonic() 
                 self._start_bag_recording()
-                finished=self._bridge.run(sim_time=self._bag_sdt)
-                self._stop_bag_recording()
-                if not finished:
+                if not self._bridge.run(sim_time=self._bag_sdt):
                     break
+                self._stop_bag_recording()
                 elapsed_min=(time.monotonic()-start_time)*1.0/60.0
                 remaining_min=self._wall_dt-elapsed_min
                 if remaining_min>0.0: # wait 
@@ -217,7 +201,7 @@ class RosBagDumper():
         self._bag_proc.start()
     
     def _launch_rosbag(self, 
-            namespace: str, dump_path: str, timeout_msec:float, bag_id: str, use_shared_drop_dir: bool = True):
+            namespace: str, dump_path: str, timeout_ms:float, bag_id: str, use_shared_drop_dir: bool = True):
         
         def ignore_keyboard_interrupt():
             signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -313,7 +297,6 @@ class RosBagDumper():
         exit_req=False
         rosbag_started=False
         while not exit_req:
-            timeout_ms = int(timeout_msec)
             if not term_trigger.wait(timeout_ms):
                 Journal.log(self.__class__.__name__,
                     "launch_rosbag",
