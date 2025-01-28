@@ -78,7 +78,7 @@ class AgentRefsFromKeyboard:
                 fill_value=0.0).reshape(-1)
         self._current_twist_ref_base=np.full_like(self._current_twist_ref_world, fill_value=0.0).reshape(1, -1)
 
-        self._current_dpos_ref = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="p", robot_idxs=self.cluster_idx_np), 
+        self._current_pos_ref = np.full_like(self.agent_refs.rob_refs.root_state.get(data_type="p", robot_idxs=self.cluster_idx_np), 
                 fill_value=0.0).reshape(-1)
         
         self._robot_state = RobotState(namespace=self.namespace,
@@ -237,7 +237,7 @@ class AgentRefsFromKeyboard:
         increment = True,
         reset: bool = False):
         
-        current_pos_ref=self._current_dpos_ref
+        current_pos_ref=self._current_pos_ref
 
         if not reset:
             # xy vel
@@ -254,7 +254,9 @@ class AgentRefsFromKeyboard:
             if nav_type=="vertical" and increment:
                 current_pos_ref[2]+=self.dpos
         else:
-            current_pos_ref[:]=0.0
+            robot_p = self._robot_state.root_state.get(data_type="p")[self.cluster_idx_np, :].reshape(-1)
+            robot_p[2]=0.0
+            current_pos_ref[:]=robot_p
         
     def _write_to_shared_mem(self):
 
@@ -264,7 +266,9 @@ class AgentRefsFromKeyboard:
         if self.enable_pos:
             robot_p = self._robot_state.root_state.get(data_type="p")[self.cluster_idx_np, :].reshape(-1)
             robot_p[2]=0.0
-            self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_dpos_ref-robot_p,
+            # self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_pos_ref-robot_p,
+            #                                 robot_idxs=self.cluster_idx_np)
+            self.agent_refs.rob_refs.root_state.set(data_type="p",data=self._current_pos_ref,
                                             robot_idxs=self.cluster_idx_np)
             self.agent_refs.rob_refs.root_state.synch_retry(row_index=self.cluster_idx, col_index=0, 
                                         n_rows=1, n_cols=3,
