@@ -116,9 +116,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_env_opt(env_opts, "task_pred_track_scale", default=3.0)
 
         # energy penalties
-        self._add_env_opt(env_opts, "CoT_offset", default=4.0)
+        self._add_env_opt(env_opts, "CoT_offset", default=1.0)
         self._add_env_opt(env_opts, "CoT_scale", default=5e-4)
-        self._add_env_opt(env_opts, "power_offset", default=4.0)
+        self._add_env_opt(env_opts, "power_offset", default=1.0)
         self._add_env_opt(env_opts, "power_scale", default=5e-4)
 
         # terminations
