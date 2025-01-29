@@ -73,7 +73,7 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
         if not self._override_agent_refs:
             agent_p_ref_current=self._agent_refs.rob_refs.root_state.get(data_type="p",
             gpu=self._use_gpu)
-            agent_p_ref_current[:, 0:2]=self._p_delta_w
+            agent_p_ref_current[:, 0:2]=self._p_trgt_w
 
         # then convert it to base ref local for the agent
         robot_q = self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
@@ -117,8 +117,9 @@ class FakePosEnvVariableFlights(VariableFlightsBaseline):
         agent_p_ref_current=self._agent_refs.rob_refs.root_state.get(data_type="p",
                 gpu=self._use_gpu)
         
-        self._p_trgt_w[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2] + \
-            agent_p_ref_current[:, 0:2]
+        # self._p_trgt_w[:, :]=self._robot_state.root_state.get(data_type="p",gpu=self._use_gpu)[:, 0:2] + \
+        #     agent_p_ref_current[:, 0:2]
+        self._p_trgt_w[:, :]=agent_p_ref_current[:, 0:2]
     
     def _debug_agent_refs(self):
         if self._use_gpu:
