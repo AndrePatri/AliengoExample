@@ -1751,6 +1751,7 @@ class SActorCriticAlgoBase(ABC):
                             "rnd_info/expl_bonus_raw_std": self._expl_bonus_raw_std[self._log_it_counter, 0],
                             "rnd_info/expl_bonus_proc_avrg": self._expl_bonus_proc_avrg[self._log_it_counter, 0],
                             "rnd_info/expl_bonus_proc_std": self._expl_bonus_proc_std[self._log_it_counter, 0],
+                            "rnd_info/rnd_loss": self._rnd_loss[self._log_it_counter, 0],
                         })
                         self._wandb_d.update(self._rnd_db_data_dict)
 
