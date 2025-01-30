@@ -3,7 +3,7 @@ from lrhc_control.agents.dummies.dummy import DummyAgent
 
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
-from lrhc_control.utils.nn.rnd import RNDNetwork
+from lrhc_control.utils.nn.rnd import RNDFull
 from adarl.utils.NoveltyScaler import NoveltyScaler
 
 import torch 
@@ -343,8 +343,6 @@ class SActorCriticAlgoBase(ABC):
             self._init_params(tot_tsteps=tot_tsteps,
                 custom_args=custom_args)
         
-        self._init_dbdata()
-
         # adding additional db info
         self._hyperparameters["obs_names"]=self._env.obs_names()
         self._hyperparameters["action_names"]=self._env.action_names()
@@ -384,20 +382,21 @@ class SActorCriticAlgoBase(ABC):
             self._a_optimizer = optim.Adam([self._log_alpha], lr=self._lr_q)
         
         if self._use_rnd:
-            self._rnd_trgt_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
+            self._rnd_net = RNDFull(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
                 layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
-                target=True,
                 device=self._torch_device,
-                dtype=self._dtype)
-            self._rnd_predictor_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
-                layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
-                target=False,
-                device=self._torch_device,
-                dtype=self._dtype)
-            self._rnd_optimizer = torch.optim.Adam(self._rnd_predictor_net.parameters(), 
+                dtype=self._dtype,
+                normalize=norm_obs # normalize if also used for SAC agent
+                )
+            self._rnd_optimizer = torch.optim.Adam(self._rnd_net.rnd_predictor_net.parameters(), 
                                     lr=self._rnd_lr)
             
-            self._rnd_input = torch.full(size=(self._batch_size, self._rnd_indim),
+            self._rnd_input = torch.full(size=(self._batch_size, self._rnd_net.input_dim()),
+                    fill_value=0.0,
+                    dtype=self._dtype,
+                    device=self._torch_device,
+                    requires_grad=False) 
+            self._rnd_bnorm_input = torch.full(size=(self._bnorm_bsize, self._rnd_net.input_dim()),
                     fill_value=0.0,
                     dtype=self._dtype,
                     device=self._torch_device,
@@ -418,6 +417,8 @@ class SActorCriticAlgoBase(ABC):
             #                     device=self._torch_device, dtype=self._dtype, 
             #                     freeze_stats=False,
             #                     debug=self._debug)
+
+        self._init_dbdata()
 
         if (self._debug):
             if self._remote_db:
@@ -534,11 +535,10 @@ class SActorCriticAlgoBase(ABC):
         
         # rnd
         self._use_rnd=False
-        self._rnd_trgt_net=None
-        self._rnd_predictor_net=None
+        self._rnd_net=None
         self._rnd_optimizer = None
         self._rnd_lr = 1e-3
-        if "use_rnd" in custom_args:
+        if "use_rnd" in custom_args and (not self._eval):
             self._use_rnd=custom_args["use_rnd"]
         self._rnd_weight=0.5
         self._alpha=0.0
@@ -1002,6 +1002,13 @@ class SActorCriticAlgoBase(ABC):
 
             self._n_rnd_updates = torch.full((self._db_data_size, 1), 
                     dtype=torch.int32, fill_value=0, device="cpu")
+            self._running_mean_rnd_input = None
+            self._running_std_rnd_input = None
+            if self._rnd_net.running_norm is not None:
+                self._running_mean_rnd_input = torch.full((self._db_data_size, self._rnd_net.input_dim()), 
+                        dtype=torch.float32, fill_value=0.0, device="cpu")
+                self._running_std_rnd_input = torch.full((self._db_data_size, self._rnd_net.input_dim()), 
+                        dtype=torch.float32, fill_value=0.0, device="cpu")
             
     def _init_replay_buffers(self):
         
@@ -1309,6 +1316,12 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('expl_bonus_proc_avrg', data=self._expl_bonus_proc_avrg.numpy())
                 hf.create_dataset('expl_bonus_proc_std', data=self._expl_bonus_proc_std.numpy())
 
+                if self._rnd_net.running_norm is not None:
+                    if self._running_mean_rnd_input is not None:
+                        hf.create_dataset('_running_mean_rnd_input', data=self._running_mean_rnd_input.numpy())
+                    if self._running_std_rnd_input is not None:
+                        hf.create_dataset('_running_std_rnd_input', data=self._running_std_rnd_input.numpy())
+
             # dump all custom env data  
             db_data_names = list(self._env.custom_db_data.keys())
             for db_dname in db_data_names:
@@ -1547,6 +1560,12 @@ class SActorCriticAlgoBase(ABC):
                 if self._running_std_obs is not None:
                     self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
 
+            if self._use_rnd:
+                if self._running_mean_rnd_input is not None:
+                    self._running_mean_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_mean()
+                if self._running_std_rnd_input is not None:
+                    self._running_std_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_mean()
+                    
             # write some episodic db info on shared mem
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
             sub_returns[:, :]=self._episodic_reward_metrics.get_sub_rew_avrg()
@@ -1755,6 +1774,13 @@ class SActorCriticAlgoBase(ABC):
                         })
                         self._wandb_d.update(self._rnd_db_data_dict)
 
+                        if self._rnd_net.running_norm is not None:
+                            # adding info on running normalizer if used
+                            if self._running_mean_rnd_input is not None:
+                                self._wandb_d.update({f"rnd_info/running_mean_rhc_input": self._running_mean_rnd_input[self._log_it_counter, :]})
+                            if self._running_std_rnd_input is not None:
+                                self._wandb_d.update({f"rnd_info/running_std_rhc_input": self._running_std_rnd_input[self._log_it_counter, :]})
+
                 if self._agent.running_norm is not None:
                     # adding info on running normalizer if used
                     if self._running_mean_obs is not None:
@@ -1959,10 +1985,19 @@ class SActorCriticAlgoBase(ABC):
         # this is not an issue and is more efficient)
         if (self._agent.running_norm is not None) and \
             (not self._eval):
-            batched_obs = self._obs.view((-1, self._env.obs_dim()))
+            batched_obs = self._obs.view((-1, self._obs_dim))
             sampled_obs = batched_obs[shuffled_buffer_idxs]
             self._agent.update_obs_bnorm(x=sampled_obs)
         
+        if self._use_rnd: # update running norm for RND
+            batched_obs = self._obs.view((-1, self._obs_dim))
+            batched_actions = self._actions.view((-1, self._actions_dim))
+            sampled_obs = batched_obs[shuffled_buffer_idxs]
+            sampled_actions = batched_actions[shuffled_buffer_idxs]
+            torch.cat(tensors=(sampled_obs, sampled_actions), dim=1, 
+                out=self._rnd_bnorm_input)
+            self._rnd_net.update_input_bnorm(x=self._rnd_bnorm_input)
+
         # update running norm on rewards also
         # if self._reward_normalizer is not None:
         #     batched_rew = self._rewards.view(-1)

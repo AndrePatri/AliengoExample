@@ -130,11 +130,10 @@ class SAC(SActorCriticAlgoBase):
                 # rnd input
                 torch.cat(tensors=(obs, actions), dim=1, out=self._rnd_input)
                 # add exploration bonus
-                raw_bonus_batch=torch.mean(torch.square(self._rnd_predictor_net(self._rnd_input)-self._rnd_trgt_net(self._rnd_input)), 
-                                            dim=1, 
-                                            keepdim=True)
+                raw_bonus_batch=self._rnd_net.get_raw_bonus(self._rnd_input)
                 
                 with torch.no_grad():
+                    # compute intrinsic reward BEFORE updating RND predictor
                     rewards=self._novelty_scaler.process_bonuses(raw_bonus_batch=raw_bonus_batch,
                         raw_reward_batch=rewards.view(-1, 1),
                         return_avg_raw_exp_bonus=None,
