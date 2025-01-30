@@ -3,6 +3,8 @@ from lrhc_control.agents.dummies.dummy import DummyAgent
 
 from lrhc_control.utils.shared_data.algo_infos import SharedRLAlgorithmInfo, QfVal, QfTrgt
 from lrhc_control.utils.shared_data.training_env import SubReturns, TotReturns
+from lrhc_control.utils.nn.rnd import RNDNetwork
+from adarl.utils.NoveltyScaler import NoveltyScaler
 
 import torch 
 import torch.optim as optim
@@ -59,6 +61,7 @@ class SActorCriticAlgoBase(ABC):
         
         self._policy_update_db_data_dict =  {}
         self._custom_env_data_db_dict = {}
+        self._rnd_db_data_dict =  {}
         self._hyperparameters = {}
         self._wandb_d={}
 
@@ -380,6 +383,38 @@ class SActorCriticAlgoBase(ABC):
             self._alpha = self._log_alpha.exp().item()
             self._a_optimizer = optim.Adam([self._log_alpha], lr=self._lr_q)
         
+        if self._use_rnd:
+            self._rnd_trgt_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
+                layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
+                target=True)
+            self._rnd_predictor_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
+                layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
+                target=False)
+            self._rnd_optimizer = torch.optim.Adam(self._rnd_predictor_net.parameters(), 
+                                    lr=self._rnd_lr)
+            
+            self._rnd_input = torch.full(size=(self._batch_size, self._rnd_indim),
+                    fill_value=0.0,
+                    dtype=self._dtype,
+                    device=self._torch_device,
+                    requires_grad=False) 
+
+            self._proc_exp_bonus_all = torch.full(size=(self._batch_size, 1),
+                    fill_value=0.0,
+                    dtype=self._dtype,
+                    device=self._torch_device,
+                    requires_grad=False) 
+            self._raw_exp_bonus_all = torch.full(size=(self._batch_size, 1),
+                    fill_value=0.0,
+                    dtype=self._dtype,
+                    device=self._torch_device,
+                    requires_grad=False) 
+        # if self._autotune_rnd_scale:
+            # self._reward_normalizer=RunningNormalizer((1,), epsilon=1e-8, 
+            #                     device=self._torch_device, dtype=self._dtype, 
+            #                     freeze_stats=False,
+            #                     debug=self._debug)
+
         if (self._debug):
             if self._remote_db:
                 job_type = "evaluation" if self._eval else "training"
@@ -470,21 +505,58 @@ class SActorCriticAlgoBase(ABC):
 
         self._policy_freq = 2
         self._trgt_net_freq = 1
+        self._rnd_freq = 1
 
+        # exploration
+
+        # entropy regularization
         self._autotune = True
         self._trgt_avrg_entropy_per_action=-1.5 # the more negative, the more deterministic the policy
         self._target_entropy = self._trgt_avrg_entropy_per_action*self._actions_dim
         self._log_alpha = None
         self._alpha = 0.2
-
         self._a_optimizer = None
 
+        # random expl ens
+        self._expl_envs_perc=0.0 # [0, 1]
+        if "expl_envs_perc" in custom_args:
+            self._expl_envs_perc=custom_args["expl_envs_perc"]
+        self._n_expl_envs = int(self._num_envs*self._expl_envs_perc) # n of random envs on which noisy actions will be applied
+        self._noise_freq = 25
+        self._noise_duration = 5 # should be less than _noise_freq
+
+        self._continuous_act_expl_noise_std=0.05 
+        self._discrete_act_expl_noise_std=1.0
+        
+        # rnd
+        self._use_rnd=False
+        self._rnd_trgt_net=None
+        self._rnd_predictor_net=None
+        self._rnd_optimizer = None
+        self._rnd_lr = 1e-3
+        if "use_rnd" in custom_args:
+            self._use_rnd=custom_args["use_rnd"]
+        self._rnd_weight=0.5
+        self._alpha=0.0
+        self._novelty_scaler=None
+        if self._use_rnd:
+            self._novelty_scaler=NoveltyScaler(th_device=self._torch_device,
+                                    bonus_weight=self._rnd_weight,
+                                    avg_alpha=self._alpha)
+        
+        self._rnd_lwidth=256
+        self._rnd_hlayers=2
+        self._rnd_outdim=32
+        self._rnd_indim=self._obs_dim+self._actions_dim
+
+        # batch normalization
         self._bnorm_bsize = 4096
         self._bnorm_vecfreq_nom = 5 # wrt vec steps
         # make sure _bnorm_vecfreq is a multiple of _collection_freq
         self._bnorm_vecfreq = (self._bnorm_vecfreq_nom//self._collection_freq)*self._collection_freq
         if self._bnorm_vecfreq == 0:
             self._bnorm_vecfreq=self._collection_freq
+        self._reward_normalizer=None
 
         self._total_timesteps = int(tot_tsteps)
         # self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
@@ -503,17 +575,7 @@ class SActorCriticAlgoBase(ABC):
         self._warmstart_vectimesteps = self._warmstart_timesteps//self._num_envs
         # ensuring multiple of collection_freq
         self._warmstart_timesteps = self._num_envs*self._warmstart_vectimesteps # actual
-                
-        self._expl_envs_perc=0.0 # [0, 1]
-        if "expl_envs_perc" in custom_args:
-            self._expl_envs_perc=custom_args["expl_envs_perc"]
-        self._n_expl_envs = int(self._num_envs*self._expl_envs_perc) # n of random envs on which noisy actions will be applied
-        self._noise_freq = 25
-        self._noise_duration = 5 # should be less than _noise_freq
-        
-        self._continuous_act_expl_noise_std=0.05 
-        self._discrete_act_expl_noise_std=1.0
-        
+            
         # debug
         self._m_checkpoint_freq_nom = 1e6 # n totoal timesteps after which a checkpoint model is dumped
         self._m_checkpoint_freq= self._m_checkpoint_freq_nom//self._num_envs
@@ -621,7 +683,13 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
         self._hyperparameters["db_vecstep_frequency"] = self._db_vecstep_frequency
         self._hyperparameters["m_checkpoint_freq"] = self._m_checkpoint_freq
-        
+
+        self._hyperparameters["use_rnd"] = self._use_rnd
+        self._hyperparameters["rnd_lwidth"] = self._rnd_lwidth
+        self._hyperparameters["rnd_hlayers"] = self._rnd_hlayers
+        self._hyperparameters["rnd_outdim"] = self._rnd_outdim
+        self._hyperparameters["rnd_indim"] = self._rnd_indim
+
         self._hyperparameters["n_db_envs"] = self._num_db_envs
         self._hyperparameters["n_expl_envs"] = self._n_expl_envs
         self._hyperparameters["noise_freq"] = self._noise_freq
@@ -904,6 +972,30 @@ class SActorCriticAlgoBase(ABC):
             self._running_std_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
                         dtype=torch.float32, fill_value=0.0, device="cpu")
 
+        # RND
+        self._rnd_loss=None
+        if self._use_rnd:
+            self._rnd_loss = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
+            self._expl_bonus_raw_avrg = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._expl_bonus_raw_std = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            # self._expl_bonus_raw_min = torch.full((self._db_data_size, 1), 
+            #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            # self._expl_bonus_raw_max = torch.full((self._db_data_size, 1), 
+            #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
+            self._expl_bonus_proc_avrg = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._expl_bonus_proc_std = torch.full((self._db_data_size, 1), 
+                        dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            # self._expl_bonus_proc_min = torch.full((self._db_data_size, 1), 
+            #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            # self._expl_bonus_proc_max = torch.full((self._db_data_size, 1), 
+            #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
     def _init_replay_buffers(self):
         
         self._bpos = 0
@@ -1203,7 +1295,13 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('policy_entropy_min', data=self._policy_entropy_min.numpy())
             hf.create_dataset('target_entropy', data=self._target_entropy)
 
-            # dump all custom env data
+            if self._use_rnd:
+                hf.create_dataset('expl_bonus_raw_avrg', data=self._expl_bonus_raw_avrg.numpy())
+                hf.create_dataset('expl_bonus_raw_std', data=self._expl_bonus_raw_std.numpy())
+                hf.create_dataset('expl_bonus_proc_avrg', data=self._expl_bonus_proc_avrg.numpy())
+                hf.create_dataset('expl_bonus_proc_std', data=self._expl_bonus_proc_std.numpy())
+
+            # dump all custom env data  
             db_data_names = list(self._env.custom_db_data.keys())
             for db_dname in db_data_names:
                 data=self._custom_env_data[db_dname]
@@ -1635,8 +1733,16 @@ class SActorCriticAlgoBase(ABC):
                             "sac_q_info/qf2_loss_validation": self._qf2_loss_validation[self._log_it_counter, 0],
                             "sac_actor_info/actor_loss_validation": self._actor_loss_validation[self._log_it_counter, 0],
                             "sac_alpha_info/alpha_loss_validation": self._alpha_loss_validation[self._log_it_counter, 0]})
-                    
+
                     self._wandb_d.update(self._policy_update_db_data_dict)
+
+                    if self._use_rnd:
+                        self._rnd_db_data_dict.update({
+                            "rnd_info/expl_bonus_raw_avrg": self._expl_bonus_raw_avrg[self._log_it_counter, 0],
+                            "rnd_info/expl_bonus_raw_std": self._expl_bonus_raw_std[self._log_it_counter, 0],
+                            "rnd_info/expl_bonus_proc_avrg": self._expl_bonus_proc_avrg[self._log_it_counter, 0],
+                            "rnd_info/expl_bonus_proc_std": self._expl_bonus_proc_std[self._log_it_counter, 0],
+                        })
 
                 if self._agent.running_norm is not None:
                     # adding info on running normalizer if used
@@ -1831,18 +1937,25 @@ class SActorCriticAlgoBase(ABC):
         if bsize is None:
             bsize=self._batch_size # same used for training
 
+        up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
+        shuffled_buffer_idxs = torch.randint(0, up_to,
+                                        (bsize,)) 
+        
         # update obs normalization        
         # (we should sample also next obs, but if most of the transitions are not terminal, 
         # this is not an issue and is more efficient)
         if (self._agent.running_norm is not None) and \
             (not self._eval):
             batched_obs = self._obs.view((-1, self._env.obs_dim()))
-            up_to = self._replay_buffer_size if self._replay_bf_full else self._bpos*self._num_envs
-            shuffled_buffer_idxs = torch.randint(0, up_to,
-                                            (bsize,)) 
             sampled_obs = batched_obs[shuffled_buffer_idxs]
             self._agent.update_obs_bnorm(x=sampled_obs)
-            
+        
+        # update running norm on rewards also
+        # if self._reward_normalizer is not None:
+        #     batched_rew = self._rewards.view(-1)
+        #     sampled_rew = batched_rew[shuffled_buffer_idxs]
+        #     self._reward_normalizer.manual_stat_update(x=sampled_rew)
+
     def _switch_training_mode(self, 
                     train: bool = True):
 

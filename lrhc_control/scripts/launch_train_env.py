@@ -71,6 +71,8 @@ if __name__ == "__main__":
         help='Performance hreshold above which demonstration envs should be deactivated.')
     
     parser.add_argument('--expl_envs_perc', type=float, help='[0, 1]', default=0)
+    
+    parser.add_argument('--use_rnd',action='store_true', help='Whether to use RND for exploration')
 
     parser.add_argument('--eval',action='store_true', help='Whether to perform an evaluation run')
     parser.add_argument('--n_eval_timesteps', type=int, help='Total number of timesteps to be evaluated', default=int(1e6))

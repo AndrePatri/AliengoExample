@@ -123,8 +123,41 @@ class SAC(SActorCriticAlgoBase):
                 
             self._switch_training_mode(train=True)
 
-            obs,actions,next_obs,rewards,next_terminal = self._sample() # sample
+            obs,actions,next_obs,rewards,next_terminal = self._sample(size=self._batch_size) # sample
             # experience from replay buffer
+
+            if self._use_rnd:
+                # rnd input
+                torch.cat(tensors=(obs, actions), dim=1, out=self._rnd_input)
+                # add exploration bonus
+                raw_bonus_batch=torch.mean(torch.square(self._rnd_predictor_net(self._rnd_input)-self._rnd_trgt_net(self._rnd_input)), 
+                                            dim=1, 
+                                            keepdim=True)
+                
+                with torch.no_grad():
+                    rewards=self._novelty_scaler.process_bonuses(raw_bonus_batch=raw_bonus_batch,
+                        raw_reward_batch=rewards.view(-1, 1),
+                        return_avg_raw_exp_bonus=None,
+                        return_avg_proc_exp_bonus=None,
+                        return_all_proc_exp_bonus=self._proc_exp_bonus_all,
+                        return_all_norm_exp_bonus=None,
+                        return_all_raw_exp_bonus=self._raw_exp_bonus_all)
+                    
+                if self._update_counter % self._rnd_freq == 0:
+                    # train rnd predictor
+                    rnd_loss = torch.mean(raw_bonus_batch)
+                    self._rnd_optimizer.zero_grad()
+                    rnd_loss.backward()
+                    self._rnd_optimizer.step()
+                    
+                    self._rnd_loss[self._log_it_counter, 0] = rnd_loss.item()
+                    
+                    if self._debug:
+                        # bonus stats
+                        self._expl_bonus_raw_avrg[self._log_it_counter, 0] = self._raw_exp_bonus_all.mean().item()
+                        self._expl_bonus_raw_std[self._log_it_counter, 0] = self._raw_exp_bonus_all.std().item()
+                        self._expl_bonus_proc_avrg[self._log_it_counter, 0] = self._proc_exp_bonus_all.mean().item()
+                        self._expl_bonus_proc_std[self._log_it_counter, 0] = self._proc_exp_bonus_all.std().item()
 
             with torch.no_grad():
                 next_action, next_log_pi, _ = self._agent.get_action(next_obs)
@@ -166,17 +199,18 @@ class SAC(SActorCriticAlgoBase):
                         self._alpha = self._log_alpha.exp().item()
                     self._n_policy_updates[self._log_it_counter]+=1
                 
-                # just log last policy update info
-                self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
-                policy_entropy=-log_pi
-                self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
-                self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
-                self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
-                self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
+                if self._debug:
+                    # just log last policy update info
+                    self._actor_loss[self._log_it_counter, 0] = actor_loss.item()
+                    policy_entropy=-log_pi
+                    self._policy_entropy_mean[self._log_it_counter, 0] = policy_entropy.mean().item()
+                    self._policy_entropy_std[self._log_it_counter, 0] = policy_entropy.std().item()
+                    self._policy_entropy_max[self._log_it_counter, 0] = policy_entropy.max().item()
+                    self._policy_entropy_min[self._log_it_counter, 0] = policy_entropy.min().item()
 
-                self._alphas[self._log_it_counter, 0] = self._alpha
-                if self._autotune:
-                    self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
+                    self._alphas[self._log_it_counter, 0] = self._alpha
+                    if self._autotune:
+                        self._alpha_loss[self._log_it_counter, 0] = alpha_loss.item()
 
             # update the target networks
             if self._update_counter % self._trgt_net_freq == 0:
@@ -186,8 +220,7 @@ class SAC(SActorCriticAlgoBase):
                     target_param.data.copy_(self._smoothing_coeff * param.data + (1 - self._smoothing_coeff) * target_param.data)
                 self._n_tqfun_updates[self._log_it_counter]+=1
 
-            if self._debug and \
-                (self._vec_transition_counter % self._db_vecstep_frequency == 0):
+            if self._debug:
                 # DEBUG INFO
         
                 # current q estimates on training batch
