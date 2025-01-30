@@ -386,10 +386,14 @@ class SActorCriticAlgoBase(ABC):
         if self._use_rnd:
             self._rnd_trgt_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
                 layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
-                target=True)
+                target=True,
+                device=self._torch_device,
+                dtype=self._dtype)
             self._rnd_predictor_net = RNDNetwork(input_dim=self._rnd_indim, output_dim=self._rnd_outdim,
                 layer_width=self._rnd_lwidth, n_hidden_layers=self._rnd_hlayers,
-                target=False)
+                target=False,
+                device=self._torch_device,
+                dtype=self._dtype)
             self._rnd_optimizer = torch.optim.Adam(self._rnd_predictor_net.parameters(), 
                                     lr=self._rnd_lr)
             
