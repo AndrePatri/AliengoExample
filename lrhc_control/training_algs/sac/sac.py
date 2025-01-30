@@ -152,6 +152,8 @@ class SAC(SActorCriticAlgoBase):
                     
                     self._rnd_loss[self._log_it_counter, 0] = rnd_loss.item()
                     
+                    self._n_rnd_updates[self._log_it_counter]+=1
+
                     if self._debug:
                         # bonus stats
                         self._expl_bonus_raw_avrg[self._log_it_counter, 0] = self._raw_exp_bonus_all.mean().item()

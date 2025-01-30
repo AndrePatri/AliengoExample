@@ -999,6 +999,9 @@ class SActorCriticAlgoBase(ABC):
             #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
             # self._expl_bonus_proc_max = torch.full((self._db_data_size, 1), 
             #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+
+            self._n_rnd_updates = torch.full((self._db_data_size, 1), 
+                    dtype=torch.int32, fill_value=0, device="cpu")
             
     def _init_replay_buffers(self):
         
@@ -1300,6 +1303,7 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('target_entropy', data=self._target_entropy)
 
             if self._use_rnd:
+                hf.create_dataset('n_rnd_updates', data=self._n_rnd_updates.numpy())
                 hf.create_dataset('expl_bonus_raw_avrg', data=self._expl_bonus_raw_avrg.numpy())
                 hf.create_dataset('expl_bonus_raw_std', data=self._expl_bonus_raw_std.numpy())
                 hf.create_dataset('expl_bonus_proc_avrg', data=self._expl_bonus_proc_avrg.numpy())
@@ -1472,7 +1476,8 @@ class SActorCriticAlgoBase(ABC):
             self._n_policy_updates[self._log_it_counter]+=self._n_policy_updates[self._log_it_counter-1]
             self._n_qfun_updates[self._log_it_counter]+=self._n_qfun_updates[self._log_it_counter-1]
             self._n_tqfun_updates[self._log_it_counter]+=self._n_tqfun_updates[self._log_it_counter-1]
-
+            if self._use_rnd:
+                self._n_rnd_updates[self._log_it_counter]+=self._n_rnd_updates[self._log_it_counter-1]
             self._policy_update_fps[self._log_it_counter] = (self._n_policy_updates[self._log_it_counter]-\
                 self._n_policy_updates[self._log_it_counter-1])/self._policy_update_dt[self._log_it_counter]
 
@@ -1790,6 +1795,8 @@ class SActorCriticAlgoBase(ABC):
                 f"Time spent for computing validation {self._validation_dt[self._log_it_counter].item()} s\n" + \
                 f"Demo envs are active: {self._demo_envs_active[self._log_it_counter].item()}. N  demo envs if active {self._env.n_demo_envs()}\n" + \
                 f"Performance metric now: {self._demo_perf_metric[self._log_it_counter].item()}/{self._demo_stop_thresh}\n"
+            if self._use_rnd:
+                info = info + f"N. rnd updates performed: {self._n_rnd_updates[self._log_it_counter].item()}\n"
             
             Journal.log(self.__class__.__name__,
                 "_post_step",
