@@ -540,7 +540,7 @@ class SActorCriticAlgoBase(ABC):
         self._rnd_lr = 1e-3
         if "use_rnd" in custom_args and (not self._eval):
             self._use_rnd=custom_args["use_rnd"]
-        self._rnd_weight=0.5
+        self._rnd_weight=1.0
         self._alpha=0.0
         self._novelty_scaler=None
         if self._use_rnd:
