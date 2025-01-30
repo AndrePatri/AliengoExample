@@ -1564,7 +1564,7 @@ class SActorCriticAlgoBase(ABC):
                 if self._running_mean_rnd_input is not None:
                     self._running_mean_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_mean()
                 if self._running_std_rnd_input is not None:
-                    self._running_std_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_mean()
+                    self._running_std_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_std()
                     
             # write some episodic db info on shared mem
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
