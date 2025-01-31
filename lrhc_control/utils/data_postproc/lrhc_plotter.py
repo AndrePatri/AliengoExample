@@ -838,6 +838,30 @@ if __name__ == "__main__":
                 data_idxs=idxs)
             
             # cmd effort
+            patterns=["rhc_cmd_q_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - rhc cmd q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd effort
+            patterns=["rhc_cmd_v_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - rhc cmd v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd effort
             patterns=["rhc_cmd_eff_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
             plotter.plot_data(dataset_name=ep_prefix+"Obs", 
