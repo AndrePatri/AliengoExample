@@ -1,8 +1,5 @@
 import torch 
 import torch.nn as nn
-import torch.nn.functional as F
-import math
-
 from torch.distributions.normal import Normal
 
 from lrhc_control.utils.nn.normalization_utils import RunningNormalizer 
@@ -22,7 +19,7 @@ class SACAgent(nn.Module):
             obs_lb: List[float] = None,
             actions_ub: List[float] = None,
             actions_lb: List[float] = None,
-            rescale_obs: bool = True,
+            rescale_obs: bool = False,
             norm_obs: bool = True,
             device:str="cuda",
             dtype=torch.float32,
@@ -37,6 +34,8 @@ class SACAgent(nn.Module):
             n_hidden_layers_critic:int=4,
             torch_compile: bool = False,
             add_weight_norm: bool = False):
+
+        super().__init__()
 
         self._use_torch_compile=torch_compile
 
@@ -55,8 +54,6 @@ class SACAgent(nn.Module):
                 f"Will use weight normalization reparametrization\n",
                 LogType.INFO)
         
-        super().__init__()
-
         self._normalize_obs = norm_obs
         self._rescale_obs=rescale_obs
         if self._rescale_obs and self._normalize_obs:

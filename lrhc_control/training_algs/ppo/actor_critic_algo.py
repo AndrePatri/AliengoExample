@@ -131,16 +131,26 @@ class ActorCriticAlgoBase(ABC):
             pass
 
         self._agent = ACAgent(obs_dim=self._env.obs_dim(),
+                        obs_ub=self._env.get_obs_ub().flatten().tolist(),
+                        obs_lb=self._env.get_obs_lb().flatten().tolist(),
                         actions_dim=self._env.actions_dim(),
-                        actor_std=0.01,
-                        critic_std=1.0,
+                        actions_ub=self._env.get_actions_ub().flatten().tolist(),
+                        actions_lb=self._env.get_actions_lb().flatten().tolist(),
+                        rescale_obs=rescale_obs,
                         norm_obs=norm_obs,
+                        compression_ratio=compression_ratio,
                         device=self._torch_device,
                         dtype=self._dtype,
                         is_eval=self._eval,
                         debug=self._debug,
-                        layer_size_actor=layer_size_actor,
-                        layer_size_critic=layer_size_actor)
+                        layer_width_actor=layer_width_actor,
+                        layer_width_critic=layer_width_critic,
+                        n_hidden_layers_actor=n_hidden_layers_actor,
+                        n_hidden_layers_critic=n_hidden_layers_critic,
+                        torch_compile=use_torch_compile,
+                        add_weight_norm=add_weight_norm,
+                        out_std_actor=0.01,
+                        out_std_critic=1.0)
         # self._agent.to(self._torch_device) # move agent to target device
 
         # load model if necessary 

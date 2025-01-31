@@ -10,7 +10,8 @@ def llayer_init(layer,
     device: str = "cuda",
     dtype = torch.float32,
     uniform_biases: bool = False,
-    add_weight_norm: bool = False):
+    add_weight_norm: bool = False,
+    orth_init_gain: float = 1.0):
 
         # Move to device and set dtype
         layer.to(device).type(dtype)
@@ -18,7 +19,7 @@ def llayer_init(layer,
         # Apply weight initialization based on the init_type argument
         if init_type is not None:
             if init_type == "orthogonal":
-                torch.nn.init.orthogonal_(layer.weight, gain=1.0)
+                torch.nn.init.orthogonal_(layer.weight, gain=orth_init_gain)
                 torch.nn.init.constant_(layer.bias, bias_const)
             if init_type == "uniform":
                 k=1/layer.in_features
