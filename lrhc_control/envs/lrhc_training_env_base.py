@@ -212,8 +212,6 @@ class LRhcTrainingEnvBase(ABC):
 
         self._env_opts["substep_dt"]=self._substep_dt
 
-        self._env_opts["actions_history_size"] = round(self._env_opts["actions_history_size"]/self._action_repeat) 
-
         self._env_opts["override_agent_refs"]=self._override_agent_refs
 
         self._env_opts["episode_timeout_lb"] = round(self._env_opts["episode_timeout_lb"]/self._action_repeat) 
