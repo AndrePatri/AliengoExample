@@ -738,6 +738,27 @@ if __name__ == "__main__":
             data_labels=sub_term_names,
             use_markers=True)
         
+        # rnd
+        if "use_rnd" in attributes:
+            if attributes["use_rnd"]:
+                plotter.compose_datasets(name="expl_bonus_proc",
+                    datasets_list=["expl_bonus_proc_avrg", "expl_bonus_proc_std"])
+                plotter.plot_data(dataset_name="expl_bonus_proc", title="expl_bonus_proc", 
+                    xaxis_dataset_name=xaxis_dataset_name,
+                    xlabel="n_timesteps_done",
+                    use_markers=True,
+                    data_alphas=[0.3, 0.3],
+                    data_labels=["expl_bonus_proc_avrg", "expl_bonus_proc_std"])
+                
+                plotter.compose_datasets(name="expl_bonus_raw",
+                    datasets_list=["expl_bonus_raw_avrg", "expl_bonus_raw_std"])
+                plotter.plot_data(dataset_name="expl_bonus_raw", title="expl_bonus_raw", 
+                    xaxis_dataset_name=xaxis_dataset_name,
+                    xlabel="n_timesteps_done",
+                    use_markers=True,
+                    data_alphas=[0.3, 0.3],
+                    data_labels=["expl_bonus_raw_avrg", "expl_bonus_raw_std"])
+                
         plotter.show()  # Display all plots
 
     else:
