@@ -229,6 +229,13 @@ class ACAgent(nn.Module):
                 ):
         x = self._preprocess_obs(x)
         return self.actor.get_action(x, only_mean=only_mean)
+    
+    def get_action_and_value(self, x, 
+        action=None):
+        x = self._preprocess_obs(x)
+        action, probs, entropy = self.actor.get_action(x, action=action)
+        value=self.critic(x)
+        return action, probs, entropy, value
 
 class CriticV(nn.Module):
     def __init__(self,
@@ -430,15 +437,17 @@ class Actor(nn.Module):
         
             return self.actor_mean(x)
 
-        def get_action(self, x, only_mean: bool = False):
+        def get_action(self, x, only_mean: bool = False, action=None):
             
             action_mean = self(x)
             action_logstd = self.actor_logstd.expand_as(action_mean)
             action_std = torch.exp(action_logstd)
             probs = Normal(action_mean, action_std)
-            if not only_mean:
-                action = probs.sample()
-            else:
-                action = action_mean
+            if action is None:
+                if not only_mean:
+                    action = probs.sample()
+                else:
+                    action = action_mean
+            
             return action, probs.log_prob(action).sum(1), probs.entropy().sum(1)
-        
+            

@@ -612,7 +612,6 @@ if __name__ == "__main__":
         custom_args = custom_args_dict,
         comment=args.comment,
         eval=args.eval,
-        load_qf=False,
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,

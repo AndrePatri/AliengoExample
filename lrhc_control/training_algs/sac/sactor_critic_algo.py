@@ -197,13 +197,12 @@ class SActorCriticAlgoBase(ABC):
             verbose: bool = False,
             drop_dir_name: str = None,
             eval: bool = False,
-            load_qf: bool = False,
             model_path: str = None,
             n_eval_timesteps: int = None,
             comment: str = "",
             dump_checkpoints: bool = False,
-            norm_obs: bool = False,
-            rescale_obs: bool = True):
+            norm_obs: bool = True,
+            rescale_obs: bool = False):
 
         tot_tsteps=int(100e6)
         if "tot_tsteps" in custom_args:
@@ -224,7 +223,8 @@ class SActorCriticAlgoBase(ABC):
         self._eval = eval
         self._load_qf=False
         if self._eval:
-            self._load_qf=load_qf
+            if "load_qf" in custom_args:
+                self._load_qf=custom_args["load_qf"]
         try:
             self._det_eval=custom_args["det_eval"]
         except:
@@ -505,7 +505,7 @@ class SActorCriticAlgoBase(ABC):
         self._lr_policy = 1e-3
         self._lr_q = 5e-4
 
-        self._discount_factor = 0.995
+        self._discount_factor = 0.99
         self._smoothing_coeff = 0.005
 
         self._policy_freq = 2
@@ -644,6 +644,7 @@ class SActorCriticAlgoBase(ABC):
         self._exp_to_qft_grad_ratio=float(self._total_timesteps-self._warmstart_timesteps)/float(self._n_tqf_updates_to_be_done)
 
         self._db_data_size = round(self._total_timesteps_vec/self._db_vecstep_frequency)+self._db_vecstep_frequency
+        
         # write them to hyperparam dictionary for debugging
         self._hyperparameters["n_envs"] = self._num_envs
         self._hyperparameters["obs_dim"] = self._obs_dim
@@ -1458,7 +1459,6 @@ class SActorCriticAlgoBase(ABC):
 
     def _post_step(self):
         
-        # these have to always be updated
         self._collection_dt[self._log_it_counter] += \
             (self._collection_t-self._start_time)
         self._batch_norm_update_dt[self._log_it_counter] += \

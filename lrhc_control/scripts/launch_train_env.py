@@ -81,8 +81,6 @@ if __name__ == "__main__":
     parser.add_argument('--det_eval',action='store_true', help='Whether to perform a deterministic eval (only action mean is used). Only valid if --eval.')
     parser.add_argument('--allow_expl_during_eval',action='store_true', help='Whether to allow expl envs during evaluation (useful to tune exploration)')
     parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
-
-    parser.add_argument('--load_qf',action='store_true', help='whether to load the q function during eval')
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
@@ -211,7 +209,6 @@ if __name__ == "__main__":
         custom_args=custom_args,
         comment=args.comment,
         eval=args.eval,
-        load_qf=args.load_qf,
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,
