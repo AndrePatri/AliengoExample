@@ -21,7 +21,7 @@ def llayer_init(layer,
             if init_type == "orthogonal":
                 torch.nn.init.orthogonal_(layer.weight, gain=orth_init_gain)
                 torch.nn.init.constant_(layer.bias, bias_const)
-            if init_type == "uniform":
+            elif init_type == "uniform":
                 k=1/layer.in_features
                 bound=math.sqrt(k)
                 torch.nn.init.uniform_(layer.weight,a=-bound,b=bound)
