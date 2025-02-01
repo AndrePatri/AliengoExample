@@ -214,7 +214,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=actions_dim # it's better to also add the smoothed actions as obs
         
         # Agent task reference
-        self._add_env_opt(env_opts, "use_pof0", default=False) # with some prob, references will be null
+        self._add_env_opt(env_opts, "use_pof0", default=True) # with some prob, references will be null
         self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
         self._add_env_opt(env_opts, "max_ref", default=1.0)
 
