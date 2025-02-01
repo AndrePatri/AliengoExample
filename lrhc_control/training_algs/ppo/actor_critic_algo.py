@@ -145,6 +145,7 @@ class ActorCriticAlgoBase(ABC):
             
             # update batch normalization
             self._update_batch_norm(bsize=self._bnorm_bsize)
+            self._bnorm_t = time.perf_counter()
 
             # generalized advantage estimation
             self._compute_returns()
@@ -585,6 +586,7 @@ class ActorCriticAlgoBase(ABC):
         self._env_step_rt_factor = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
         
+        self._bnorm_t = -1.0
         self._batch_norm_update_dt = torch.full((self._db_data_size, 1), 
                     dtype=torch.float32, fill_value=0.0, device="cpu")
                     
@@ -1162,8 +1164,10 @@ class ActorCriticAlgoBase(ABC):
 
         self._rollout_dt[self._log_it_counter] += \
             self._rollout_t -self._start_time
+        self._batch_norm_update_dt[self._log_it_counter] += \
+            (self._bnorm_t-self._rollout_t)
         self._gae_dt[self._log_it_counter] += \
-            self._gae_t - self._rollout_t
+            self._gae_t - self._bnorm_t
         self._policy_update_dt[self._log_it_counter] += \
             self._policy_update_t - self._gae_t
 
