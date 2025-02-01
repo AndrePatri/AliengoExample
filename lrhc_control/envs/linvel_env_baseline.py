@@ -965,7 +965,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # (it will be rotated in base frame when provided to the agent and used for rew 
         # computation)
         
-        if self.self._env_opts["use_pof0"]: # sample from bernoulli distribution
+        if self._env_opts["use_pof0"]: # sample from bernoulli distribution
             torch.bernoulli(input=self._pof1_b,out=self._bernoulli_coeffs) # by default bernoulli_coeffs are 1 if not self._env_opts["use_pof0"]
         if env_indxs is None:
             random_uniform=torch.full_like(self._agent_twist_ref_current_w, fill_value=0.0)
