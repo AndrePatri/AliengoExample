@@ -1,6 +1,3 @@
-from lrhc_control.training_algs.ppo.ppo import PPO
-from lrhc_control.training_algs.sac.sac import SAC
-from lrhc_control.training_algs.dummy.dummy import Dummy
 from lrhc_control.utils.determinism import deterministic_run
 
 from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
@@ -182,16 +179,22 @@ if __name__ == "__main__":
     algo=None
     if not args.dummy:
         if args.sac:
+            from lrhc_control.training_algs.sac.sac import SAC
+
             algo = SAC(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
         else:
+            from lrhc_control.training_algs.ppo.ppo import PPO
+
             algo = PPO(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
     else:
+        from lrhc_control.training_algs.dummy.dummy import Dummy
+
         algo=Dummy(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,

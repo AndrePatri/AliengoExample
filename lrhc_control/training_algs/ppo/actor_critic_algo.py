@@ -103,22 +103,6 @@ class ActorCriticAlgoBase(ABC):
         self._is_discrete_actions_bool=self._env.is_action_discrete()
         self._is_discrete_actions=torch.where(self._is_discrete_actions_bool)[0]
 
-        # default to all debug envs
-        self._db_env_selector=torch.tensor(list(range(0, self._num_envs)), dtype=torch.int)
-        self._db_env_selector_bool=torch.full((self._num_envs, ), 
-                dtype=torch.bool, device="cpu",
-                fill_value=True)
-        # default to no expl envs
-        self._expl_env_selector=None
-        self._expl_env_selector_bool=torch.full((self._num_envs, ), dtype=torch.bool, device="cpu",
-                fill_value=False)
-        self._pert_counter=0.0
-        # demo envs
-        self._demo_stop_thresh=None # performance metrics above which demo envs are deactivated
-        # (can be overridden thorugh the provided options)
-        self._demo_env_selector=self._env.demo_env_idxs()
-        self._demo_env_selector_bool=self._env.demo_env_idxs(get_bool=True)
-
     def learn(self):
         
         if not self._setup_done:
