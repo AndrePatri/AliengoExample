@@ -216,7 +216,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # Agent task reference
         self._add_env_opt(env_opts, "use_pof0", default=True) # with some prob, references will be null
         self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
-        self._add_env_opt(env_opts, "max_ref", default=1.0)
+        self._add_env_opt(env_opts, "max_ref", default=0.4)
 
         # ready to init base class
         self._this_child_path = os.path.abspath(__file__)
