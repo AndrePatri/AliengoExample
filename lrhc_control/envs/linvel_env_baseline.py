@@ -36,8 +36,6 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         env_name = "LinVelTrack"
         device = "cuda" if use_gpu else "cpu"
 
-        self._actions_map={}
-
         self._add_env_opt(env_opts, "srew_drescaling", 
             False)
         
@@ -360,19 +358,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._power_penalty_weights_sum = torch.sum(self._power_penalty_weights).item()
         subr_names=self._get_rewards_names() # initializes
         # _reward_map
-        # which rewards are to be computed at substeps frequency?
-        self._is_substep_rew[self._reward_map["task_error"]]=False
-        if self._env_opts["add_CoT_reward"]:
-            self._is_substep_rew[self._reward_map["CoT"]]=True
-        if self._env_opts["add_power_reward"]:
-            self._is_substep_rew[self._reward_map["mech_pow"]]=True
-        if self._env_opts["add_action_rate_reward"]:
-            self._is_substep_rew[self._reward_map["action_rate"]]=False
-        if self._env_opts["add_jnt_v_reward"]:
-            self._is_substep_rew[self._reward_map["jnt_v"]]=True
-
-        if self._env_opts["use_rhc_avrg_vel_tracking"]:
-            self._is_substep_rew[self._reward_map["rhc_avrg_vel_error"]]=False
+        
             
         # reward clipping
         self._reward_thresh_lb[:, :]=-1e6 # (neg rewards can be nasty, especially if they all become negative)
@@ -503,7 +489,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._env_opts["use_track_reward_smoother"]:
             sub_reward_proxy=self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)[:, 0:1]
             smoothing_dt=self._substep_dt
-            if not self._is_substep_rew[0]: # assuming first reward is tracking
+            if not self._is_substep_rew[self._reward_map["task_error"]]: # assuming first reward is tracking
                 smoothing_dt=self._substep_dt*self._action_repeat
             self._track_rew_smoother=ExponentialSignalSmoother(
                 name=self.__class__.__name__+"VelErrorSmoother",
@@ -675,8 +661,25 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._rhc_refs.rob_refs.root_state.synch_all(read=False, retry=True) # write mirror to shared mem
         self._rhc_refs.contact_flags.synch_all(read=False, retry=True)
         self._rhc_refs.rob_refs.contact_pos.synch_all(read=False, retry=True)
+    
+    def _fill_substep_obs(self,
+            obs: torch.Tensor):
 
-    def _fill_obs(self,
+        # measured stuff
+        robot_twist_meas_base_loc = self._robot_state.root_state.get(data_type="twist",gpu=self._use_gpu)
+        robot_jnt_v_meas = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
+        
+        if self._env_opts["use_linvel_from_rhc"]:
+            # twist estimate from mpc
+            robot_twist_rhc_base_loc_next = self._rhc_cmds.root_state.get(data_type="twist",gpu=self._use_gpu)
+            obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
+        else:
+            obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_meas_base_loc[:, 0:3]
+        obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_meas_base_loc[:, 3:6]
+
+        obs[:, self._obs_map["v_jnt"]:(self._obs_map["v_jnt"]+self._n_jnts)] = robot_jnt_v_meas 
+
+    def _fill_step_obs(self,
             obs: torch.Tensor):
 
         # measured stuff
@@ -700,29 +703,16 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # refs
         agent_twist_ref = self._agent_refs.rob_refs.root_state.get(data_type="twist",gpu=self._use_gpu)
 
-        next_idx=0
-        obs[:, next_idx:(next_idx+3)] = robot_gravity_norm_base_loc # norm. gravity vector in base frame
-        next_idx+=3
-        if self._env_opts["use_linvel_from_rhc"]:
-            obs[:, next_idx:(next_idx+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
-        else:
-            obs[:, next_idx:(next_idx+3)] = robot_twist_meas_base_loc[:, 0:3]
-        next_idx+=3
-        obs[:, next_idx:(next_idx+3)] = robot_twist_meas_base_loc[:, 3:6]
-        next_idx+=3
-        obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_meas # meas jnt pos
-        next_idx+=self._n_jnts
-        obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_v_meas # meas jnt vel
-        next_idx+=self._n_jnts
-        obs[:, next_idx:(next_idx+6)] = agent_twist_ref # high lev agent refs to be tracked
-        next_idx+=6
+        obs[:, self._obs_map["gn_base"]:(self._obs_map["gn_base"]+3)] = robot_gravity_norm_base_loc # norm. gravity vector in base frame
+        
+        obs[:, self._obs_map["q_jnt"]:(self._obs_map["q_jnt"]+self._n_jnts)] = robot_jnt_q_meas # meas jnt pos
+        obs[:, self._obs_map["twist_ref"]:(self._obs_map["twist_ref"]+6)] = agent_twist_ref # high lev agent refs to be tracked
+
         if self._env_opts["add_mpc_contact_f_to_obs"]:
             n_forces=3*len(self._contact_names)
-            obs[:, next_idx:(next_idx+n_forces)] = self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=self._use_gpu)
-            next_idx+=n_forces
+            obs[:, self._obs_map["contact_f_mpc"]:(self._obs_map["contact_f_mpc"]+n_forces)] = self._rhc_cmds.contact_wrenches.get(data_type="f",gpu=self._use_gpu)
         if self._env_opts["add_fail_idx_to_obs"]:
-            obs[:, next_idx:(next_idx+1)] = self._rhc_fail_idx(gpu=self._use_gpu)
-            next_idx+=1
+            obs[:, self._obs_map["rhc_fail_idx"]:(self._obs_map["rhc_fail_idx"]+1)] = self._rhc_fail_idx(gpu=self._use_gpu)
         if self._env_opts["add_term_mpc_capsize"]:
             obs[:, next_idx:(next_idx+3)] = self._rhc_cmds.root_state.get(data_type="gn",gpu=self._use_gpu)
             next_idx+=3
@@ -984,10 +974,14 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # proprioceptive stream of obs
         next_idx=0
+
+        self._obs_map["gn_base"]=next_idx
         obs_names[0] = "gn_x_base_loc"
         obs_names[1] = "gn_y_base_loc"
         obs_names[2] = "gn_z_base_loc"
         next_idx+=3
+
+        self._obs_map["twist_meas"]=next_idx
         obs_names[next_idx] = "linvel_x_base_loc"
         obs_names[next_idx+1] = "linvel_y_base_loc"
         obs_names[next_idx+2] = "linvel_z_base_loc"
@@ -995,15 +989,20 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs_names[next_idx+4] = "omega_y_base_loc"
         obs_names[next_idx+5] = "omega_z_base_loc"
         next_idx+=6
+
         jnt_names=self.get_observed_joints()
+        self._obs_map["q_jnt"]=next_idx
         for i in range(self._n_jnts): # jnt obs (pos):
             obs_names[next_idx+i] = f"q_jnt_{jnt_names[i]}"
         next_idx+=self._n_jnts
+        
+        self._obs_map["v_jnt"]=next_idx
         for i in range(self._n_jnts): # jnt obs (v):
             obs_names[next_idx+i] = f"v_jnt_{jnt_names[i]}"
         next_idx+=self._n_jnts
-
+        
         # references
+        self._obs_map["twist_ref"]=next_idx
         obs_names[next_idx] = "linvel_x_ref_base_loc"
         obs_names[next_idx+1] = "linvel_y_ref_base_loc"
         obs_names[next_idx+2] = "linvel_z_ref_base_loc"
@@ -1011,27 +1010,31 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs_names[next_idx+4] = "omega_y_ref_base_loc"
         obs_names[next_idx+5] = "omega_z_ref_base_loc"
         next_idx+=6
-
+        
         # contact forces
         if self._env_opts["add_mpc_contact_f_to_obs"]:
             i = 0
+            self._obs_map["contact_f_mpc"]=next_idx
             for contact in self._contact_names:
                 obs_names[next_idx+i] = f"fc_{contact}_x_base_loc"
                 obs_names[next_idx+i+1] = f"fc_{contact}_y_base_loc"
                 obs_names[next_idx+i+2] = f"fc_{contact}_z_base_loc"
                 i+=3        
             next_idx+=3*len(self._contact_names)
-
+            
         # data directly from MPC
         if self._env_opts["add_fail_idx_to_obs"]:
+            self._obs_map["rhc_fail_idx"]=next_idx
             obs_names[next_idx] = "rhc_fail_idx"
             next_idx+=1
         if self._env_opts["add_term_mpc_capsize"]:
+            self._obs_map["gn_base_mpc"]=next_idx
             obs_names[next_idx] = "gn_x_rhc_base_loc"
             obs_names[next_idx+1] = "gn_y_rhc_base_loc"
             obs_names[next_idx+2] = "gn_z_rhc_base_loc"
             next_idx+=3
         if self._env_opts["use_rhc_avrg_vel_tracking"]:
+            self._obs_map["avrg_twist_mpc"]=next_idx
             obs_names[next_idx] = "linvel_x_avrg_rhc"
             obs_names[next_idx+1] = "linvel_y_avrg_rhc"
             obs_names[next_idx+2] = "linvel_z_avrg_rhc"
@@ -1039,14 +1042,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_names[next_idx+4] = "omega_y_avrg_rhc"
             obs_names[next_idx+5] = "omega_z_avrg_rhc"
             next_idx+=6
+        
         if self._env_opts["add_flight_info"]:
+            self._obs_map["flight_info"]=next_idx
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_pos_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_len_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
+        
         if self._env_opts["add_flight_settings"]:
+            self._obs_map["flight_settings"]=next_idx
             for i in range(len(self._contact_names)):
                 obs_names[next_idx+i] = "flight_len_cmd_"+ self._contact_names[i]
             next_idx+=len(self._contact_names)
@@ -1058,17 +1065,22 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             next_idx+=len(self._contact_names)
 
         if self._env_opts["add_rhc_cmds_to_obs"]:
+            self._obs_map["rhc_cmds_q"]=next_idx
             for i in range(self._n_jnts): # jnt obs (pos):
                 obs_names[next_idx+i] = f"rhc_cmd_q_{jnt_names[i]}"
             next_idx+=self._n_jnts
+            self._obs_map["rhc_cmds_v"]=next_idx
             for i in range(self._n_jnts): # jnt obs (pos):
                 obs_names[next_idx+i] = f"rhc_cmd_v_{jnt_names[i]}"
             next_idx+=self._n_jnts
+            self._obs_map["rhc_cmds_eff"]=next_idx
             for i in range(self._n_jnts): # jnt obs (pos):
                 obs_names[next_idx+i] = f"rhc_cmd_eff_{jnt_names[i]}"
             next_idx+=self._n_jnts
+
         # previous actions info
         if self._env_opts["use_action_history"]:
+            self._obs_map["action_history"]=next_idx
             action_names = self._get_action_names()
             if self._env_opts["add_prev_actions_stats_to_obs"]:
                 for act_idx in range(self.actions_dim()):
@@ -1087,10 +1099,20 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     next_idx+=self.actions_dim()
 
         if self._env_opts["use_action_smoothing"]:
+            self._obs_map["action_smoothing"]=next_idx
             for smoothed_action in range(self.actions_dim()):
                 obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
             next_idx+=self.actions_dim()
         return obs_names
+
+    def _set_substep_obs(self):
+        # which obs are to be averaged over substeps?
+
+        self._is_substep_obs[self._obs_map["twist_meas"]:self._obs_map["twist_meas"]+6]=True
+
+        self._is_substep_obs[self._obs_map["v_jnt"]:self._obs_map["v_jnt"]+6]=True # also good for noise
+
+        # self._is_substep_obs[self._obs_map["contact_f_mpc"]:self._obs_map["contact_f_mpc"]+3*len(self._contact_names)]=True
 
     def _get_action_names(self):
         
@@ -1112,6 +1134,22 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         return action_names
     
+    def _set_substep_rew(self):
+
+        # which rewards are to be computed at substeps frequency?
+        self._is_substep_rew[self._reward_map["task_error"]]=False
+        if self._env_opts["add_CoT_reward"]:
+            self._is_substep_rew[self._reward_map["CoT"]]=True
+        if self._env_opts["add_power_reward"]:
+            self._is_substep_rew[self._reward_map["mech_pow"]]=True
+        if self._env_opts["add_action_rate_reward"]:
+            self._is_substep_rew[self._reward_map["action_rate"]]=False
+        if self._env_opts["add_jnt_v_reward"]:
+            self._is_substep_rew[self._reward_map["jnt_v"]]=True
+
+        if self._env_opts["use_rhc_avrg_vel_tracking"]:
+            self._is_substep_rew[self._reward_map["rhc_avrg_vel_error"]]=False
+
     def _get_rewards_names(self):
         
         counter=0

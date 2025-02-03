@@ -122,6 +122,9 @@ class LRhcTrainingEnvBase(ABC):
         self._rand_safety_reset_counter = None
         self._rand_trunc_counter = None
 
+        self._actions_map={} # to be used to hold info like action idxs
+        self._obs_map={}
+
         self._obs = None
         self._obs_ub = None
         self._obs_lb = None
@@ -152,6 +155,15 @@ class LRhcTrainingEnvBase(ABC):
         self._init_custom_db_data()
         
         self._demo_setup() # setup for demo envs
+
+        # to ensure maps are properly initialized
+        _ = self._get_action_names()
+        _ = self._get_obs_names()
+        _ = self._get_sub_trunc_names()
+        _ = self._get_sub_term_names()
+
+        self._set_substep_rew()
+        self._set_substep_obs()
 
         self._custom_post_init()
 
@@ -513,13 +525,18 @@ class LRhcTrainingEnvBase(ABC):
             self._assemble_substep_rewards() # includes rewards clipping
             self._custom_post_substp_post_rew() # custom substepping logic
 
+            # fill substep obs
+            next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
+            self._fill_substep_obs(next_obs)
+            self._assemble_substep_obs()
+        
             if not i==(self._action_repeat-1):
-                # just sends reset signal to complete remote step sequence,
+                # sends reset signal to complete remote step sequence,
                 # but does not reset any remote env
                 stepping_ok = stepping_ok and self._remote_reset(reset_mask=None) 
             else: # last substep
                 next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
-                self._fill_obs(next_obs) # update next obs
+                self._fill_step_obs(next_obs) # update next obs
                 self._clamp_obs(next_obs) # good practice
                 obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
                 obs[:, :] = next_obs # start from next observation, unless reset (handled in post_step())
@@ -617,7 +634,7 @@ class LRhcTrainingEnvBase(ABC):
         self._prev_root_q_substep[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
 
         obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
-        self._fill_obs(obs)
+        self._fill_step_obs(obs)
         self._clamp_obs(obs)
 
         # updating prev step quantities
@@ -708,7 +725,11 @@ class LRhcTrainingEnvBase(ABC):
         #     self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
         sub_rewards[:, self._is_substep_rew] = sub_rewards[:, self._is_substep_rew] + \
             self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
-                            
+    
+    def _assemble_substep_obs(self):
+        next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)        
+        next_obs[:, self._is_substep_obs] += next_obs[:, self._is_substep_obs]/self._action_repeat
+
     def randomize_task_refs(self,
                 env_indxs: torch.Tensor = None):
                     
@@ -756,9 +777,9 @@ class LRhcTrainingEnvBase(ABC):
 
         obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
         next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
-        self._fill_obs(obs) # initialize observations 
+        self._fill_step_obs(obs) # initialize observations 
         self._clamp_obs(obs) # to avoid bad things
-        self._fill_obs(next_obs) # and next obs
+        self._fill_step_obs(next_obs) # and next obs
         self._clamp_obs(next_obs)
 
         self.reset_custom_db_data(keep_track=False)
@@ -991,6 +1012,9 @@ class LRhcTrainingEnvBase(ABC):
 
         self._obs.run()
         self._next_obs.run()
+
+        self._is_substep_obs = torch.zeros((self.obs_dim,), dtype=torch.bool, device=device)
+        self._is_substep_obs.fill_(False) # default to all step obs
         
     def _init_actions(self, actions_dim: int):
         
@@ -1757,13 +1781,26 @@ class LRhcTrainingEnvBase(ABC):
     @abstractmethod
     def _compute_substep_rewards(self):
         pass
+    
+    @abstractmethod
+    def _set_substep_rew(self):
+        pass
+
+    @abstractmethod
+    def _set_substep_obs(self):
+        pass
 
     @abstractmethod
     def _compute_step_rewards(self):
         pass
-
+    
     @abstractmethod
-    def _fill_obs(self,
+    def _fill_substep_obs(self,
+            obs: torch.Tensor):
+        pass
+    
+    @abstractmethod
+    def _fill_step_obs(self,
             obs: torch.Tensor):
         pass
 
