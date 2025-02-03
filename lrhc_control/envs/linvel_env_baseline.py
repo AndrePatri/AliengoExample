@@ -77,7 +77,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         self._add_env_opt(env_opts, "vec_ep_freq_metrics_db", 1) # n eps over which debug metrics are reported
         self._add_env_opt(env_opts, "demo_envs_perc", 0.0)
-        self._add_env_opt(env_opts, "max_cmd_v", 1.5) # maximum cmd v for v actions (single component)
+        self._add_env_opt(env_opts, "max_cmd_v", 0.2) # maximum cmd v for v actions (single component)
 
         # action smoothing
         self._add_env_opt(env_opts, "use_action_smoothing", False)
