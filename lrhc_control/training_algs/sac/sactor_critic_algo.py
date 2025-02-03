@@ -999,7 +999,7 @@ class SActorCriticAlgoBase(ABC):
             #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
             # self._expl_bonus_proc_max = torch.full((self._db_data_size, 1), 
             #             dtype=torch.float32, fill_value=torch.nan, device="cpu")
-
+            
             self._n_rnd_updates = torch.full((self._db_data_size, 1), 
                     dtype=torch.int32, fill_value=0, device="cpu")
             self._running_mean_rnd_input = None
@@ -1250,6 +1250,8 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
+                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs())
+
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
             
@@ -1263,7 +1265,9 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('sub_rew_min_over_envs_demo', data=self._sub_rew_min_over_envs_demo.numpy())
 
                 hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
-
+                
+                hf.create_dataset('expl_env_selector', data=self._expl_env_selector)
+                
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
             hf.create_dataset('env_step_rt_factor', data=self._env_step_rt_factor.numpy())
