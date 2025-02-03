@@ -124,9 +124,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # action rate penalty
         self._add_env_opt(env_opts, "action_rate_offset", default=1.0)
-        self._add_env_opt(env_opts, "action_rate_scale", default=1.0)
+        self._add_env_opt(env_opts, "action_rate_scale", default=0.3)
         self._add_env_opt(env_opts, "action_rate_rew_d_weight", default=0.1)
-        self._add_env_opt(env_opts, "action_rate_rew_c_weight", default=1.0)
+        self._add_env_opt(env_opts, "action_rate_rew_c_weight", default=0.3)
 
         # jnt vel penalty
         self._add_env_opt(env_opts, "jnt_vel_offset", default=1.0)
@@ -214,9 +214,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             obs_dim+=actions_dim # it's better to also add the smoothed actions as obs
         
         # Agent task reference
-        self._add_env_opt(env_opts, "use_pof0", default=False) # with some prob, references will be null
+        self._add_env_opt(env_opts, "use_pof0", default=True) # with some prob, references will be null
         self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
-        self._add_env_opt(env_opts, "max_ref", default=1.0)
+        self._add_env_opt(env_opts, "max_ref", default=0.4)
 
         # ready to init base class
         self._this_child_path = os.path.abspath(__file__)
@@ -965,7 +965,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # (it will be rotated in base frame when provided to the agent and used for rew 
         # computation)
         
-        if self.self._env_opts["use_pof0"]: # sample from bernoulli distribution
+        if self._env_opts["use_pof0"]: # sample from bernoulli distribution
             torch.bernoulli(input=self._pof1_b,out=self._bernoulli_coeffs) # by default bernoulli_coeffs are 1 if not self._env_opts["use_pof0"]
         if env_indxs is None:
             random_uniform=torch.full_like(self._agent_twist_ref_current_w, fill_value=0.0)

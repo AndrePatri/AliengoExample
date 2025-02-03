@@ -1,6 +1,3 @@
-from lrhc_control.training_algs.ppo.ppo import PPO
-from lrhc_control.training_algs.sac.sac import SAC
-from lrhc_control.training_algs.dummy.dummy import Dummy
 from lrhc_control.utils.determinism import deterministic_run
 
 from control_cluster_bridge.utilities.shared_data.sim_data import SharedEnvInfo
@@ -81,8 +78,6 @@ if __name__ == "__main__":
     parser.add_argument('--det_eval',action='store_true', help='Whether to perform a deterministic eval (only action mean is used). Only valid if --eval.')
     parser.add_argument('--allow_expl_during_eval',action='store_true', help='Whether to allow expl envs during evaluation (useful to tune exploration)')
     parser.add_argument('--override_env',action='store_true', help='Whether to override env when running evaluation')
-
-    parser.add_argument('--load_qf',action='store_true', help='whether to load the q function during eval')
     
     parser.add_argument('--anomaly_detect',action='store_true', help='Whether to enable anomaly detection (useful for debug)')
 
@@ -184,16 +179,22 @@ if __name__ == "__main__":
     algo=None
     if not args.dummy:
         if args.sac:
+            from lrhc_control.training_algs.sac.sac import SAC
+
             algo = SAC(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
         else:
+            from lrhc_control.training_algs.ppo.ppo import PPO
+
             algo = PPO(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,
                 seed=args.seed)
     else:
+        from lrhc_control.training_algs.dummy.dummy import Dummy
+
         algo=Dummy(env=env, 
                 debug=args.db, 
                 remote_db=args.rmdb,
@@ -211,7 +212,6 @@ if __name__ == "__main__":
         custom_args=custom_args,
         comment=args.comment,
         eval=args.eval,
-        load_qf=args.load_qf,
         model_path=mpath_full,
         n_eval_timesteps=args.n_eval_timesteps,
         dump_checkpoints=args.dump_checkpoints,
