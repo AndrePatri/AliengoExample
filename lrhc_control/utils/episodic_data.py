@@ -556,8 +556,7 @@ class EpisodicData():
         return torch.sum(self.get_avrg(env_selector=env_selector), dim=0, keepdim=True)/scale
     
     def get_std_over_envs(self, env_selector: torch.Tensor = None):
-        values = self.get_avrg(env_selector=env_selector)  # Get values
-        std = torch.std(values, dim=0, keepdim=True, unbiased=True)  # Compute std over envs
+        std = torch.std(self.get_avrg(env_selector=env_selector), dim=0, keepdim=True, unbiased=False) 
         return std
     
     def get_min_over_envs(self, 
