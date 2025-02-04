@@ -614,9 +614,11 @@ class ActorCriticAlgoBase(ABC):
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._tot_rew_max_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._tot_rew_avrg_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
+        self._tot_rew_std_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         self._sub_rew_max = torch.full((self._db_data_size, self._num_envs, self._n_rewards), 
@@ -627,9 +629,11 @@ class ActorCriticAlgoBase(ABC):
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._sub_rew_max_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._sub_rew_avrg_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+        self._sub_rew_std_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         # custom data from env # (log data just from db envs for simplicity)
@@ -643,8 +647,9 @@ class ActorCriticAlgoBase(ABC):
             avrg = self._env.custom_db_data[dbdatan].get_avrg().reshape(self._num_envs, -1)
             min = self._env.custom_db_data[dbdatan].get_min().reshape(self._num_envs, -1)
             max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs().reshape(1, -1)
-            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs().reshape(1, -1)
             min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs().reshape(1, -1)
+            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs().reshape(1, -1)
+            std_over_envs = self._env.custom_db_data[dbdatan].get_std_over_envs().reshape(1, -1)
 
             self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
                 max.shape[0], 
@@ -662,14 +667,19 @@ class ActorCriticAlgoBase(ABC):
                 max_over_envs.shape[0], 
                 max_over_envs.shape[1]), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
-                avrg_over_envs.shape[0], 
-                avrg_over_envs.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._custom_env_data[dbdatan]["min_over_envs"] =torch.full((self._db_data_size, 
                 min_over_envs.shape[0], 
                 min_over_envs.shape[1]), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
+                avrg_over_envs.shape[0], 
+                avrg_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["std_over_envs"] =torch.full((self._db_data_size, 
+                std_over_envs.shape[0], 
+                std_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
 
         # algorithm-specific db info
         self._tot_loss_mean = torch.full((self._db_data_size, 1), 
@@ -948,15 +958,17 @@ class ActorCriticAlgoBase(ABC):
             hf.create_dataset('sub_rew_avrg', data=self._sub_rew_avrg.numpy())
             hf.create_dataset('sub_rew_min', data=self._sub_rew_min.numpy())
             hf.create_dataset('sub_rew_max_over_envs', data=self._sub_rew_max_over_envs.numpy())
-            hf.create_dataset('sub_rew_avrg_over_envs', data=self._sub_rew_avrg_over_envs.numpy())
             hf.create_dataset('sub_rew_min_over_envs', data=self._sub_rew_min_over_envs.numpy())
+            hf.create_dataset('sub_rew_avrg_over_envs', data=self._sub_rew_avrg_over_envs.numpy())
+            hf.create_dataset('sub_rew_std_over_envs', data=self._sub_rew_std_over_envs.numpy())
 
             hf.create_dataset('tot_rew_max', data=self._tot_rew_max.numpy())
             hf.create_dataset('tot_rew_avrg', data=self._tot_rew_avrg.numpy())
             hf.create_dataset('tot_rew_min', data=self._tot_rew_min.numpy())
             hf.create_dataset('tot_rew_max_over_envs', data=self._tot_rew_max_over_envs.numpy())
-            hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
             hf.create_dataset('tot_rew_min_over_envs', data=self._tot_rew_min_over_envs.numpy())
+            hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
+            hf.create_dataset('tot_rew_std_over_envs', data=self._tot_rew_std_over_envs.numpy())
             
             hf.create_dataset('ep_tsteps_env_distribution', data=self._ep_tsteps_env_distribution.numpy())
 
@@ -1193,15 +1205,17 @@ class ActorCriticAlgoBase(ABC):
             self._tot_rew_avrg[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg()
             self._tot_rew_min[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_min()
             self._tot_rew_max_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_max_over_envs()
-            self._tot_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg_over_envs()
             self._tot_rew_min_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_min_over_envs()
+            self._tot_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg_over_envs()
+            self._tot_rew_std_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_std_over_envs()
 
             self._sub_rew_max[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max()
             self._sub_rew_avrg[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg()
             self._sub_rew_min[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min()
             self._sub_rew_max_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max_over_envs()
-            self._sub_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs()
             self._sub_rew_min_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min_over_envs()
+            self._sub_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs()
+            self._sub_rew_std_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_std_over_envs()
 
             # fill env custom db metrics (only for debug environments)
             db_data_names = list(self._env.custom_db_data.keys())
@@ -1210,8 +1224,9 @@ class ActorCriticAlgoBase(ABC):
                 self._custom_env_data[dbdatan]["avrg"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg()
                 self._custom_env_data[dbdatan]["min"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_min()
                 self._custom_env_data[dbdatan]["max_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_max_over_envs()
-                self._custom_env_data[dbdatan]["avrg_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg_over_envs()
                 self._custom_env_data[dbdatan]["min_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_min_over_envs()
+                self._custom_env_data[dbdatan]["avrg_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg_over_envs()
+                self._custom_env_data[dbdatan]["std_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_std_over_envs()
 
             # other data
             if self._agent.running_norm is not None:
@@ -1306,10 +1321,12 @@ class ActorCriticAlgoBase(ABC):
             
                     self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_max_over_envs": 
                         data["max_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
-                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_avrg_over_envs": 
-                        data["avrg_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
                     self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_min_over_envs": 
                         data["min_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
+                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_avrg_over_envs": 
+                        data["avrg_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
+                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_std_over_envs": 
+                        data["std_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
                 
                 self._wandb_d.update({'log_iteration' : self._log_it_counter})
                 self._wandb_d.update(dict(zip(info_names, info_data)))
@@ -1322,8 +1339,10 @@ class ActorCriticAlgoBase(ABC):
                     'tot_reward/tot_rew_avrg': wandb.Histogram(self._tot_rew_avrg[self._log_it_counter, :, :].numpy()),
                     'tot_reward/tot_rew_min': wandb.Histogram(self._tot_rew_min[self._log_it_counter, :, :].numpy()),
                     'tot_reward/tot_rew_max_over_envs': self._tot_rew_max_over_envs[self._log_it_counter, :, :].item(),
+                    'tot_reward/tot_rew_min_over_envs': self._tot_rew_min_over_envs[self._log_it_counter, :, :].item(),
                     'tot_reward/tot_rew_avrg_over_envs': self._tot_rew_avrg_over_envs[self._log_it_counter, :, :].item(),
-                    'tot_reward/tot_rew_min_over_envs': self._tot_rew_min_over_envs[self._log_it_counter, :, :].item()})
+                    'tot_reward/tot_rew_std_over_envs': self._tot_rew_std_over_envs[self._log_it_counter, :, :].item()
+                    })
                 # sub rewards from db envs
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_max":
                         wandb.Histogram(self._sub_rew_max.numpy()[self._log_it_counter, :, i:i+1]) for i in range(len(self._reward_names))})
@@ -1334,10 +1353,12 @@ class ActorCriticAlgoBase(ABC):
             
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_max_over_envs":
                         self._sub_rew_max_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
-                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg_over_envs":
-                        self._sub_rew_avrg_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_min_over_envs":
                         self._sub_rew_min_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg_over_envs":
+                        self._sub_rew_avrg_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_std_over_envs":
+                        self._sub_rew_std_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                         
                 # algo info
                 self._policy_update_db_data_dict.update({
@@ -1394,8 +1415,9 @@ class ActorCriticAlgoBase(ABC):
                 f"min: {self._tot_rew_min_over_envs[self._log_it_counter, :, :].item()}\n" + \
                 f"Episodic sub-rewards episodic data --> \nsub rewards names: {self._reward_names_str}\n" + \
                 f"max: {self._sub_rew_max_over_envs[self._log_it_counter, :]}\n" + \
-                f"avg: {self._sub_rew_avrg_over_envs[self._log_it_counter, :]}\n" + \
                 f"min: {self._sub_rew_min_over_envs[self._log_it_counter, :]}\n" + \
+                f"avg: {self._sub_rew_avrg_over_envs[self._log_it_counter, :]}\n" + \
+                f"std: {self._sub_rew_std_over_envs[self._log_it_counter, :]}\n" + \
                 f"N. of episodes on which episodic rew stats are computed: {self._n_of_played_episodes[self._log_it_counter].item()}\n" + \
                 f"Current env. step sps: {self._env_step_fps[self._log_it_counter].item()}, time for experience collection {self._rollout_dt[self._log_it_counter].item()} s\n" + \
                 f"Current env (sub-stepping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n" + \

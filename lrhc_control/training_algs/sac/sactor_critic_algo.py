@@ -819,9 +819,11 @@ class SActorCriticAlgoBase(ABC):
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._tot_rew_max_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._tot_rew_avrg_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._tot_rew_min_over_envs = torch.full((self._db_data_size, 1, 1), 
+        self._tot_rew_std_over_envs = torch.full((self._db_data_size, 1, 1), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         self._sub_rew_max = torch.full((self._db_data_size, self._num_db_envs, self._n_rewards), 
@@ -832,9 +834,11 @@ class SActorCriticAlgoBase(ABC):
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._sub_rew_max_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
+        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+            dtype=torch.float32, fill_value=torch.nan, device="cpu")
         self._sub_rew_avrg_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
-        self._sub_rew_min_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
+        self._sub_rew_std_over_envs = torch.full((self._db_data_size, 1, self._n_rewards), 
             dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         # custom data from env # (log data just from db envs for simplicity)
@@ -848,8 +852,9 @@ class SActorCriticAlgoBase(ABC):
             avrg = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
             min = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector).reshape(self._num_db_envs, -1)
             max_over_envs = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
-            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
             min_over_envs = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            avrg_over_envs = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
+            std_over_envs = self._env.custom_db_data[dbdatan].get_std_over_envs(env_selector=self._db_env_selector).reshape(1, -1)
 
             self._custom_env_data[dbdatan]["max"] =torch.full((self._db_data_size, 
                 max.shape[0], 
@@ -867,15 +872,19 @@ class SActorCriticAlgoBase(ABC):
                 max_over_envs.shape[0], 
                 max_over_envs.shape[1]), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
-                avrg_over_envs.shape[0], 
-                avrg_over_envs.shape[1]), 
-                dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._custom_env_data[dbdatan]["min_over_envs"] =torch.full((self._db_data_size, 
                 min_over_envs.shape[0], 
                 min_over_envs.shape[1]), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
-
+            self._custom_env_data[dbdatan]["avrg_over_envs"] =torch.full((self._db_data_size, 
+                avrg_over_envs.shape[0], 
+                avrg_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._custom_env_data[dbdatan]["std_over_envs"] =torch.full((self._db_data_size, 
+                std_over_envs.shape[0], 
+                std_over_envs.shape[1]), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            
         # exploration envs
         if self._n_expl_envs > 0:
             self._ep_tsteps_expl_env_distribution = torch.full((self._db_data_size, self._n_expl_envs, 1), 
@@ -890,9 +899,11 @@ class SActorCriticAlgoBase(ABC):
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._sub_rew_max_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._sub_rew_avrg_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
+            self._sub_rew_std_over_envs_expl = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
         
         # demo environments
@@ -915,9 +926,11 @@ class SActorCriticAlgoBase(ABC):
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._sub_rew_max_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
+            self._sub_rew_min_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+                dtype=torch.float32, fill_value=torch.nan, device="cpu")
             self._sub_rew_avrg_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
-            self._sub_rew_min_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
+            self._sub_rew_std_over_envs_demo = torch.full((self._db_data_size, 1, self._n_rewards), 
                 dtype=torch.float32, fill_value=torch.nan, device="cpu")
             
         # algorithm-specific db info
@@ -1228,16 +1241,18 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('sub_rew_avrg', data=self._sub_rew_avrg.numpy())
             hf.create_dataset('sub_rew_min', data=self._sub_rew_min.numpy())
             hf.create_dataset('sub_rew_max_over_envs', data=self._sub_rew_max_over_envs.numpy())
-            hf.create_dataset('sub_rew_avrg_over_envs', data=self._sub_rew_avrg_over_envs.numpy())
             hf.create_dataset('sub_rew_min_over_envs', data=self._sub_rew_min_over_envs.numpy())
+            hf.create_dataset('sub_rew_avrg_over_envs', data=self._sub_rew_avrg_over_envs.numpy())
+            hf.create_dataset('sub_rew_std_over_envs', data=self._sub_rew_std_over_envs.numpy())
 
             hf.create_dataset('tot_rew_max', data=self._tot_rew_max.numpy())
             hf.create_dataset('tot_rew_avrg', data=self._tot_rew_avrg.numpy())
             hf.create_dataset('tot_rew_min', data=self._tot_rew_min.numpy())
             hf.create_dataset('tot_rew_max_over_envs', data=self._tot_rew_max_over_envs.numpy())
-            hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
             hf.create_dataset('tot_rew_min_over_envs', data=self._tot_rew_min_over_envs.numpy())
-            
+            hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
+            hf.create_dataset('tot_rew_std_over_envs', data=self._tot_rew_std_over_envs.numpy())
+
             hf.create_dataset('ep_tsteps_env_distribution', data=self._ep_tsteps_env_distribution.numpy())
 
             if self._n_expl_envs > 0:
@@ -1246,8 +1261,9 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('sub_rew_avrg_expl', data=self._sub_rew_avrg_expl.numpy())
                 hf.create_dataset('sub_rew_min_expl', data=self._sub_rew_min_expl.numpy())
                 hf.create_dataset('sub_rew_max_over_envs_expl', data=self._sub_rew_max_over_envs_expl.numpy())
-                hf.create_dataset('sub_rew_avrg_over_envs_expl', data=self._sub_rew_avrg_over_envs_expl.numpy())
                 hf.create_dataset('sub_rew_min_over_envs_expl', data=self._sub_rew_min_over_envs_expl.numpy())
+                hf.create_dataset('sub_rew_avrg_over_envs_expl', data=self._sub_rew_avrg_over_envs_expl.numpy())
+                hf.create_dataset('sub_rew_std_over_envs_expl', data=self._sub_rew_std_over_envs_expl.numpy())
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
@@ -1262,8 +1278,9 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('sub_rew_avrg_demo', data=self._sub_rew_avrg_demo.numpy())
                 hf.create_dataset('sub_rew_min_demo', data=self._sub_rew_min_demo.numpy())
                 hf.create_dataset('sub_rew_max_over_envs_demo', data=self._sub_rew_max_over_envs_demo.numpy())
-                hf.create_dataset('sub_rew_avrg_over_envs_demo', data=self._sub_rew_avrg_over_envs_demo.numpy())
                 hf.create_dataset('sub_rew_min_over_envs_demo', data=self._sub_rew_min_over_envs_demo.numpy())
+                hf.create_dataset('sub_rew_avrg_over_envs_demo', data=self._sub_rew_avrg_over_envs_demo.numpy())
+                hf.create_dataset('sub_rew_std_over_envs_demo', data=self._sub_rew_std_over_envs_demo.numpy())
 
                 hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
                 
@@ -1511,16 +1528,17 @@ class SActorCriticAlgoBase(ABC):
             self._tot_rew_avrg[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg(env_selector=self._db_env_selector)
             self._tot_rew_min[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_min(env_selector=self._db_env_selector)
             self._tot_rew_max_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_max_over_envs(env_selector=self._db_env_selector)
-            self._tot_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg_over_envs(env_selector=self._db_env_selector)
             self._tot_rew_min_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_min_over_envs(env_selector=self._db_env_selector)
+            self._tot_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_avrg_over_envs(env_selector=self._db_env_selector)
+            self._tot_rew_std_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_tot_rew_std_over_envs(env_selector=self._db_env_selector)
 
             self._sub_rew_max[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max(env_selector=self._db_env_selector)
             self._sub_rew_avrg[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg(env_selector=self._db_env_selector)
             self._sub_rew_min[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min(env_selector=self._db_env_selector)
             self._sub_rew_max_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max_over_envs(env_selector=self._db_env_selector)
-            self._sub_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._db_env_selector)
             self._sub_rew_min_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min_over_envs(env_selector=self._db_env_selector)
-            
+            self._sub_rew_avrg_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._db_env_selector)
+            self._sub_rew_std_over_envs[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_std_over_envs(env_selector=self._db_env_selector)
 
             # fill env custom db metrics (only for debug environments)
             db_data_names = list(self._env.custom_db_data.keys())
@@ -1529,8 +1547,9 @@ class SActorCriticAlgoBase(ABC):
                 self._custom_env_data[dbdatan]["avrg"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg(env_selector=self._db_env_selector)
                 self._custom_env_data[dbdatan]["min"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_min(env_selector=self._db_env_selector)
                 self._custom_env_data[dbdatan]["max_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_max_over_envs(env_selector=self._db_env_selector)
-                self._custom_env_data[dbdatan]["avrg_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector)
                 self._custom_env_data[dbdatan]["min_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_min_over_envs(env_selector=self._db_env_selector)
+                self._custom_env_data[dbdatan]["avrg_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_avrg_over_envs(env_selector=self._db_env_selector)
+                self._custom_env_data[dbdatan]["std_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_std_over_envs(env_selector=self._db_env_selector)
 
             # exploration envs
             if self._n_expl_envs > 0:
@@ -1541,8 +1560,9 @@ class SActorCriticAlgoBase(ABC):
                 self._sub_rew_avrg_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg(env_selector=self._expl_env_selector)
                 self._sub_rew_min_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min(env_selector=self._expl_env_selector)
                 self._sub_rew_max_over_envs_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max_over_envs(env_selector=self._expl_env_selector)
-                self._sub_rew_avrg_over_envs_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._expl_env_selector)
                 self._sub_rew_min_over_envs_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min_over_envs(env_selector=self._expl_env_selector)
+                self._sub_rew_avrg_over_envs_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._expl_env_selector)
+                self._sub_rew_std_over_envs_expl[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_std_over_envs(env_selector=self._expl_env_selector)
 
             # demo envs
             if self._env.n_demo_envs() > 0 and self._env.demo_active():
@@ -1554,8 +1574,9 @@ class SActorCriticAlgoBase(ABC):
                 self._sub_rew_avrg_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg(env_selector=self._demo_env_selector)
                 self._sub_rew_min_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min(env_selector=self._demo_env_selector)
                 self._sub_rew_max_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_max_over_envs(env_selector=self._demo_env_selector)
-                self._sub_rew_avrg_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._demo_env_selector)
                 self._sub_rew_min_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_min_over_envs(env_selector=self._demo_env_selector)
+                self._sub_rew_avrg_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_avrg_over_envs(env_selector=self._demo_env_selector)
+                self._sub_rew_std_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_std_over_envs(env_selector=self._demo_env_selector)
 
             # other data
             if self._agent.running_norm is not None:
@@ -1659,10 +1680,12 @@ class SActorCriticAlgoBase(ABC):
             
                     self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_max_over_envs": 
                         data["max_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
-                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_avrg_over_envs": 
-                        data["avrg_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
                     self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_min_over_envs": 
                         data["min_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
+                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_avrg_over_envs": 
+                        data["avrg_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
+                    self._custom_env_data_db_dict.update({f"env_dbdata/{dbdatan}-{data_names[i]}" + "_std_over_envs": 
+                        data["std_over_envs"][self._log_it_counter, :, i:i+1] for i in range(len(data_names))})
                 
                 self._wandb_d.update({'log_iteration' : self._log_it_counter})
                 self._wandb_d.update(dict(zip(info_names, info_data)))
@@ -1675,22 +1698,27 @@ class SActorCriticAlgoBase(ABC):
                     'tot_reward/tot_rew_avrg': wandb.Histogram(self._tot_rew_avrg[self._log_it_counter, :, :].numpy()),
                     'tot_reward/tot_rew_min': wandb.Histogram(self._tot_rew_min[self._log_it_counter, :, :].numpy()),
                     'tot_reward/tot_rew_max_over_envs': self._tot_rew_max_over_envs[self._log_it_counter, :, :].item(),
+                    'tot_reward/tot_rew_min_over_envs': self._tot_rew_min_over_envs[self._log_it_counter, :, :].item(),
                     'tot_reward/tot_rew_avrg_over_envs': self._tot_rew_avrg_over_envs[self._log_it_counter, :, :].item(),
-                    'tot_reward/tot_rew_min_over_envs': self._tot_rew_min_over_envs[self._log_it_counter, :, :].item()})
+                    'tot_reward/tot_rew_std_over_envs': self._tot_rew_std_over_envs[self._log_it_counter, :, :].item(),
+                    })
                 # sub rewards from db envs
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_max":
                         wandb.Histogram(self._sub_rew_max.numpy()[self._log_it_counter, :, i:i+1]) for i in range(len(self._reward_names))})
-                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg":
-                        wandb.Histogram(self._sub_rew_avrg.numpy()[self._log_it_counter, :, i:i+1]) for i in range(len(self._reward_names))})
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_min":
                         wandb.Histogram(self._sub_rew_min.numpy()[self._log_it_counter, :, i:i+1]) for i in range(len(self._reward_names))})
+                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg":
+                        wandb.Histogram(self._sub_rew_avrg.numpy()[self._log_it_counter, :, i:i+1]) for i in range(len(self._reward_names))})
+                    
             
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_max_over_envs":
                         self._sub_rew_max_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
-                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg_over_envs":
-                        self._sub_rew_avrg_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                 self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_min_over_envs":
                         self._sub_rew_min_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_avrg_over_envs":
+                        self._sub_rew_avrg_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                self._wandb_d.update({f"sub_reward/{self._reward_names[i]}_sub_rew_std_over_envs":
+                        self._sub_rew_std_over_envs[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                 
                 # exploration envs
                 if self._n_expl_envs > 0:
@@ -1707,10 +1735,12 @@ class SActorCriticAlgoBase(ABC):
                 
                     self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_max_over_envs_expl":
                             self._sub_rew_max_over_envs_expl[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
-                    self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_avrg_over_envs_expl":
-                            self._sub_rew_avrg_over_envs_expl[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                     self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_min_over_envs_expl":
                             self._sub_rew_min_over_envs_expl[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                    self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_avrg_over_envs_expl":
+                            self._sub_rew_avrg_over_envs_expl[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                    self._wandb_d.update({f"sub_reward_expl/{self._reward_names[i]}_sub_rew_std_over_envs_expl":
+                            self._sub_rew_std_over_envs_expl[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                 
                 # demo envs (only log if active, otherwise we log nans which wandb doesn't like)
                 if self._env.n_demo_envs() > 0:
@@ -1729,10 +1759,12 @@ class SActorCriticAlgoBase(ABC):
                 
                     self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_max_over_envs_demo":
                             self._sub_rew_max_over_envs_demo[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
-                    self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_avrg_over_envs_demo":
-                            self._sub_rew_avrg_over_envs_demo[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                     self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_min_over_envs_demo":
                             self._sub_rew_min_over_envs_demo[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                    self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_avrg_over_envs_demo":
+                            self._sub_rew_avrg_over_envs_demo[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
+                    self._wandb_d.update({f"sub_reward_demo/{self._reward_names[i]}_sub_rew_std_over_envs_demo":
+                            self._sub_rew_std_over_envs_demo[self._log_it_counter, :, i:i+1] for i in range(len(self._reward_names))})
                     
                 if self._vec_transition_counter > (self._warmstart_vectimesteps-1):
                     # algo info
@@ -1817,8 +1849,9 @@ class SActorCriticAlgoBase(ABC):
                 f"min: {self._tot_rew_min_over_envs[self._log_it_counter, :, :].item()}\n" + \
                 f"Episodic sub-rewards episodic data --> \nsub rewards names: {self._reward_names_str}\n" + \
                 f"max: {self._sub_rew_max_over_envs[self._log_it_counter, :]}\n" + \
-                f"avg: {self._sub_rew_avrg_over_envs[self._log_it_counter, :]}\n" + \
                 f"min: {self._sub_rew_min_over_envs[self._log_it_counter, :]}\n" + \
+                f"avg: {self._sub_rew_avrg_over_envs[self._log_it_counter, :]}\n" + \
+                f"std: {self._sub_rew_std_over_envs[self._log_it_counter, :]}\n" + \
                 f"N. of episodes on which episodic rew stats are computed: {self._n_of_played_episodes[self._log_it_counter].item()}\n" + \
                 f"Current env. step sps: {self._env_step_fps[self._log_it_counter].item()}, time for experience collection {self._collection_dt[self._log_it_counter].item()} s\n" + \
                 f"Current env (sub-stepping) rt factor: {self._env_step_rt_factor[self._log_it_counter].item()}\n" + \

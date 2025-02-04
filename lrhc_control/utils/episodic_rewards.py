@@ -102,6 +102,10 @@ class EpisodicRewards(EpisodicData):
         env_selector: torch.Tensor = None):
         return super().get_avrg_over_envs(env_selector=env_selector)
 
+    def get_sub_rew_std_over_envs(self, 
+        env_selector: torch.Tensor = None):
+        return super().get_std_over_envs(env_selector=env_selector)
+
     def get_sub_rew_min_over_envs(self, 
         env_selector: torch.Tensor = None):
         return super().get_min_over_envs(env_selector=env_selector)
@@ -126,6 +130,10 @@ class EpisodicRewards(EpisodicData):
     def get_tot_rew_avrg_over_envs(self, 
         env_selector: torch.Tensor = None):
         return self._tot_reward_episodic_stats.get_avrg_over_envs(env_selector=env_selector)
+
+    def get_tot_rew_std_over_envs(self, 
+        env_selector: torch.Tensor = None):
+        return self._tot_reward_episodic_stats.get_std_over_envs(env_selector=env_selector)
 
     def get_tot_rew_min_over_envs(self, 
         env_selector: torch.Tensor = None):
