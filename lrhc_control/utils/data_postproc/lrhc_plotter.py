@@ -1005,10 +1005,28 @@ if __name__ == "__main__":
                 marker_size=marker_size,
                 data_labels=sub_term_names,
                 data_idxs=None)
+            plotter.plot_data(dataset_name=ep_prefix+"Terminations", 
+                title=ep_prefix+"Terminations", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=sub_term_names,
+                data_idxs=None)
+
+            
             
             # sub terminations
             plotter.plot_data(dataset_name=ep_prefix+"SubTruncations", 
                 title=ep_prefix+"SubTruncations", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=sub_trunc_names,
+                data_idxs=None)
+            plotter.plot_data(dataset_name=ep_prefix+"Truncations", 
+                title=ep_prefix+"Truncations", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
