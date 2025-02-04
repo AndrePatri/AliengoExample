@@ -507,9 +507,11 @@ class LRhcTrainingEnvBase(ABC):
         stepping_ok = True
         tot_rewards = self._tot_rewards.get_torch_mirror(gpu=self._use_gpu)
         sub_rewards = self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)
+        next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
         tot_rewards.zero_()
         sub_rewards.zero_()
         self._substep_rewards.zero_()
+        next_obs.zero_() # necessary for substep obs
 
         for i in range(0, self._action_repeat):
             stepping_ok = stepping_ok and self._check_controllers_registered(retry=False) # does not make sense to run training
@@ -526,16 +528,14 @@ class LRhcTrainingEnvBase(ABC):
             self._custom_post_substp_post_rew() # custom substepping logic
 
             # fill substep obs
-            next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
-            self._fill_substep_obs(next_obs)
+            self._fill_substep_obs(self._substep_obs)
             self._assemble_substep_obs()
-        
             if not i==(self._action_repeat-1):
                 # sends reset signal to complete remote step sequence,
                 # but does not reset any remote env
                 stepping_ok = stepping_ok and self._remote_reset(reset_mask=None) 
             else: # last substep
-                next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)
+                
                 self._fill_step_obs(next_obs) # update next obs
                 self._clamp_obs(next_obs) # good practice
                 obs = self._obs.get_torch_mirror(gpu=self._use_gpu)
@@ -709,6 +709,14 @@ class LRhcTrainingEnvBase(ABC):
                                     ep_finished=episode_finished,
                                     ignore_ep_end=ignore_ep_end)
         
+        self.custom_db_data["Terminations"].update(new_data=self._terminations.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+        self.custom_db_data["Truncations"].update(new_data=self._truncations.get_torch_mirror(gpu=False), 
+                                    ep_finished=episode_finished,
+                                    ignore_ep_end=ignore_ep_end)
+
+        
         self._get_custom_db_data(episode_finished=episode_finished, ignore_ep_end=ignore_ep_end)
 
     def reset_custom_db_data(self, keep_track: bool = False):
@@ -723,12 +731,11 @@ class LRhcTrainingEnvBase(ABC):
         # average over substeps depending on scale
         # sub_rewards[:, self._is_substep_rew] = sub_rewards[:, self._is_substep_rew] + \
         #     self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
-        sub_rewards[:, self._is_substep_rew] = sub_rewards[:, self._is_substep_rew] + \
-            self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
+        sub_rewards[:, self._is_substep_rew] += self._substep_rewards[:, self._is_substep_rew]/self._action_repeat
     
     def _assemble_substep_obs(self):
         next_obs = self._next_obs.get_torch_mirror(gpu=self._use_gpu)        
-        next_obs[:, self._is_substep_obs] += next_obs[:, self._is_substep_obs]/self._action_repeat
+        next_obs[:, self._is_substep_obs] += self._substep_obs[:, self._is_substep_obs]/self._action_repeat
 
     def randomize_task_refs(self,
                 env_indxs: torch.Tensor = None):
@@ -1013,8 +1020,11 @@ class LRhcTrainingEnvBase(ABC):
         self._obs.run()
         self._next_obs.run()
 
-        self._is_substep_obs = torch.zeros((self.obs_dim,), dtype=torch.bool, device=device)
+        self._is_substep_obs = torch.zeros((self.obs_dim(),), dtype=torch.bool, device=device)
         self._is_substep_obs.fill_(False) # default to all step obs
+
+        # not super memory efficient
+        self._substep_obs=torch.full_like(self._obs.get_torch_mirror(gpu=self._use_gpu), fill_value=0.0)
         
     def _init_actions(self, actions_dim: int):
         
@@ -1168,6 +1178,7 @@ class LRhcTrainingEnvBase(ABC):
             store_transitions=self._full_db,
             max_ep_duration=self._max_ep_length())
         self._add_custom_db_data(db_data=stepping_data)
+        
         # log also action data
         actions = self._actions.get_torch_mirror()
         action_names = self._get_action_names()
@@ -1192,6 +1203,7 @@ class LRhcTrainingEnvBase(ABC):
                     fill_value=t_scaling,
                     dtype=torch.int32,device="cpu")
         sub_term = self._sub_terminations.get_torch_mirror()
+        term = self._terminations.get_torch_mirror()
         sub_termination_names = self.sub_term_names()
     
         sub_term_data = EpisodicData("SubTerminations", sub_term, sub_termination_names,
@@ -1200,7 +1212,15 @@ class LRhcTrainingEnvBase(ABC):
             max_ep_duration=self._max_ep_length())
         sub_term_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_data(db_data=sub_term_data)
+        term_data = EpisodicData("Terminations", term, ["terminations"],
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+        term_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
+        self._add_custom_db_data(db_data=term_data)
+        
         sub_trunc = self._sub_truncations.get_torch_mirror()
+        trunc = self._truncations.get_torch_mirror()
         sub_truncations_names = self.sub_trunc_names()
         sub_trunc_data = EpisodicData("SubTruncations", sub_trunc, sub_truncations_names,
             ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
@@ -1208,6 +1228,12 @@ class LRhcTrainingEnvBase(ABC):
             max_ep_duration=self._max_ep_length())
         sub_trunc_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
         self._add_custom_db_data(db_data=sub_trunc_data)
+        trunc_data = EpisodicData("Truncations", trunc, ["truncations"],
+            ep_vec_freq=self._env_opts["vec_ep_freq_metrics_db"],
+            store_transitions=self._full_db,
+            max_ep_duration=self._max_ep_length())
+        trunc_data.set_constant_data_scaling(enable=True,scaling=data_scaling)
+        self._add_custom_db_data(db_data=trunc_data)
 
     def _add_custom_db_data(self, db_data: EpisodicData):
         self.custom_db_data[db_data.name()] = db_data

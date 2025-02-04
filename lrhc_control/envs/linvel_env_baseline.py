@@ -75,7 +75,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
         self._add_env_opt(env_opts, "vec_ep_freq_metrics_db", 1) # n eps over which debug metrics are reported
         self._add_env_opt(env_opts, "demo_envs_perc", 0.0)
-        self._add_env_opt(env_opts, "max_cmd_v", 0.2) # maximum cmd v for v actions (single component)
+        self._add_env_opt(env_opts, "max_cmd_v", 1.0) # maximum cmd v for v actions (single component)
 
         # action smoothing
         self._add_env_opt(env_opts, "use_action_smoothing", False)
@@ -214,7 +214,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # Agent task reference
         self._add_env_opt(env_opts, "use_pof0", default=True) # with some prob, references will be null
         self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
-        self._add_env_opt(env_opts, "max_ref", default=0.4)
+        self._add_env_opt(env_opts, "max_ref", default=0.3)
 
         # ready to init base class
         self._this_child_path = os.path.abspath(__file__)
@@ -672,10 +672,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._env_opts["use_linvel_from_rhc"]:
             # twist estimate from mpc
             robot_twist_rhc_base_loc_next = self._rhc_cmds.root_state.get(data_type="twist",gpu=self._use_gpu)
-            obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
+            obs[:, self._obs_map["linvel_meas"]:(self._obs_map["linvel_meas"]+3)] = robot_twist_rhc_base_loc_next[:, 0:3]
         else:
-            obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_meas_base_loc[:, 0:3]
-        obs[:, self._obs_map["twist_meas"]:(self._obs_map["twist_meas"]+3)] = robot_twist_meas_base_loc[:, 3:6]
+            obs[:, self._obs_map["linvel_meas"]:(self._obs_map["linvel_meas"]+3)] = robot_twist_meas_base_loc[:, 0:3]
+        obs[:, self._obs_map["omega_meas"]:(self._obs_map["omega_meas"]+3)] = robot_twist_meas_base_loc[:, 3:6]
 
         obs[:, self._obs_map["v_jnt"]:(self._obs_map["v_jnt"]+self._n_jnts)] = robot_jnt_v_meas 
 
@@ -714,41 +714,32 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._env_opts["add_fail_idx_to_obs"]:
             obs[:, self._obs_map["rhc_fail_idx"]:(self._obs_map["rhc_fail_idx"]+1)] = self._rhc_fail_idx(gpu=self._use_gpu)
         if self._env_opts["add_term_mpc_capsize"]:
-            obs[:, next_idx:(next_idx+3)] = self._rhc_cmds.root_state.get(data_type="gn",gpu=self._use_gpu)
-            next_idx+=3
+            obs[:, self._obs_map["gn_base_mpc"]:(self._obs_map["gn_base_mpc"]+3)] = self._rhc_cmds.root_state.get(data_type="gn",gpu=self._use_gpu)
         if self._env_opts["use_rhc_avrg_vel_tracking"]:
             self._get_avrg_rhc_root_twist(out=self._root_twist_avrg_rhc_base_loc,base_loc=True)
-            obs[:, next_idx:(next_idx+6)] = self._root_twist_avrg_rhc_base_loc
-            next_idx+=6
+            obs[:, self._obs_map["avrg_twist_mpc"]:(self._obs_map["avrg_twist_mpc"]+6)] = self._root_twist_avrg_rhc_base_loc
         if self._env_opts["add_flight_info"]:
-            obs[:, next_idx:(next_idx+self._flight_info_size)] = flight_info_now
-            next_idx+=self._flight_info_size
+            obs[:, self._obs_map["flight_info"]:(self._obs_map["flight_info"]+self._flight_info_size)] = flight_info_now
         if self._env_opts["add_flight_settings"]:
-            obs[:, next_idx:(next_idx+self._flight_setting_size)] = flight_settings_now
-            next_idx+=self._flight_setting_size
+            obs[:, self._obs_map["flight_settings"]:(self._obs_map["flight_settings"]+self._flight_setting_size)] = flight_settings_now
 
         if self._env_opts["add_rhc_cmds_to_obs"]:
-            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_q_rhc_applied_next
-            next_idx+=self._n_jnts
-            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_v_rhc_applied_next
-            next_idx+=self._n_jnts
-            obs[:, next_idx:(next_idx+self._n_jnts)] = robot_jnt_eff_rhc_applied_next
-            next_idx+=self._n_jnts
+            obs[:, self._obs_map["rhc_cmds_q"]:(self._obs_map["rhc_cmds_q"]+self._n_jnts)] = robot_jnt_q_rhc_applied_next
+            obs[:, self._obs_map["rhc_cmds_v"]:(self._obs_map["rhc_cmds_v"]+self._n_jnts)] = robot_jnt_v_rhc_applied_next
+            obs[:, self._obs_map["rhc_cmds_eff"]:(self._obs_map["rhc_cmds_eff"]+self._n_jnts)] = robot_jnt_eff_rhc_applied_next
         if self._env_opts["use_action_history"]:
             if self._env_opts["add_prev_actions_stats_to_obs"]: # just add last, std and mean to obs
-                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=0)
-                next_idx+=self.actions_dim()
-                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
-                next_idx+=self.actions_dim()
-                obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
-                next_idx+=self.actions_dim()
+                obs[:, self._obs_map["action_history_prev"]:(self._obs_map["action_history_prev"]+self.actions_dim())]=self._act_mem_buffer.get(idx=0)
+                obs[:, self._obs_map["action_history_avrg"]:(self._obs_map["action_history_avrg"]+self.actions_dim())]=self._act_mem_buffer.mean(clone=False)
+                obs[:, self._obs_map["action_history_std"]:(self._obs_map["action_history_std"]+self.actions_dim())]=self._act_mem_buffer.std(clone=False)
             else: # add whole memory buffer to obs
+                next_idx=self._obs_map["action_history"]
                 for i in range(self._env_opts["actions_history_size"]):
                     obs[:, next_idx:(next_idx+self.actions_dim())]=self._act_mem_buffer.get(idx=i) # get all (n_envs x (obs_dim x horizon))
                     next_idx+=self.actions_dim()
 
         if self._env_opts["use_action_smoothing"]: # adding smoothed actions
-            obs[:, next_idx:(next_idx+self.actions_dim())]=self.get_actual_actions()
+            obs[:, self._obs_map["action_smoothing"]:(self._obs_map["action_smoothing"]+self.actions_dim())]=self.get_actual_actions()
             next_idx+=self.actions_dim()
 
     def _get_custom_db_data(self, 
@@ -924,6 +915,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
     def _compute_substep_rewards(self):
         
+        sub_rewards = self._sub_rewards.get_torch_mirror(gpu=self._use_gpu)
+
         if self._env_opts["add_CoT_reward"] or self._env_opts["add_power_reward"]:
             jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
             jnts_effort = self._robot_state.jnts_state.get(data_type="eff",gpu=self._use_gpu)
@@ -935,18 +928,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     mass_weight=False # inessential scaling
                     )
                 idx=self._reward_map["CoT"]
-                self._substep_rewards[:, idx:(idx+1)] = self._env_opts["CoT_offset"]*(1-self._env_opts["CoT_scale"]*CoT)
+                sub_rewards[:, idx:(idx+1)] = self._env_opts["CoT_offset"]*(1-self._env_opts["CoT_scale"]*CoT)
 
             if self._env_opts["add_power_reward"]:
                 weighted_mech_power=self._mech_pow(jnts_vel=jnts_vel,jnts_effort=jnts_effort, drained=True)
                 idx=self._reward_map["mech_pow"]
-                self._substep_rewards[:, idx:(idx+1)] = self._env_opts["power_offset"]*(1-self._env_opts["power_scale"]*weighted_mech_power)
+                sub_rewards[:, idx:(idx+1)] = self._env_opts["power_offset"]*(1-self._env_opts["power_scale"]*weighted_mech_power)
         
         if self._env_opts["add_jnt_v_reward"]:
             jnts_vel = self._robot_state.jnts_state.get(data_type="v",gpu=self._use_gpu)
             jnt_v=self._jnt_vel_penalty(jnts_vel=jnts_vel)
             idx=self._reward_map["jnt_v"]
-            self._substep_rewards[:, idx:(idx+1)] = self._env_opts["jnt_vel_offset"]*(1-self._env_opts["jnt_vel_scale"]*jnt_v)
+            sub_rewards[:, idx:(idx+1)] = self._env_opts["jnt_vel_offset"]*(1-self._env_opts["jnt_vel_scale"]*jnt_v)
 
     def _randomize_task_refs(self,
         env_indxs: torch.Tensor = None):
@@ -981,14 +974,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         obs_names[2] = "gn_z_base_loc"
         next_idx+=3
 
-        self._obs_map["twist_meas"]=next_idx
+        self._obs_map["linvel_meas"]=next_idx
         obs_names[next_idx] = "linvel_x_base_loc"
         obs_names[next_idx+1] = "linvel_y_base_loc"
         obs_names[next_idx+2] = "linvel_z_base_loc"
-        obs_names[next_idx+3] = "omega_x_base_loc"
-        obs_names[next_idx+4] = "omega_y_base_loc"
-        obs_names[next_idx+5] = "omega_z_base_loc"
-        next_idx+=6
+        next_idx+=3
+
+        self._obs_map["omega_meas"]=next_idx
+        obs_names[next_idx] = "omega_x_base_loc"
+        obs_names[next_idx+1] = "omega_y_base_loc"
+        obs_names[next_idx+2] = "omega_z_base_loc"
+        next_idx+=3
 
         jnt_names=self.get_observed_joints()
         self._obs_map["q_jnt"]=next_idx
@@ -1083,12 +1079,15 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             self._obs_map["action_history"]=next_idx
             action_names = self._get_action_names()
             if self._env_opts["add_prev_actions_stats_to_obs"]:
+                self._obs_map["action_history_prev"]=next_idx
                 for act_idx in range(self.actions_dim()):
                     obs_names[next_idx+act_idx] = action_names[act_idx]+f"_prev_act"
                 next_idx+=self.actions_dim()
+                self._obs_map["action_history_avrg"]=next_idx
                 for act_idx in range(self.actions_dim()):
                     obs_names[next_idx+act_idx] = action_names[act_idx]+f"_avrg_act"
                 next_idx+=self.actions_dim()
+                self._obs_map["action_history_std"]=next_idx
                 for act_idx in range(self.actions_dim()):
                     obs_names[next_idx+act_idx] = action_names[act_idx]+f"_std_act"
                 next_idx+=self.actions_dim()
@@ -1108,9 +1107,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def _set_substep_obs(self):
         # which obs are to be averaged over substeps?
 
-        self._is_substep_obs[self._obs_map["twist_meas"]:self._obs_map["twist_meas"]+6]=True
-
-        self._is_substep_obs[self._obs_map["v_jnt"]:self._obs_map["v_jnt"]+6]=True # also good for noise
+        self._is_substep_obs[self._obs_map["linvel_meas"]:self._obs_map["linvel_meas"]+3]=True
+        self._is_substep_obs[self._obs_map["omega_meas"]:self._obs_map["omega_meas"]+3]=True
+        self._is_substep_obs[self._obs_map["v_jnt"]:self._obs_map["v_jnt"]+self._n_jnts]=True # also good for noise
 
         # self._is_substep_obs[self._obs_map["contact_f_mpc"]:self._obs_map["contact_f_mpc"]+3*len(self._contact_names)]=True
 
