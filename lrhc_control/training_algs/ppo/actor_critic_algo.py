@@ -423,10 +423,12 @@ class ActorCriticAlgoBase(ABC):
 
         # policy rollout and return comp./adv estimation
         self._total_timesteps = int(tot_tsteps) # total timesteps to be collected (including sub envs)
-        # self._total_timesteps = self._total_timesteps//self._env_n_action_reps # correct with n of action reps
+        # self._total_timesteps = self._total_timesteps # correct with n of action reps
         
         self._rollout_vec_timesteps = 128 # numer of vectorized steps (rescaled depending on env substepping) 
         # to be done per policy rollout (influences adv estimation!!!)
+        self._rollout_vec_timesteps =self._rollout_vec_timesteps//self._env_n_action_reps # correct for action rep
+        
         self._batch_size = self._rollout_vec_timesteps * self._num_envs
 
         self._iterations_n = self._total_timesteps//self._batch_size # number of ppo iterations
