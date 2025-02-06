@@ -786,6 +786,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if drained:
             mech_pow_jnts.clamp_(0.0,torch.inf) # do not account for regenerative power
         mech_pow_tot = torch.sum(mech_pow_jnts, dim=1, keepdim=True)
+        self._pow_db_data[:, 1:2]=mech_pow_tot.cpu()
         if autoscaled:
             mech_pow_tot=mech_pow_tot/self._power_penalty_weights_sum
         return mech_pow_tot
