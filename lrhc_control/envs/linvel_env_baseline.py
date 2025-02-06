@@ -128,7 +128,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # jnt vel penalty
         self._add_env_opt(env_opts, "jnt_vel_offset", default=1.0)
-        self._add_env_opt(env_opts, "jnt_vel_scale", default=1.0)
+        self._add_env_opt(env_opts, "jnt_vel_scale", default=2.0)
 
         # terminations
         self._add_env_opt(env_opts, "add_term_mpc_capsize", default=False) # add termination based on mpc capsizing prediction
