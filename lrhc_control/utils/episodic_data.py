@@ -369,6 +369,8 @@ class EpisodicData():
                 fill_value=torch.nan,
                 dtype=self._dtype, device="cpu",
                 requires_grad=False)
+            # preallocating since constant
+            self._full_data_env_selector=torch.arange(self._n_envs, device="cpu")
 
     def reset(self,
             keep_track: bool = None,
@@ -414,7 +416,9 @@ class EpisodicData():
             self._average_over_eps[to_be_reset, :]=0
             self._n_played_eps[to_be_reset, :]=0
             self._scale_now[to_be_reset, :]=1
-            
+
+            # if self._full_data is not None:
+            #     self._full_data[:, to_be_reset, :]=torch.nan
             if self._full_data is not None:
                 self._full_data[:, :, to_be_reset, :]=torch.nan
                 
@@ -471,9 +475,9 @@ class EpisodicData():
         self._tot_sum_up_to_now[ep_finished.flatten(), :] += self._current_ep_sum_scaled[ep_finished.flatten(), :]
 
         if self._full_data is not None: # store data on single transition
-            self._full_data[self._n_played_eps, self._steps_counter, # this step
-                :, :]=new_data.to(dtype=self._dtype)
-
+            self._full_data[self._n_played_eps.squeeze(), self._steps_counter.squeeze(), # this step
+                self._full_data_env_selector, :]=new_data.to(dtype=self._dtype)
+            
         self._n_played_eps[ep_finished.flatten(), 0] += 1 # an episode has been played
         
         if ignore_ep_end is not None: # ignore data if to be ignored and ep end;
@@ -510,7 +514,7 @@ class EpisodicData():
 
         if self._full_data is not None:
             self._full_data_last[:, :, selector, :]=self._full_data[:, :, selector, :]
-            
+
         EpisodicData.reset(self,to_be_reset=selector)        
 
     def data_names(self):
@@ -685,4 +689,3 @@ if __name__ == "__main__":
     # print(mem_buffer.mean())
     # print("AAAAA")
     # print(mem_buffer.horizon())
-
