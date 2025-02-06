@@ -27,12 +27,12 @@ if __name__ == "__main__":
     parser.add_argument('--env_idx', type=int, help='', default=0)
     parser.add_argument('--env_range', type=int, help='', default=1)
     parser.add_argument('--dtype', type=str, help='', default="float")
-    parser.add_argument('--with_counters', action=argparse.BooleanOptionalAction, default=False, help='')
-    parser.add_argument('--with_safety_counter', action=argparse.BooleanOptionalAction, default=False, help='')
+    parser.add_argument('--with_counters', action="store_true", default=False, help='')
+    parser.add_argument('--with_safety_counter', action="store_true", default=False, help='')
     parser.add_argument('--resolution', type=int, help='', default=2)
-    parser.add_argument('--with_sub_r', action=argparse.BooleanOptionalAction, default=True, help='')
-    parser.add_argument('--with_sub_t', action=argparse.BooleanOptionalAction, default=True, help='')
-    parser.add_argument('--with_sinfo', action=argparse.BooleanOptionalAction, default=True, help='')
+    parser.add_argument('--with_sub_r', action="store_true", default=True, help='')
+    parser.add_argument('--with_sub_t', action="store_true", default=True, help='')
+    parser.add_argument('--with_sinfo', action="store_true", default=True, help='')
     parser.add_argument('--obs_names', nargs='+', default=None,
                         help='')
 
