@@ -103,8 +103,8 @@ class LRHCPlotter:
                         else:
                             self.data[dataset_name] = dataset[:]  # Use slicing for arrays
                             if env_idx is not None: # load data just for one specific env
+                                print(f"Dataset '{dataset_name}' will be loaded only for env {env_idx}. Original shape {self.data[dataset_name].shape[0]}, {self.data[dataset_name].shape[1]}, {self.data[dataset_name].shape[2]}")
                                 self.data[dataset_name] = self.data[dataset_name][:, env_idx:env_idx+1, :]
-                                
                         print(f"Dataset '{dataset_name}' with shape {self.data[dataset_name].shape} loaded successfully.")
                     else:
                         print(f"Warning: Dataset '{dataset_name}' not found in the file.")
@@ -921,6 +921,18 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
+            # omega
+            patterns=["omega_*_base_loc"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
+                title=ep_prefix+"obs - omega (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+
             # actions buffer
             patterns=["*_prev_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
@@ -953,7 +965,7 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
 
-            patterns=["_m*_act"]
+            patterns=["*_m*_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
             plotter.plot_data(dataset_name=ep_prefix+"Obs", 
                 title=ep_prefix+"obs - action buffer - full action history buffer", 
@@ -1005,15 +1017,6 @@ if __name__ == "__main__":
                 marker_size=marker_size,
                 data_labels=sub_term_names,
                 data_idxs=None)
-            plotter.plot_data(dataset_name=ep_prefix+"Terminations", 
-                title=ep_prefix+"Terminations", 
-                xaxis_dataset_name=xaxis_dataset_name,
-                xlabel=xlabel,
-                use_markers=True,
-                marker_size=marker_size,
-                data_labels=sub_term_names,
-                data_idxs=None)
-
             
             
             # sub terminations
@@ -1025,15 +1028,27 @@ if __name__ == "__main__":
                 marker_size=marker_size,
                 data_labels=sub_trunc_names,
                 data_idxs=None)
+            
+            # terminations
+            plotter.plot_data(dataset_name=ep_prefix+"Terminations", 
+                title=ep_prefix+"Terminations", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=["is_terminal"],
+                data_idxs=None)
+            
+            # truncations
             plotter.plot_data(dataset_name=ep_prefix+"Truncations", 
                 title=ep_prefix+"Truncations", 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
                 marker_size=marker_size,
-                data_labels=sub_trunc_names,
+                data_labels=["is_truncated"],
                 data_idxs=None)
-
+            
             # sub rewards
             plotter.plot_data(dataset_name=ep_prefix+"sub_rew", 
                 title=ep_prefix+"sub_rew", 
