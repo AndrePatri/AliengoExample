@@ -701,7 +701,10 @@ class SimpleCounters(SharedDataBase):
                 vlevel: VLevel = VLevel.V0,
                 safe: bool = True,
                 force_reconnection: bool = False,
-                with_gpu_mirror: bool = False):
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
+
+        self._debug=debug
 
         self._using_gpu = with_gpu_mirror
         self._torch_device = "cuda" if self._using_gpu else "cpu"
@@ -738,12 +741,12 @@ class SimpleCounters(SharedDataBase):
                     with_gpu_mirror=with_gpu_mirror)
 
     def _write(self):
-
-        if self._using_gpu:
-            # copy from gpu to cpu
-            self._step_counter.synch_mirror(from_gpu=True,non_blocking=False)
-        # copy from cpu to shared memory
-        self._step_counter.synch_all(read=False, retry=True)
+        if self._debug:
+            if self._using_gpu:
+                # copy from gpu to cpu
+                self._step_counter.synch_mirror(from_gpu=True,non_blocking=False)
+            # copy from cpu to shared memory
+            self._step_counter.synch_all(read=False, retry=True)
 
     def get_shared_mem(self):
 
@@ -797,12 +800,20 @@ class SimpleCounters(SharedDataBase):
 
         self._step_counter.close()
 
-    def time_limits_reached(self):
+    def time_limits_reached(self, 
+            limit: torch.Tensor = None,
+            offset: torch.Tensor = None):
 
-        # to be called after increment or decrement 
+        limits=self._n_steps
+        if limit is not None:
+            limits=limit
 
         valid_counters=~(self.get()==0)
-        time_l_reached = (self.get() % self._n_steps) == 0
+
+        if offset is not None:
+            time_l_reached = ((self.get()+offset) % limits) == 0
+        else:
+            time_l_reached = (self.get() % limits) == 0
 
         # counters at 0 are neglected 
         return torch.logical_and(time_l_reached,valid_counters)
@@ -861,7 +872,8 @@ class EpisodesCounter(SimpleCounters):
                 vlevel: VLevel = VLevel.V0,
                 safe: bool = True,
                 force_reconnection: bool = False,
-                with_gpu_mirror: bool = False):
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
 
         basename = "EpisodesCounter"
 
@@ -876,8 +888,41 @@ class EpisodesCounter(SimpleCounters):
                 vlevel=vlevel,
                 safe=safe,
                 force_reconnection=force_reconnection,
-                with_gpu_mirror=with_gpu_mirror)
+                with_gpu_mirror=with_gpu_mirror,
+                debug=debug)
 
+class TimeCounter(SimpleCounters):
+
+    def __init__(self,
+                namespace: str,
+                n_steps_lb: int = None,
+                n_steps_ub: int = None,
+                randomize_offsets_at_startup: bool = True,
+                n_envs: int = None, 
+                is_server = False, 
+                verbose: bool = False, 
+                vlevel: VLevel = VLevel.V0,
+                safe: bool = True,
+                force_reconnection: bool = False,
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
+
+        basename = "TimeCounter"
+
+        super().__init__(namespace=namespace,
+                basename=basename,
+                n_steps_lb=n_steps_lb,
+                n_steps_ub=n_steps_ub,
+                randomize_offsets_at_startup=randomize_offsets_at_startup,
+                n_envs=n_envs, 
+                is_server=is_server, 
+                verbose=verbose, 
+                vlevel=vlevel,
+                safe=safe,
+                force_reconnection=force_reconnection,
+                with_gpu_mirror=with_gpu_mirror,
+                debug=debug)
+        
 class TaskRandCounter(SimpleCounters):
 
     def __init__(self,
@@ -891,7 +936,8 @@ class TaskRandCounter(SimpleCounters):
                 vlevel: VLevel = VLevel.V0,
                 safe: bool = True,
                 force_reconnection: bool = False,
-                with_gpu_mirror: bool = False):
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
 
         basename = "TaskRandCounter"
 
@@ -906,7 +952,8 @@ class TaskRandCounter(SimpleCounters):
                 vlevel=vlevel,
                 safe=safe,
                 force_reconnection=force_reconnection,
-                with_gpu_mirror=with_gpu_mirror)
+                with_gpu_mirror=with_gpu_mirror,
+                debug=debug)
 
 class SafetyRandResetsCounter(SimpleCounters):
 
@@ -921,7 +968,8 @@ class SafetyRandResetsCounter(SimpleCounters):
                 vlevel: VLevel = VLevel.V0,
                 safe: bool = True,
                 force_reconnection: bool = False,
-                with_gpu_mirror: bool = False):
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
 
         basename = "SafetyRandResetsCounter"
 
@@ -936,7 +984,8 @@ class SafetyRandResetsCounter(SimpleCounters):
                 vlevel=vlevel,
                 safe=safe,
                 force_reconnection=force_reconnection,
-                with_gpu_mirror=with_gpu_mirror)
+                with_gpu_mirror=with_gpu_mirror,
+                debug=debug)
 
 class RandomTruncCounter(SimpleCounters):
 
@@ -951,7 +1000,8 @@ class RandomTruncCounter(SimpleCounters):
                 vlevel: VLevel = VLevel.V0,
                 safe: bool = True,
                 force_reconnection: bool = False,
-                with_gpu_mirror: bool = False):
+                with_gpu_mirror: bool = False,
+                debug: bool = False):
 
         basename = "RandomTruncCounter"
 
@@ -966,7 +1016,8 @@ class RandomTruncCounter(SimpleCounters):
                 vlevel=vlevel,
                 safe=safe,
                 force_reconnection=force_reconnection,
-                with_gpu_mirror=with_gpu_mirror)
+                with_gpu_mirror=with_gpu_mirror,
+                debug=debug)
         
 if __name__ == "__main__":  
 
