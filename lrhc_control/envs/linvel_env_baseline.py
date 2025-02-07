@@ -118,7 +118,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         self._add_env_opt(env_opts, "CoT_offset", default=1.0)
         self._add_env_opt(env_opts, "CoT_scale", default=5e-4)
         self._add_env_opt(env_opts, "power_offset", default=1.0)
-        self._add_env_opt(env_opts, "power_scale", default=5e-4)
+        self._add_env_opt(env_opts, "power_scale", default=8e-4)
 
         # action rate penalty
         self._add_env_opt(env_opts, "action_rate_offset", default=1.0)
