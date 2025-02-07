@@ -612,11 +612,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         
     def _apply_actions_to_rhc(self):
         
-        self._set_refs()
+        self._set_rhc_refs()
 
-        self._write_refs()
+        self._write_rhc_refs()
 
-    def _set_refs(self):
+    def _set_rhc_refs(self):
 
         action_to_be_applied = self.get_actual_actions() # see _get_action_names() to get 
         # the meaning of each component of this tensor
@@ -641,16 +641,17 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             gpu=self._use_gpu) 
         
         # contact flags
+        idx=self._actions_map["contact_flag_start"]
         if self._env_opts["use_prob_based_stepping"]:
             # encode actions as probs
             self._random_thresh_contacts.uniform_() # random values in-place between 0 and 1
-            rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] >= self._random_thresh_contacts  # keep contact with 
+            rhc_latest_contact_ref[:, :] = action_to_be_applied[:, idx:idx+self._n_contacts] >= self._random_thresh_contacts  # keep contact with 
             # probability action_to_be_applied[:, 6:10]
         else: # just use a threshold
-            rhc_latest_contact_ref[:, :] = action_to_be_applied[:, 6:10] > 0
+            rhc_latest_contact_ref[:, :] = action_to_be_applied[:, idx:idx+self._n_contacts] > 0
         # actually apply actions to controller
         
-    def _write_refs(self):
+    def _write_rhc_refs(self):
 
         if self._use_gpu:
             # GPU->CPU --> we cannot use asynchronous data transfer since it's unsafe
