@@ -122,9 +122,9 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         # action rate penalty
         self._add_env_opt(env_opts, "action_rate_offset", default=1.0)
-        self._add_env_opt(env_opts, "action_rate_scale", default=0.3)
+        self._add_env_opt(env_opts, "action_rate_scale", default=0.5)
         self._add_env_opt(env_opts, "action_rate_rew_d_weight", default=0.1)
-        self._add_env_opt(env_opts, "action_rate_rew_c_weight", default=0.3)
+        self._add_env_opt(env_opts, "action_rate_rew_c_weight", default=0.8)
 
         # jnt vel penalty
         self._add_env_opt(env_opts, "jnt_vel_offset", default=1.0)
