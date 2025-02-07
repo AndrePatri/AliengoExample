@@ -22,7 +22,7 @@ from lrhc_control.utils.shared_data.training_env import SubRewards
 from lrhc_control.utils.shared_data.training_env import Actions
 from lrhc_control.utils.shared_data.training_env import Terminations, SubTerminations
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
-from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter,RandomTruncCounter
+from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter,RandomTruncCounter,TimeCounter
 
 from lrhc_control.utils.episodic_rewards import EpisodicRewards
 from lrhc_control.utils.episodic_data import EpisodicData
@@ -177,7 +177,6 @@ class LRhcTrainingEnvBase(ABC):
         self._check_for_env_opts("episode_timeout_lb", int)
         self._check_for_env_opts("episode_timeout_ub", int)
         self._check_for_env_opts("n_steps_task_rand_lb", int)
-        self._check_for_env_opts("n_steps_task_rand_ub", int)
         self._check_for_env_opts("n_steps_task_rand_ub", int)
         self._check_for_env_opts("use_random_trunc", bool)
         self._check_for_env_opts("random_trunc_freq", int)
@@ -570,6 +569,7 @@ class LRhcTrainingEnvBase(ABC):
         self._task_rand_counter.increment() # task randomization
         if self._rand_trunc_counter is not None: # random truncations (for removing temp. correlations)
             self._rand_trunc_counter.increment()
+        self._time_counter.increment()
 
         # check truncation and termination conditions 
         self._check_truncations() # defined in child env
@@ -642,8 +642,11 @@ class LRhcTrainingEnvBase(ABC):
         self._prev_root_q_step[:, :]=self._robot_state.root_state.get(data_type="q",gpu=self._use_gpu)
 
         # synchronize and reset counters for finished episodes
-        self._ep_timeout_counter.reset(to_be_reset=episode_finished_cpu)
-        self._task_rand_counter.reset(to_be_reset=episode_finished_cpu)
+        self._ep_timeout_counter.reset(to_be_reset=episode_finished)
+        self._task_rand_counter.reset(to_be_reset=episode_finished)
+        self._time_counter.reset(to_be_reset=torch.logical_or(terminated,to_be_reset)) # reset only 
+        # if resetting environment or if terminal
+
         if self._rand_trunc_counter is not None:
             # only reset when safety truncation was is triggered   
             self._rand_trunc_counter.reset(to_be_reset=self._rand_trunc_counter.time_limits_reached(),
@@ -764,6 +767,7 @@ class LRhcTrainingEnvBase(ABC):
         self._task_rand_counter.sync_counters(other_counter=self._ep_timeout_counter)
         if self._rand_safety_reset_counter is not None:
             self._rand_safety_reset_counter.reset()
+        self._time_counter.reset()
 
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset_all(init_data=self._default_action)
@@ -1456,7 +1460,8 @@ class LRhcTrainingEnvBase(ABC):
                             vlevel=self._vlevel,
                             safe=True,
                             force_reconnection=True,
-                            with_gpu_mirror=False) # handles step counter through episodes and through envs
+                            with_gpu_mirror=self._use_gpu,
+                            debug=self._debug) # handles step counter through episodes and through envs
         self._ep_timeout_counter.run()
         self._task_rand_counter = TaskRandCounter(namespace=self._namespace,
                             n_envs=self._n_envs,
@@ -1468,7 +1473,8 @@ class LRhcTrainingEnvBase(ABC):
                             vlevel=self._vlevel,
                             safe=True,
                             force_reconnection=True,
-                            with_gpu_mirror=False) # handles step counter through episodes and through envs
+                            with_gpu_mirror=self._use_gpu,
+                            debug=self._debug) # handles step counter through episodes and through envs
         self._task_rand_counter.run()
         self._task_rand_counter.sync_counters(other_counter=self._ep_timeout_counter)
         if self._env_opts["use_random_trunc"]:
@@ -1482,7 +1488,8 @@ class LRhcTrainingEnvBase(ABC):
                             vlevel=self._vlevel,
                             safe=True,
                             force_reconnection=True,
-                            with_gpu_mirror=False)
+                            with_gpu_mirror=self._use_gpu,
+                            debug=False)
             self._rand_trunc_counter.run()
             # self._rand_trunc_counter.sync_counters(other_counter=self._ep_timeout_counter)
         if self._env_opts["use_random_safety_reset"]:
@@ -1496,10 +1503,25 @@ class LRhcTrainingEnvBase(ABC):
                             vlevel=self._vlevel,
                             safe=True,
                             force_reconnection=True,
-                            with_gpu_mirror=False)
+                            with_gpu_mirror=self._use_gpu,
+                            debug=False)
             self._rand_safety_reset_counter.run()
             # self._rand_safety_reset_counter.sync_counters(other_counter=self._ep_timeout_counter)
-        
+
+        # timer to track abs time in each env (reset logic to be implemented in child)
+        self._time_counter = TimeCounter(namespace=self._namespace,
+                            n_envs=self._n_envs,
+                            n_steps_lb=1e9,
+                            n_steps_ub=1e9,
+                            randomize_offsets_at_startup=False,
+                            is_server=True,
+                            verbose=self._verbose,
+                            vlevel=self._vlevel,
+                            safe=True,
+                            force_reconnection=True,
+                            with_gpu_mirror=self._use_gpu,
+                            debug=self._debug)
+        self._time_counter.run()
 
         # debug data servers
         traing_env_param_dict = {}
