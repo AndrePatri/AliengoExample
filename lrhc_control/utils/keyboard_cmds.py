@@ -580,9 +580,14 @@ class AgentActionsFromKeyboard:
         self._d_flight_length=1
         self._d_flight_apex=0.01
         self._d_flight_end=0.01
+        self._d_freq=5.0
+        self._d_offset=1.0
         self._d_flength_enabled=False
         self._d_fapex_enabled=False
         self._d_fend_enabled=False
+        self._d_freq_enabled=False
+        self._d_offset_enabled=False
+
         self._d_fparam_enabled_contact_i = [False]*self._n_contacts
 
         self.contact_pos_change_vals = np.zeros((3, self._n_contacts))
@@ -612,14 +617,20 @@ class AgentActionsFromKeyboard:
         
         self.v_first, self.v_end = self.get_first_and_last_indices(act_names, "v")
         self.omega_first, self.omega_end = self.get_first_and_last_indices(act_names, "omega")
-        self.contact_flag_first, self.contact_flag_end = self.get_first_and_last_indices(act_names, "contact")
+        self.contact_flag_first, self.contact_flag_end = self.get_first_and_last_indices(act_names, "contact_flag")
         self.flight_len_first, self.flight_len_end = self.get_first_and_last_indices(act_names, "flight_len")
         self.flight_apex_first, self.flight_apex_end = self.get_first_and_last_indices(act_names, "flight_apex")
         self.flight_end_first, self.flight_end_end = self.get_first_and_last_indices(act_names, "flight_end")
 
+        self.stepfreq_first, self.stepfreq_end = self.get_first_and_last_indices(act_names, "stepfreq")
+        self.stepoffset_first, self.stepoffset_end = self.get_first_and_last_indices(act_names, "stepoffset")
+
         self.contact_p_first, self.contact_p_end = self.get_first_and_last_indices(act_names, "contact_p")
 
-        self._n_contacts=self.contact_flag_end-self.contact_flag_first+1
+        if self.contact_flag_end is not None:
+            self._n_contacts=self.contact_flag_end-self.contact_flag_first+1
+        else:
+            self._n_contacts=self.stepfreq_end-self.stepfreq_first+1
         self._synch(read=True)
         # write defaults
         actions=self.agent_actions.get_numpy_mirror()
@@ -635,6 +646,11 @@ class AgentActionsFromKeyboard:
             actions[self.cluster_idx, self.flight_apex_first:self.flight_apex_end+1]=0.1
         if self.flight_end_first is not None:
             actions[self.cluster_idx, self.flight_end_first:self.flight_end_end+1]=0.0
+        if self.stepfreq_first is not None:
+            actions[self.cluster_idx, self.stepfreq_first:self.stepfreq_end+1]=8.0
+        if self.stepoffset_first is not None:
+            actions[self.cluster_idx, self.stepoffset_first:self.stepoffset_end+1]=0.0
+
         self._synch(read=False)
 
     def get_first_and_last_indices(self, strings, substring):
@@ -769,22 +785,41 @@ class AgentActionsFromKeyboard:
             else:
                 flight_params[contact_start:contact_start+1]=\
                     flight_params[contact_start:contact_start+1]-self._d_flight_end
+        
+        if self._d_freq_enabled:
+            start=self.stepfreq_first+contact_idx
+            if increment:
+                flight_params[start:start+1]=\
+                    flight_params[start:start+1]+self._d_freq
+            else:
+                flight_params[start:start+1]=\
+                    flight_params[start:start+1]-self._d_freq
             
+        if self._d_offset_enabled:
+            start=self.stepoffset_first+contact_idx
+            if increment:
+                flight_params[start:start+1]=\
+                    flight_params[start:start+1]+self._d_offset
+            else:
+                flight_params[start:start+1]=\
+                    flight_params[start:start+1]-self._d_offset
+                
     def _set_contacts(self,
                 key,
                 is_contact: bool = True):
 
         current_actions=self.agent_actions.get_numpy_mirror()[self.cluster_idx_np, :]
-        contacts=current_actions[self.contact_flag_first:self.contact_flag_end+1]
+        if self.contact_flag_first is not None:
+            contacts=current_actions[self.contact_flag_first:self.contact_flag_end+1]
 
-        if key == "7":
-            contacts[self._contact_mapping[0]] = 1 if is_contact else -1
-        if key== "9":
-            contacts[self._contact_mapping[1]] = 1 if is_contact else -1
-        if key == "1":
-            contacts[self._contact_mapping[2]] = 1 if is_contact else -1
-        if key == "3":
-            contacts[self._contact_mapping[3]] = 1 if is_contact else -1
+            if key == "7":
+                contacts[self._contact_mapping[0]] = 1 if is_contact else -1
+            if key== "9":
+                contacts[self._contact_mapping[1]] = 1 if is_contact else -1
+            if key == "1":
+                contacts[self._contact_mapping[2]] = 1 if is_contact else -1
+            if key == "3":
+                contacts[self._contact_mapping[3]] = 1 if is_contact else -1
 
     def _set_base_height(self,
                     key):
@@ -986,6 +1021,22 @@ class AgentActionsFromKeyboard:
         if key=="E":
             self._d_fend_enabled=not self._d_fend_enabled
             info = f"Flight end change enabled: {self._d_fend_enabled}"
+            Journal.log(self.__class__.__name__,
+                "_set_flight_params",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+        if key=="R":
+            self._d_freq_enabled=not self._d_freq_enabled
+            info = f"Step phase frequency change enabled: {self._d_freq_enabled}"
+            Journal.log(self.__class__.__name__,
+                "_set_flight_params",
+                info,
+                LogType.INFO,
+                throw_when_excep = True)
+        if key=="D":
+            self._d_offset_enabled=not self._d_offset_enabled
+            info = f"Step phase offset change enabled: {self._d_offset_enabled}"
             Journal.log(self.__class__.__name__,
                 "_set_flight_params",
                 info,
