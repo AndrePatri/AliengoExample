@@ -574,7 +574,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
     def reset(self):
         LRhcTrainingEnvBase.reset(self)
 
-    def _pre_step(self): 
+    def _pre_substep(self): 
         pass
 
     def _custom_post_step(self,episode_finished):

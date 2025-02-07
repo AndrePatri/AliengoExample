@@ -22,7 +22,7 @@ from lrhc_control.utils.shared_data.training_env import SubRewards
 from lrhc_control.utils.shared_data.training_env import Actions
 from lrhc_control.utils.shared_data.training_env import Terminations, SubTerminations
 from lrhc_control.utils.shared_data.training_env import Truncations, SubTruncations
-from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter,RandomTruncCounter,TimeCounter
+from lrhc_control.utils.shared_data.training_env import EpisodesCounter,TaskRandCounter,SafetyRandResetsCounter,RandomTruncCounter,SubStepAbsCounter
 
 from lrhc_control.utils.episodic_rewards import EpisodicRewards
 from lrhc_control.utils.episodic_data import EpisodicData
@@ -499,9 +499,7 @@ class LRhcTrainingEnvBase(ABC):
             self._apply_actions_smoothing() # smooth actions if enabled (the tensor returned by 
             # get_actions does not contain smoothing and can be safely employed for experience collection)
 
-        self._apply_actions_to_rhc() # apply agent actions to rhc controller
-
-        self._pre_step()
+        self._apply_actions_to_rhc() # apply last agent actions to rhc controller
 
         stepping_ok = True
         tot_rewards = self._tot_rewards.get_torch_mirror(gpu=self._use_gpu)
@@ -513,6 +511,9 @@ class LRhcTrainingEnvBase(ABC):
         next_obs.zero_() # necessary for substep obs
 
         for i in range(0, self._action_repeat):
+
+            self._pre_substep() # custom logic @ substep freq
+
             stepping_ok = stepping_ok and self._check_controllers_registered(retry=False) # does not make sense to run training
             # if we lost some controllers
             stepping_ok = stepping_ok and self._remote_sim_step() # blocking, 
@@ -553,6 +554,8 @@ class LRhcTrainingEnvBase(ABC):
                     scale*=sub_rewards.shape[1] # n. dims rescaling
                 tot_rewards.mul_(1/scale)
 
+            self._substep_abs_counter.increment() # @ substep freq
+
             if not stepping_ok:
                 return False
             
@@ -569,7 +572,6 @@ class LRhcTrainingEnvBase(ABC):
         self._task_rand_counter.increment() # task randomization
         if self._rand_trunc_counter is not None: # random truncations (for removing temp. correlations)
             self._rand_trunc_counter.increment()
-        self._time_counter.increment()
 
         # check truncation and termination conditions 
         self._check_truncations() # defined in child env
@@ -644,7 +646,7 @@ class LRhcTrainingEnvBase(ABC):
         # synchronize and reset counters for finished episodes
         self._ep_timeout_counter.reset(to_be_reset=episode_finished)
         self._task_rand_counter.reset(to_be_reset=episode_finished)
-        self._time_counter.reset(to_be_reset=torch.logical_or(terminated,to_be_reset)) # reset only 
+        self._substep_abs_counter.reset(to_be_reset=torch.logical_or(terminated,to_be_reset)) # reset only 
         # if resetting environment or if terminal
 
         if self._rand_trunc_counter is not None:
@@ -767,7 +769,7 @@ class LRhcTrainingEnvBase(ABC):
         self._task_rand_counter.sync_counters(other_counter=self._ep_timeout_counter)
         if self._rand_safety_reset_counter is not None:
             self._rand_safety_reset_counter.reset()
-        self._time_counter.reset()
+        self._substep_abs_counter.reset()
 
         if self._act_mem_buffer is not None:
             self._act_mem_buffer.reset_all(init_data=self._default_action)
@@ -1509,7 +1511,7 @@ class LRhcTrainingEnvBase(ABC):
             # self._rand_safety_reset_counter.sync_counters(other_counter=self._ep_timeout_counter)
 
         # timer to track abs time in each env (reset logic to be implemented in child)
-        self._time_counter = TimeCounter(namespace=self._namespace,
+        self._substep_abs_counter = SubStepAbsCounter(namespace=self._namespace,
                             n_envs=self._n_envs,
                             n_steps_lb=1e9,
                             n_steps_ub=1e9,
@@ -1521,7 +1523,7 @@ class LRhcTrainingEnvBase(ABC):
                             force_reconnection=True,
                             with_gpu_mirror=self._use_gpu,
                             debug=self._debug)
-        self._time_counter.run()
+        self._substep_abs_counter.run()
 
         # debug data servers
         traing_env_param_dict = {}
@@ -1804,7 +1806,7 @@ class LRhcTrainingEnvBase(ABC):
         return ~self._is_continuous_actions
 
     @abstractmethod
-    def _pre_step(self):
+    def _pre_substep(self):
         pass
     
     @abstractmethod

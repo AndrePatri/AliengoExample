@@ -147,22 +147,12 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         self._rhc_refs.rob_refs.root_state.set(data_type="twist", data=rhc_latest_twist_cmd,
             gpu=self._use_gpu) 
         
-        # flight settings
+        # sanity checks on frequency
         start=self._actions_map["flight_stepfreq_start"]
         invalid=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_min"]
         action_to_be_applied[:, start:(start+self._n_contacts)][invalid]=self._env_opts["step_freq_min"] # sanity check
 
-        # handle phase frequency and offset
-        for i in range(self._n_contacts):
-            idx_freq=self._actions_map["flight_stepfreq_start"]+i
-            idx_offset=self._actions_map["flight_stepoffset_start"]+i
-            action_to_be_applied[:, ]
-            flight_step_freq_cmd=action_to_be_applied[:, idx_freq:(idx_freq+1)].to(dtype=torch.int32)
-            flight_step_offset_cmd=action_to_be_applied[:, idx_offset:(idx_offset+1)].to(dtype=torch.int32)
-            time_to_insert_flights=self._time_counter.time_limits_reached(limit=flight_step_freq_cmd,
-                                            offset=flight_step_offset_cmd)
-            rhc_latest_contact_ref[:, i:i+1] =~time_to_insert_flights
-
+        # flight settings
         if self._env_opts["control_flength"]:
             idx=self._actions_map["flight_len_start"]
             flen_now=self._rhc_refs.flight_settings.get(data_type="len", gpu=self._use_gpu)
@@ -180,13 +170,42 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
             fend_now=self._rhc_refs.flight_settings.get(data_type="end_dpos", gpu=self._use_gpu)
             fend_now[:, :]=action_to_be_applied[:, idx:(idx+self._n_contacts)]
             self._rhc_refs.flight_settings.set(data=fend_now, data_type="end_dpos", gpu=self._use_gpu)
+    
+    def _write_rhc_refs(self):
+        # do not write contact flags (those are written @ the MPC freq by _pre_substep)
+        if self._use_gpu:
+            self._rhc_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=False) # write from gpu to cpu mirror
+            self._rhc_refs.rob_refs.contact_pos.synch_mirror(from_gpu=True,non_blocking=False)
+
+        self._rhc_refs.rob_refs.root_state.synch_all(read=False, retry=True) # write mirror to shared mem
+        self._rhc_refs.rob_refs.contact_pos.synch_all(read=False, retry=True)
 
     def _write_rhc_refs(self):
         LinVelTrackBaseline._write_rhc_refs(self)
         if self._use_gpu:
             self._rhc_refs.flight_settings.synch_mirror(from_gpu=True,non_blocking=False)
         self._rhc_refs.flight_settings.synch_all(read=False, retry=True)
-        
+    
+    def _pre_substep(self):
+        # runs at substep freq (MPC freq)
+        rhc_latest_contact_ref = self._rhc_refs.contact_flags.get_torch_mirror(gpu=self._use_gpu)
+        action_to_be_applied = self.get_actual_actions()
+
+        # handle phase frequency and offset and set MPC reference accordingly
+        for i in range(self._n_contacts):
+            idx_freq=self._actions_map["flight_stepfreq_start"]+i
+            idx_offset=self._actions_map["flight_stepoffset_start"]+i
+            flight_step_freq_cmd=action_to_be_applied[:, idx_freq:(idx_freq+1)].to(dtype=torch.int32)
+            flight_step_offset_cmd=action_to_be_applied[:, idx_offset:(idx_offset+1)].to(dtype=torch.int32)
+            time_to_insert_flights=self._substep_abs_counter.time_limits_reached(limit=flight_step_freq_cmd,
+                                            offset=flight_step_offset_cmd)
+            rhc_latest_contact_ref[:, i:i+1] =~time_to_insert_flights
+
+        # write right away to mpc
+        if self._use_gpu:
+            self._rhc_refs.contact_flags.synch_mirror(from_gpu=True,non_blocking=False)
+        self._rhc_refs.contact_flags.synch_all(read=False, retry=True)
+
     def _get_action_names(self):
 
         action_names = [""] * self.actions_dim()

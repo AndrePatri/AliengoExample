@@ -891,7 +891,7 @@ class EpisodesCounter(SimpleCounters):
                 with_gpu_mirror=with_gpu_mirror,
                 debug=debug)
 
-class TimeCounter(SimpleCounters):
+class SubStepAbsCounter(SimpleCounters):
 
     def __init__(self,
                 namespace: str,
@@ -907,7 +907,7 @@ class TimeCounter(SimpleCounters):
                 with_gpu_mirror: bool = False,
                 debug: bool = False):
 
-        basename = "TimeCounter"
+        basename = "SubStepAbsCounter"
 
         super().__init__(namespace=namespace,
                 basename=basename,
