@@ -667,10 +667,9 @@ class LRhcTrainingEnvBase(ABC):
         # always reset if a termination occurred or if there's a random safety reset
         # request
         terminated = self._terminations.get_torch_mirror(gpu=self._use_gpu)
-        to_be_reset=terminated.cpu()
-
+        to_be_reset=terminated.clone()
         if (self._rand_safety_reset_counter is not None) and self._random_reset_active:
-            to_be_reset[:, :]=torch.logical_or(to_be_reset,
+            to_be_reset=torch.logical_or(to_be_reset,
                 self._rand_safety_reset_counter.time_limits_reached())
 
         return to_be_reset
