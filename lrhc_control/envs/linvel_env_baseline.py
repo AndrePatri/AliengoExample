@@ -777,10 +777,12 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         actions_rate=actions_now-actions_prev
         actions_rate_c=actions_rate[:, continuous_actions]
         actions_rate_d=actions_rate[:, discrete_actions]
-        actions_rate_c_sqrd=self._env_opts["action_rate_rew_c_weight"]*torch.sum(actions_rate_c*actions_rate_c, dim=1, keepdim=True)/n_c_actions
-        actions_rate_d_sqrd=self._env_opts["action_rate_rew_d_weight"]*torch.sum(actions_rate_d*actions_rate_d, dim=1, keepdim=True)/n_d_actions
 
-        return actions_rate_c_sqrd+actions_rate_d_sqrd
+        actions_rate_sqrd=None # assuming n_c_actions > 0 always
+        actions_rate_sqrd=self._env_opts["action_rate_rew_c_weight"]*torch.sum(actions_rate_c*actions_rate_c, dim=1, keepdim=True)/n_c_actions
+        if discrete_actions.any():
+            actions_rate_sqrd+=self._env_opts["action_rate_rew_d_weight"]*torch.sum(actions_rate_d*actions_rate_d, dim=1, keepdim=True)/n_d_actions
+        return actions_rate_sqrd
 
     def _mech_pow(self, jnts_vel, jnts_effort, autoscaled: bool = False, drained: bool = True):
         mech_pow_jnts=(jnts_effort*jnts_vel)*self._power_penalty_weights
