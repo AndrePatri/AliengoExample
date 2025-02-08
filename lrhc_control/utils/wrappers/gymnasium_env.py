@@ -533,6 +533,7 @@ if __name__ == "__main__":
     parser.add_argument('--rmdb',action='store_true', help='Whether to enable remote debug (e.g. data logging on remote servers)')
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
     parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
+    parser.add_argument('--act_rescale_critic',action='store_true', help='Whether to rescale actions provided to critic (if SAC) to be in range [-1, 1]')
 
     parser.add_argument('--run_name', type=str, help='Name of training run', default="GymnasiumEnvTest")
     parser.add_argument('--drop_dir', type=str, help='Directory root where all run data will be dumped',default="/tmp")

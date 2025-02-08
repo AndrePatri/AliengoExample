@@ -141,20 +141,20 @@ class ACAgent(nn.Module):
                             add_weight_norm=add_weight_norm,
                             out_std=out_std_actor)
 
-        self.running_norm = None
+        self.obs_running_norm = None
         if self._normalize_obs:
-            self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
+            self.obs_running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
                                     device=device, dtype=dtype, 
                                     freeze_stats=True, # always start with freezed stats
                                     debug=self._debug)
-            self.running_norm.type(dtype) # ensuring correct dtype for whole module
+            self.obs_running_norm.type(dtype) # ensuring correct dtype for whole module
         
         if self._use_torch_compile:
             self.critic = torch.compile(self.critic)
             self.actor = torch.compile(self.actor)
 
         msg=f"Created PPO agent with actor [{self._layer_width_actor}, {self._n_hidden_layers_actor}]\
-        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
+        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.obs_running_norm)}"
         Journal.log(self.__class__.__name__,
             "__init__",
             msg,
@@ -177,9 +177,9 @@ class ACAgent(nn.Module):
         return os.path.abspath(__file__)
     
     def update_obs_bnorm(self, x):
-        self.running_norm.unfreeze()
-        self.running_norm.manual_stat_update(x)
-        self.running_norm.freeze()
+        self.obs_running_norm.unfreeze()
+        self.obs_running_norm.manual_stat_update(x)
+        self.obs_running_norm.freeze()
 
     def _obs_scaling_layer(self, x):
         x=(x-self.obs_bias)
@@ -216,8 +216,8 @@ class ACAgent(nn.Module):
     def _preprocess_obs(self, x):
         if self._rescale_obs:
             x = self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        if self.obs_running_norm is not None:
+            x = self.obs_running_norm(x)
         return x
     
     def get_value(self, x):

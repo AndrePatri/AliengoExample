@@ -27,25 +27,25 @@ class RNDFull(nn.Module):
         self._normalize=normalize
         self._input_dim=input_dim
 
-        self.running_norm = None
+        self.obs_running_norm = None
         if self._normalize:
-            self.running_norm = RunningNormalizer((input_dim,), epsilon=1e-8, 
+            self.obs_running_norm = RunningNormalizer((input_dim,), epsilon=1e-8, 
                                     device=device, dtype=dtype, 
                                     freeze_stats=True, # always start with freezed stats
                                     debug=debug)
-            self.running_norm.type(dtype) # ensuring correct dtype for whole module
+            self.obs_running_norm.type(dtype) # ensuring correct dtype for whole module
     
     def update_input_bnorm(self, x):
-        self.running_norm.unfreeze()
-        self.running_norm.manual_stat_update(x)
-        self.running_norm.freeze()
+        self.obs_running_norm.unfreeze()
+        self.obs_running_norm.manual_stat_update(x)
+        self.obs_running_norm.freeze()
     
     def input_dim(self):
         return self._input_dim
     
     def get_raw_bonus(self, input):
-        if self.running_norm is not None:
-            input = self.running_norm(input)
+        if self.obs_running_norm is not None:
+            input = self.obs_running_norm(input)
         return torch.mean(torch.square(self.rnd_predictor_net(input)-self.rnd_trgt_net(input)), 
                                             dim=1, 
                                             keepdim=True)

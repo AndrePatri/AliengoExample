@@ -278,7 +278,10 @@ class SActorCriticAlgoBase(ABC):
             add_weight_norm=True
         if "compression_ratio" in self._hyperparameters:
             compression_ratio=self._hyperparameters["compression_ratio"]
-        
+
+        use_action_rescale=False
+        if "use_action_rescale" in self._hyperparameters:
+            use_action_rescale=self._hyperparameters["act_rescale_critic"]
         if not self._override_agent_actions:
             self._agent = SACAgent(obs_dim=self._env.obs_dim(),
                         obs_ub=self._env.get_obs_ub().flatten().tolist(),
@@ -288,6 +291,7 @@ class SActorCriticAlgoBase(ABC):
                         actions_lb=self._env.get_actions_lb().flatten().tolist(),
                         rescale_obs=rescale_obs,
                         norm_obs=norm_obs,
+                        use_action_rescale_for_critic=use_action_rescale_for_critic,
                         compression_ratio=compression_ratio,
                         device=self._torch_device,
                         dtype=self._dtype,
@@ -983,7 +987,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._running_mean_obs=None
         self._running_std_obs=None
-        if self._agent.running_norm is not None and not self._eval:
+        if self._agent.obs_running_norm is not None and not self._eval:
             # some db data for the agent
             self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
                         dtype=torch.float32, fill_value=0.0, device="cpu")
@@ -1018,7 +1022,7 @@ class SActorCriticAlgoBase(ABC):
                     dtype=torch.int32, fill_value=0, device="cpu")
             self._running_mean_rnd_input = None
             self._running_std_rnd_input = None
-            if self._rnd_net.running_norm is not None:
+            if self._rnd_net.obs_running_norm is not None:
                 self._running_mean_rnd_input = torch.full((self._db_data_size, self._rnd_net.input_dim()), 
                         dtype=torch.float32, fill_value=0.0, device="cpu")
                 self._running_std_rnd_input = torch.full((self._db_data_size, self._rnd_net.input_dim()), 
@@ -1338,7 +1342,7 @@ class SActorCriticAlgoBase(ABC):
                 hf.create_dataset('expl_bonus_proc_avrg', data=self._expl_bonus_proc_avrg.numpy())
                 hf.create_dataset('expl_bonus_proc_std', data=self._expl_bonus_proc_std.numpy())
 
-                if self._rnd_net.running_norm is not None:
+                if self._rnd_net.obs_running_norm is not None:
                     if self._running_mean_rnd_input is not None:
                         hf.create_dataset('_running_mean_rnd_input', data=self._running_mean_rnd_input.numpy())
                     if self._running_std_rnd_input is not None:
@@ -1354,7 +1358,7 @@ class SActorCriticAlgoBase(ABC):
                     hf.create_dataset(var_name, data=data[subname])
             
             # other data
-            if self._agent.running_norm is not None:
+            if self._agent.obs_running_norm is not None:
                 if self._running_mean_obs is not None:
                     hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())
                 if self._running_std_obs is not None:
@@ -1579,17 +1583,17 @@ class SActorCriticAlgoBase(ABC):
                 self._sub_rew_std_over_envs_demo[self._log_it_counter, :, :] = self._episodic_reward_metrics.get_sub_rew_std_over_envs(env_selector=self._demo_env_selector)
 
             # other data
-            if self._agent.running_norm is not None:
+            if self._agent.obs_running_norm is not None:
                 if self._running_mean_obs is not None:
-                    self._running_mean_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_mean()
+                    self._running_mean_obs[self._log_it_counter, :] = self._agent.obs_running_norm.get_current_mean()
                 if self._running_std_obs is not None:
-                    self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
+                    self._running_std_obs[self._log_it_counter, :] = self._agent.obs_running_norm.get_current_std()
 
             if self._use_rnd:
                 if self._running_mean_rnd_input is not None:
-                    self._running_mean_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_mean()
+                    self._running_mean_rnd_input[self._log_it_counter, :] = self._rnd_net.obs_running_norm.get_current_mean()
                 if self._running_std_rnd_input is not None:
-                    self._running_std_rnd_input[self._log_it_counter, :] = self._rnd_net.running_norm.get_current_std()
+                    self._running_std_rnd_input[self._log_it_counter, :] = self._rnd_net.obs_running_norm.get_current_std()
                     
             # write some episodic db info on shared mem
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
@@ -1810,14 +1814,14 @@ class SActorCriticAlgoBase(ABC):
                         })
                         self._wandb_d.update(self._rnd_db_data_dict)
 
-                        if self._rnd_net.running_norm is not None:
+                        if self._rnd_net.obs_running_norm is not None:
                             # adding info on running normalizer if used
                             if self._running_mean_rnd_input is not None:
                                 self._wandb_d.update({f"rnd_info/running_mean_rhc_input": self._running_mean_rnd_input[self._log_it_counter, :]})
                             if self._running_std_rnd_input is not None:
                                 self._wandb_d.update({f"rnd_info/running_std_rhc_input": self._running_std_rnd_input[self._log_it_counter, :]})
 
-                if self._agent.running_norm is not None:
+                if self._agent.obs_running_norm is not None:
                     # adding info on running normalizer if used
                     if self._running_mean_obs is not None:
                         self._wandb_d.update({f"running_norm/mean": self._running_mean_obs[self._log_it_counter, :]})
@@ -2020,12 +2024,12 @@ class SActorCriticAlgoBase(ABC):
         # update obs normalization        
         # (we should sample also next obs, but if most of the transitions are not terminal, 
         # this is not an issue and is more efficient)
-        if (self._agent.running_norm is not None) and \
+        if (self._agent.obs_running_norm is not None) and \
             (not self._eval):
             batched_obs = self._obs.view((-1, self._obs_dim))
             sampled_obs = batched_obs[shuffled_buffer_idxs]
             self._agent.update_obs_bnorm(x=sampled_obs)
-        
+
         if self._use_rnd: # update running norm for RND
             batched_obs = self._obs.view((-1, self._obs_dim))
             batched_actions = self._actions.view((-1, self._actions_dim))

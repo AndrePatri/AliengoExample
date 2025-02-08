@@ -21,6 +21,7 @@ class SACAgent(nn.Module):
             actions_lb: List[float] = None,
             rescale_obs: bool = False,
             norm_obs: bool = True,
+            use_action_rescale_for_critic: bool = True,
             device:str="cuda",
             dtype=torch.float32,
             is_eval:bool=False,
@@ -63,6 +64,8 @@ class SACAgent(nn.Module):
                 LogType.WARN,
                 throw_when_excep = True)
         
+        self._use_action_rescale_for_critic=use_action_rescale_for_critic
+
         self._rescaling_epsi=1e-9
 
         self._debug = debug
@@ -160,13 +163,13 @@ class SACAgent(nn.Module):
             self.qf1_target.load_state_dict(self.qf1.state_dict())
             self.qf2_target.load_state_dict(self.qf2.state_dict())
 
-        self.running_norm = None
+        self.obs_running_norm = None
         if self._normalize_obs:
-            self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
+            self.obs_running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
                                     device=device, dtype=dtype, 
                                     freeze_stats=True, # always start with freezed stats
                                     debug=self._debug)
-            self.running_norm.type(dtype) # ensuring correct dtype for whole module
+            self.obs_running_norm.type(dtype) # ensuring correct dtype for whole module
 
         if self._use_torch_compile:
             self.actor = torch.compile(self.actor)
@@ -174,10 +177,12 @@ class SACAgent(nn.Module):
             self.qf2 = torch.compile(self.qf2)
             self.qf1_target = torch.compile(self.qf1_target)
             self.qf2_target = torch.compile(self.qf2_target)
-            self.running_norm=torch.compile(self.running_norm)
+            self.obs_running_norm=torch.compile(self.obs_running_norm)
 
         msg=f"Created SAC agent with actor [{self._layer_width_actor}, {self._n_hidden_layers_actor}]\
-        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\n Running normalizer: {type(self.running_norm)}"
+        and critic [{self._layer_width_critic}, {self._n_hidden_layers_critic}] sizes.\
+        \n Runningobs normalizer: {type(self.obs_running_norm)} \
+        \n Critic input actions are descaled: {self._use_action_rescale_for_critic}"
         Journal.log(self.__class__.__name__,
             "__init__",
             msg,
@@ -200,9 +205,9 @@ class SACAgent(nn.Module):
         return os.path.abspath(__file__)
     
     def update_obs_bnorm(self, x):
-        self.running_norm.unfreeze()
-        self.running_norm.manual_stat_update(x)
-        self.running_norm.freeze()
+        self.obs_running_norm.unfreeze()
+        self.obs_running_norm.manual_stat_update(x)
+        self.obs_running_norm.freeze()
 
     def _obs_scaling_layer(self, x):
         x=(x-self.obs_bias)
@@ -212,9 +217,14 @@ class SACAgent(nn.Module):
     def _preprocess_obs(self, x):
         if self._rescale_obs:
             x = self._obs_scaling_layer(x)
-        if self.running_norm is not None:
-            x = self.running_norm(x)
+        if self.obs_running_norm is not None:
+            x = self.obs_running_norm(x)
         return x
+
+    def _preprocess_actions(self, a):
+        if self._use_action_rescale_for_critic:
+            a=self.actor.remove_scaling(a=a) # rescale to be in range [-1, 1]
+        return a
 
     def get_action(self, x):
         x = self._preprocess_obs(x)
@@ -222,18 +232,22 @@ class SACAgent(nn.Module):
     
     def get_qf1_val(self, x, a):
         x = self._preprocess_obs(x)
+        a = self._preprocess_actions(a)
         return self.qf1(x, a)
 
     def get_qf2_val(self, x, a):
         x = self._preprocess_obs(x)
+        a = self._preprocess_actions(a)
         return self.qf2(x, a)
     
     def get_qf1t_val(self, x, a):
         x = self._preprocess_obs(x)
+        a = self._preprocess_actions(a)
         return self.qf1_target(x, a)
     
     def get_qf2t_val(self, x, a):
         x = self._preprocess_obs(x)
+        a = self._preprocess_actions(a)
         return self.qf2_target(x, a)
 
     def load_state_dict(self, param_dict):
@@ -494,6 +508,10 @@ class Actor(nn.Module):
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+    
+    def remove_scaling(self, a):
+        a=(a - self.action_bias)/(self.action_scale+1e-6)
+        return a
 
 if __name__ == "__main__":  
     

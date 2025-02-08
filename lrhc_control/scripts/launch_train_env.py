@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('--obs_norm',action='store_true', help='Whether to enable the use of running normalizer in agent')
     parser.add_argument('--obs_rescale',action='store_true', help='Whether to rescale observation depending on their expected range')
     parser.add_argument('--add_weight_norm',action='store_true', help='Whether to add weight normalization to agent llayers')
+    parser.add_argument('--act_rescale_critic',action='store_true', help='Whether to rescale actions provided to critic (if SAC) to be in range [-1, 1]')
 
     parser.add_argument('--sac',action='store_true', help='Use SAC, otherwise PPO, unless dummy is set')
     parser.add_argument('--dummy',action='store_true', help='Use dummy agent')

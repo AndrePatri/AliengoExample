@@ -41,13 +41,13 @@ class DummyAgent(nn.Module):
         self._torch_device = device
         self._torch_dtype = dtype
 
-        self.running_norm = None
+        self.obs_running_norm = None
         # if self._normalize_obs:
-        #     self.running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
+        #     self.obs_running_norm = RunningNormalizer((obs_dim,), epsilon=epsilon, 
         #                             device=device, dtype=dtype, 
         #                             freeze_stats=is_eval,
         #                             debug=self._debug)
-        #     self.running_norm.type(dtype) # ensuring correct dtype for whole module
+        #     self.obs_running_norm.type(dtype) # ensuring correct dtype for whole module
 
     def layer_width_actor(self):
         return -1

@@ -742,7 +742,7 @@ class ActorCriticAlgoBase(ABC):
         
         self._running_mean_obs=None
         self._running_std_obs=None
-        if self._agent.running_norm is not None and not self._eval:
+        if self._agent.obs_running_norm is not None and not self._eval:
             # some db data for the agent
             self._running_mean_obs = torch.full((self._db_data_size, self._env.obs_dim()), 
                         dtype=torch.float32, fill_value=0.0, device="cpu")
@@ -1034,7 +1034,7 @@ class ActorCriticAlgoBase(ABC):
                     hf.create_dataset(var_name, data=data[subname])
             
             # other data
-            if self._agent.running_norm is not None:
+            if self._agent.obs_running_norm is not None:
                 if self._running_mean_obs is not None:
                     hf.create_dataset('running_mean_obs', data=self._running_mean_obs.numpy())
                 if self._running_std_obs is not None:
@@ -1231,11 +1231,11 @@ class ActorCriticAlgoBase(ABC):
                 self._custom_env_data[dbdatan]["std_over_envs"][self._log_it_counter, :, :] = self._env.custom_db_data[dbdatan].get_std_over_envs()
 
             # other data
-            if self._agent.running_norm is not None:
+            if self._agent.obs_running_norm is not None:
                 if self._running_mean_obs is not None:
-                    self._running_mean_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_mean()
+                    self._running_mean_obs[self._log_it_counter, :] = self._agent.obs_running_norm.get_current_mean()
                 if self._running_std_obs is not None:
-                    self._running_std_obs[self._log_it_counter, :] = self._agent.running_norm.get_current_std()
+                    self._running_std_obs[self._log_it_counter, :] = self._agent.obs_running_norm.get_current_std()
 
             # write some episodic db info on shared mem
             sub_returns=self._sub_returns.get_torch_mirror(gpu=False)
@@ -1390,7 +1390,7 @@ class ActorCriticAlgoBase(ABC):
 
                 self._wandb_d.update(self._policy_update_db_data_dict)
                 
-                if self._agent.running_norm is not None:
+                if self._agent.obs_running_norm is not None:
                     # adding info on running normalizer if used
                     if self._running_mean_obs is not None:
                         self._wandb_d.update({f"running_norm/mean": self._running_mean_obs[self._log_it_counter, :]})
@@ -1494,7 +1494,7 @@ class ActorCriticAlgoBase(ABC):
         # update obs normalization        
         # (we should sample also next obs, but if most of the transitions are not terminal, 
         # this is not an issue and is more efficient)
-        if (self._agent.running_norm is not None) and \
+        if (self._agent.obs_running_norm is not None) and \
             (not self._eval):
 
             sampled_obs, _ = self._sample(size=bsize)
