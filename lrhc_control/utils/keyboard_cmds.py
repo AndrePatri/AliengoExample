@@ -622,7 +622,7 @@ class AgentActionsFromKeyboard:
         self.flight_apex_first, self.flight_apex_end = self.get_first_and_last_indices(act_names, "flight_apex")
         self.flight_end_first, self.flight_end_end = self.get_first_and_last_indices(act_names, "flight_end")
 
-        self.stepfreq_first, self.stepfreq_end = self.get_first_and_last_indices(act_names, "stepfreq")
+        self.flight_freq_first, self.flight_freq_end = self.get_first_and_last_indices(act_names, "stepfreq")
         self.stepoffset_first, self.stepoffset_end = self.get_first_and_last_indices(act_names, "stepoffset")
 
         self.contact_p_first, self.contact_p_end = self.get_first_and_last_indices(act_names, "contact_p")
@@ -630,7 +630,7 @@ class AgentActionsFromKeyboard:
         if self.contact_flag_end is not None:
             self._n_contacts=self.contact_flag_end-self.contact_flag_first+1
         else:
-            self._n_contacts=self.stepfreq_end-self.stepfreq_first+1
+            self._n_contacts=self.flight_freq_end-self.flight_freq_first+1
         self._synch(read=True)
         # write defaults
         actions=self.agent_actions.get_numpy_mirror()
@@ -646,8 +646,8 @@ class AgentActionsFromKeyboard:
             actions[self.cluster_idx, self.flight_apex_first:self.flight_apex_end+1]=0.1
         if self.flight_end_first is not None:
             actions[self.cluster_idx, self.flight_end_first:self.flight_end_end+1]=0.0
-        if self.stepfreq_first is not None:
-            actions[self.cluster_idx, self.stepfreq_first:self.stepfreq_end+1]=8.0
+        if self.flight_freq_first is not None:
+            actions[self.cluster_idx, self.flight_freq_first:self.flight_freq_end+1]=0.0
         if self.stepoffset_first is not None:
             actions[self.cluster_idx, self.stepoffset_first:self.stepoffset_end+1]=0.0
 
@@ -787,7 +787,7 @@ class AgentActionsFromKeyboard:
                     flight_params[contact_start:contact_start+1]-self._d_flight_end
         
         if self._d_freq_enabled:
-            start=self.stepfreq_first+contact_idx
+            start=self.flight_freq_first+contact_idx
             if increment:
                 flight_params[start:start+1]=\
                     flight_params[start:start+1]+self._d_freq

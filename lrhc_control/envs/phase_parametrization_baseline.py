@@ -31,9 +31,9 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
             timeout_ms: int = 60000,
             env_opts: Dict = {}):
         
-        self._add_env_opt(env_opts, "step_freq_min", default=3)
+        self._add_env_opt(env_opts, "flength_min", default=3) # substeps
 
-        self._add_env_opt(env_opts, "control_flength", default=True)
+        self._add_env_opt(env_opts, "control_flength", default=False)
         self._add_env_opt(env_opts, "control_fapex", default=False) 
         self._add_env_opt(env_opts, "control_fend", default=False) 
         
@@ -80,9 +80,11 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         
         LinVelTrackBaseline._custom_post_init(self)
 
-        # actions bounds
-        _=self._get_action_names() # also fills actions map
-        
+        self._add_env_opt(env_opts, "flength_max", default=self._n_nodes_rhc.mean().item()) # MPC steps (substeps)
+        self._add_env_opt(env_opts, "phase_vecfreq_max", default=self._env_opts["n_steps_task_rand_ub"]*self._action_repeat) # substeps
+        self._add_env_opt(env_opts, "flight_freq_lb_thresh", default=1.0/self._env_opts["phase_vecfreq_max"]) # substeps
+
+        # actions bounds        
         v_cmd_max = 2.5*self._env_opts["max_cmd_v"]
         omega_cmd_max = 2.5*self._env_opts["max_cmd_v"]
         self._actions_lb[:, 0:3] = -v_cmd_max 
@@ -90,20 +92,19 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         self._actions_lb[:, 3:6] = -omega_cmd_max # twist cmds
         self._actions_ub[:, 3:6] = omega_cmd_max  
 
-        idx=self._actions_map["flight_stepfreq_start"]
-        self._actions_lb[:, idx:idx+self._n_contacts] = self._env_opts["step_freq_min"]
-        self._actions_ub[:, idx:idx+self._n_contacts] = self._env_opts["episode_timeout_ub"]
+        idx=self._actions_map["flights_per_substeps_start"] # n. flights/n. substeps [0, 1.0/min_flight_length]
+        self._actions_lb[:, idx:idx+self._n_contacts] = 0.0
+        self._actions_ub[:, idx:idx+self._n_contacts] = 1.0/self._env_opts["flength_min"]
 
         idx=self._actions_map["flight_stepoffset_start"]
-        mpc_horizon_vecsteps=int(self._n_nodes_rhc.mean().item()/self._action_repeat)
-        self._actions_lb[:, idx:idx+self._n_contacts] = 1
-        self._actions_ub[:, idx:idx+self._n_contacts] = 10*mpc_horizon_vecsteps
+        self._actions_lb[:, idx:idx+self._n_contacts] = 0.0
+        self._actions_ub[:, idx:idx+self._n_contacts] = self._env_opts["phase_vecfreq_max"]
 
         # flight params (length)
         if self._env_opts["control_flength"]:
             idx=self._actions_map["flight_len_start"]
-            self._actions_lb[:, idx:(idx+self._n_contacts)]=3
-            self._actions_ub[:, idx:(idx+self._n_contacts)]=self._n_nodes_rhc.mean().item()
+            self._actions_lb[:, idx:(idx+self._n_contacts)]=self._env_opts["flength_min"]
+            self._actions_ub[:, idx:(idx+self._n_contacts)]=self._env_opts["flength_max"]
             self._is_continuous_actions[idx:(idx+self._n_contacts)]=True
 
         # flight params (apex)
@@ -148,9 +149,11 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
             gpu=self._use_gpu) 
         
         # sanity checks on frequency
-        start=self._actions_map["flight_stepfreq_start"]
-        invalid=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_min"]
-        action_to_be_applied[:, start:(start+self._n_contacts)][invalid]=self._env_opts["step_freq_min"] # sanity check
+        start=self._actions_map["flights_per_substeps_start"]
+        too_low=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_min"]
+        too_high=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_max"]
+        action_to_be_applied[:, start:(start+self._n_contacts)][too_low]=self._env_opts["step_freq_min"] # sanity check
+        action_to_be_applied[:, start:(start+self._n_contacts)][too_high]=self._env_opts["step_freq_max"]
 
         # flight settings
         if self._env_opts["control_flength"]:
@@ -176,14 +179,10 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         if self._use_gpu:
             self._rhc_refs.rob_refs.root_state.synch_mirror(from_gpu=True,non_blocking=False) # write from gpu to cpu mirror
             self._rhc_refs.rob_refs.contact_pos.synch_mirror(from_gpu=True,non_blocking=False)
+            self._rhc_refs.flight_settings.synch_mirror(from_gpu=True,non_blocking=False)
 
         self._rhc_refs.rob_refs.root_state.synch_all(read=False, retry=True) # write mirror to shared mem
         self._rhc_refs.rob_refs.contact_pos.synch_all(read=False, retry=True)
-
-    def _write_rhc_refs(self):
-        LinVelTrackBaseline._write_rhc_refs(self)
-        if self._use_gpu:
-            self._rhc_refs.flight_settings.synch_mirror(from_gpu=True,non_blocking=False)
         self._rhc_refs.flight_settings.synch_all(read=False, retry=True)
     
     def _pre_substep(self):
@@ -192,13 +191,16 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         action_to_be_applied = self.get_actual_actions()
 
         # handle phase frequency and offset and set MPC reference accordingly
+        start_freq=self._actions_map["flights_per_substeps_start"]
+        zero_freq=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["flight_freq_lb_thresh"]
+        action_to_be_applied[:, start:(start+self._n_contacts)][zero_freq]=0.0 # set exactly zero freq
         for i in range(self._n_contacts):
-            idx_freq=self._actions_map["flight_stepfreq_start"]+i
+            idx_freq=start_freq+i
             idx_offset=self._actions_map["flight_stepoffset_start"]+i
-            flight_step_freq_cmd=action_to_be_applied[:, idx_freq:(idx_freq+1)].to(dtype=torch.int32)
+            n_substeps_freq_cmd=(1.0/(action_to_be_applied[:, idx_freq:(idx_freq+1)])).to(dtype=torch.int32)
             flight_step_offset_cmd=action_to_be_applied[:, idx_offset:(idx_offset+1)].to(dtype=torch.int32)
-            time_to_insert_flights=self._substep_abs_counter.time_limits_reached(limit=flight_step_freq_cmd,
-                                            offset=flight_step_offset_cmd)
+            time_to_insert_flights=self._substep_abs_counter.time_limits_reached(limit=n_substeps_freq_cmd,
+                                            offset=flight_step_offset_cmd)# robust against 0 freq since freq is always <1
             rhc_latest_contact_ref[:, i:i+1] =~time_to_insert_flights
 
         # write right away to mpc
@@ -217,7 +219,7 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         action_names[5] = "yaw_omega_cmd"
 
         next_idx=6
-        self._actions_map["flight_stepfreq_start"]=next_idx
+        self._actions_map["flights_per_substeps_start"]=next_idx
         for i in range(len(self._contact_names)):
             contact=self._contact_names[i]
             action_names[next_idx] = f"stepfreq_{contact}"
