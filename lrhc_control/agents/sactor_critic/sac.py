@@ -28,7 +28,7 @@ class SACAgent(nn.Module):
             load_qf:bool=False,
             epsilon:float=1e-8,
             debug:bool=False,
-            compression_ratio: float = - 1.0, # > 0; if [0, 1] compression, >1 "expansion"
+            compression_ratio:float=-1.0, # > 0; if [0, 1] compression, >1 "expansion"
             layer_width_actor:int=256,
             n_hidden_layers_actor:int=2,
             layer_width_critic:int=512,

@@ -280,7 +280,7 @@ class SActorCriticAlgoBase(ABC):
             compression_ratio=self._hyperparameters["compression_ratio"]
 
         act_rescale_critic=False
-        if "use_action_rescale" in self._hyperparameters:
+        if "act_rescale_critic" in self._hyperparameters:
             act_rescale_critic=self._hyperparameters["act_rescale_critic"]
         if not self._override_agent_actions:
             self._agent = SACAgent(obs_dim=self._env.obs_dim(),
