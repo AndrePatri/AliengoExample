@@ -80,9 +80,9 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         
         LinVelTrackBaseline._custom_post_init(self)
 
-        self._add_env_opt(env_opts, "flength_max", default=self._n_nodes_rhc.mean().item()) # MPC steps (substeps)
-        self._add_env_opt(env_opts, "phase_vecfreq_max", default=self._env_opts["n_steps_task_rand_ub"]*self._action_repeat) # substeps
-        self._add_env_opt(env_opts, "flight_freq_lb_thresh", default=1.0/self._env_opts["phase_vecfreq_max"]) # substeps
+        self._add_env_opt(self._env_opts, "flength_max", default=self._n_nodes_rhc.mean().item()) # MPC steps (substeps)
+        self._add_env_opt(self._env_opts, "phase_vecfreq_max", default=self._env_opts["n_steps_task_rand_ub"]*self._action_repeat) # substeps
+        self._add_env_opt(self._env_opts, "flight_freq_lb_thresh", default=1.0/self._env_opts["phase_vecfreq_max"]) # substeps
 
         # actions bounds        
         v_cmd_max = 2.5*self._env_opts["max_cmd_v"]
@@ -147,13 +147,6 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         
         self._rhc_refs.rob_refs.root_state.set(data_type="twist", data=rhc_latest_twist_cmd,
             gpu=self._use_gpu) 
-        
-        # sanity checks on frequency
-        start=self._actions_map["flights_per_substeps_start"]
-        too_low=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_min"]
-        too_high=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["step_freq_max"]
-        action_to_be_applied[:, start:(start+self._n_contacts)][too_low]=self._env_opts["step_freq_min"] # sanity check
-        action_to_be_applied[:, start:(start+self._n_contacts)][too_high]=self._env_opts["step_freq_max"]
 
         # flight settings
         if self._env_opts["control_flength"]:
@@ -192,8 +185,8 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
 
         # handle phase frequency and offset and set MPC reference accordingly
         start_freq=self._actions_map["flights_per_substeps_start"]
-        zero_freq=action_to_be_applied[:, start:(start+self._n_contacts)]<self._env_opts["flight_freq_lb_thresh"]
-        action_to_be_applied[:, start:(start+self._n_contacts)][zero_freq]=0.0 # set exactly zero freq
+        zero_freq=action_to_be_applied[:, start_freq:(start_freq+self._n_contacts)]<self._env_opts["flight_freq_lb_thresh"]
+        action_to_be_applied[:, start_freq:(start_freq+self._n_contacts)][zero_freq]=0.0 # set exactly zero freq
         for i in range(self._n_contacts):
             idx_freq=start_freq+i
             idx_offset=self._actions_map["flight_stepoffset_start"]+i
