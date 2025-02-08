@@ -167,6 +167,10 @@ class LRhcTrainingEnvBase(ABC):
 
         self._custom_post_init()
 
+        # update actions scale and offset in case it was modified in _custom_post_init
+        self._actions_scale = (self._actions_ub - self._actions_lb)/2.0
+        self._actions_offset = (self._actions_ub + self._actions_lb)/2.0
+
         if self._env_opts["use_action_smoothing"]:
             self._init_action_smoothing()
 
@@ -1646,11 +1650,9 @@ class LRhcTrainingEnvBase(ABC):
         return self._actions_ub
     
     def get_actions_scale(self):
-        self._actions_scale = (self._actions_ub - self._actions_lb)/2.0
         return self._actions_scale
     
     def get_actions_offset(self):
-        self._actions_offset = (self._actions_ub + self._actions_lb)/2.0
         return self._actions_offset
     
     def get_obs_lb(self):

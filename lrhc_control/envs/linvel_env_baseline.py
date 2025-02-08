@@ -774,7 +774,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         n_d_actions=discrete_actions.sum().item()
         actions_prev=self._act_mem_buffer.get(idx=1) 
         actions_now=self._act_mem_buffer.get(idx=0)
-        actions_rate=actions_now-actions_prev
+        actions_scale=self.get_actions_scale()
+        actions_rate=(actions_now-actions_prev)/self.actions_scale # scaling to remove dependence on actions range
         actions_rate_c=actions_rate[:, continuous_actions]
         actions_rate_d=actions_rate[:, discrete_actions]
 
