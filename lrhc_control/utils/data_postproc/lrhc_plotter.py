@@ -997,6 +997,28 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
+            patterns=["*stepfreq*"]
+            idxs,selected=plotter.get_idx_matching(patterns, actions_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
+                title=ep_prefix+"actions - step frequency only [flights/mpc_steps]", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=False,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            patterns=["*stepoffset*"]
+            idxs,selected=plotter.get_idx_matching(patterns, actions_names)
+            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
+                title=ep_prefix+"actions - step offset only [mpc_steps]", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=False,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+
             patterns=["*flight_*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
             plotter.plot_data(dataset_name=ep_prefix+"Actions", 
