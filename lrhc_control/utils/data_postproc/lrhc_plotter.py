@@ -4,7 +4,7 @@ import os
 import glob
 import numpy as np
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-from typing import List, Union
+from typing import List, Union, Tuple
 import re
 import math
 import matplotlib.lines as mlines
@@ -84,7 +84,6 @@ class LRHCPlotter:
         except Exception as e:
             print(f"Error loading attributes: {e}")
 
-
     def load_data(self, dataset_names, env_idx: int = None):
         """
         Load one or more datasets from the HDF5 file.
@@ -117,6 +116,37 @@ class LRHCPlotter:
         except Exception as e:
             print(f"Error loading data: {e}")
 
+    def add_datas(self, dataset_name, datas: Tuple[np.ndarray],
+        avrg: bool = True):
+        
+        dnames=list(self.data.keys())
+        if not dataset_name in dnames:
+            print(f"{dataset_name} not found in available data.")
+            return False
+
+        if avrg:
+            try:
+                self.data[dataset_name]=self.data[dataset_name]/len(datas)
+            except:
+                return False
+
+        for i in range(len(datas)):
+            n_samples_base=self.data[dataset_name].shape[0]
+            n_samples_incoming=datas[i].shape[0]
+
+            # to merge data we need the same number of samples (runs may be of different length)
+            n_timesteps=n_samples_base if n_samples_base<=n_samples_incoming else n_samples_incoming
+
+            base_data=self.data[dataset_name][0:n_timesteps, :, :]
+            to_be_added=datas[i][:n_timesteps, :, :]
+
+            if not avrg:
+                self.data[dataset_name]=np.concatenate((base_data,to_be_added), axis=1) # add augmented data
+            else: # compute average
+                self.data[dataset_name]=base_data+to_be_added/len(datas)
+
+        return True
+    
     def plot_data(self, dataset_name,
             title="Plot",
             xaxis_dataset_name="", xlabel="Time", 
@@ -396,7 +426,8 @@ class LRHCPlotter:
         # Check that all datasets are loaded
         for dataset_name in datasets_list:
             if dataset_name not in self.data:
-                raise ValueError(f"Dataset '{dataset_name}' not loaded. Use 'load_data' first.")
+                print(f"Dataset '{dataset_name}' not loaded. Use 'load_data' first.")
+                return False
 
         # Retrieve the datasets
         datasets = [self.data[dataset_name] for dataset_name in datasets_list]
@@ -420,6 +451,8 @@ class LRHCPlotter:
         self.data[name] = composed_data
         print(f"Composed dataset '{name}' created with shape {composed_data.shape}.")
 
+        return True
+
 class LRHCMultiRunPlotter():
 
     def __init__(self, hdf5_file_path):
@@ -431,9 +464,12 @@ class LRHCMultiRunPlotter():
         self._single_run_datasets=[]
         self._single_run_attributes=[]
 
-        for i in range(len(self._hdf5_files)):
+        self._n_runs=len(self._hdf5_files)
+
+        for i in range(self._n_runs):
             dataset=self._hdf5_files[i]
-            self._single_run_plotters.append(LRHCPlotter(hdf5_file_path=dataset, verbose=False))
+            verbose=False
+            self._single_run_plotters.append(LRHCPlotter(hdf5_file_path=dataset, verbose=verbose))
             self._single_run_datasets.append(self._single_run_plotters[i].list_datasets())
             self._single_run_plotters[i].load_attributes()
             self._single_run_plotters[i].load_data(dataset_names=self._single_run_datasets[i])
@@ -447,6 +483,21 @@ class LRHCMultiRunPlotter():
 
         self._highlight_attr_val_differences()
 
+        self._final_plotter=self._single_run_plotters[0] # use first plotter for plotting everything
+        self.data=self._final_plotter.data
+        for i in range(len(self._dataset_names)-1):
+            datas=()
+            for j in range(self._n_runs-1):
+                dset_name=self._dataset_names[i]
+                datas+=(self._single_run_plotters[j+1].data[dset_name],)
+
+            ok=self._final_plotter.add_datas(dataset_name=dset_name, datas=datas, avrg=True) # will try to merge data across runs
+            # computing the average across runs
+            if not ok:
+                print(f"Data merge for dataset {dset_name} failed!")
+            else:
+                print(f"Dataset '{dset_name}' with shape {self.data[dset_name].shape} loaded successfully.")
+    
     def _highlight_attr_val_differences(self):
         
         self._attr_values_across_runs={}
@@ -454,6 +505,8 @@ class LRHCMultiRunPlotter():
         self._different_attrs_across_runs=[]
         attrnames='\n'.join(self._dataset_attributes)
         # print(f"Attribute list: \n {attrnames}\n")
+
+        self.attributes={} # only attributes which are equal
 
         print(f"################################\n\
             The following different attributes were found:\n")
@@ -468,8 +521,8 @@ class LRHCMultiRunPlotter():
 
             self._attr_values_across_runs[attr_name].append(attr_value)
             # first run
-            for j in range(len(self._single_run_plotters)): # for each run
-                value=self._single_run_plotters[j].attributes[attr_name]
+            for j in range(len(self._single_run_plotters)-1): # for each run
+                value=self._single_run_plotters[j+1].attributes[attr_name]
                 if isinstance(value, np.ndarray):
                     value=value.tolist()
                 if not value==attr_value:
@@ -478,6 +531,8 @@ class LRHCMultiRunPlotter():
             if self._attr_values_are_different_across_runs[attr_name]:
                 self._different_attrs_across_runs.append(attr_name)
                 print(f"{attr_name}: {self._attr_values_across_runs[attr_name]}\n")
+            else:
+                self.attributes[attr_name]=self._single_run_plotters[0].attributes[attr_name]
 
         print(f"################################")
                       
@@ -526,8 +581,56 @@ class LRHCMultiRunPlotter():
     
         return True  # All lists are equal
 
+    def list_datasets(self):
+        return self._final_plotter.list_datasets()
 
+    def list_attributes(self):
+        return self._final_plotter.list_attributes()
+    
+    def load_data(self, dataset_names, env_idx: int = None):
+        pass
 
+    def load_attributes(self):
+        pass
+
+    def get_idx_matching(self, pattern_list, original_list):
+
+        return self._final_plotter.get_idx_matching(pattern_list,original_list)
+
+    def plot_data(self, dataset_name,
+            title="Plot",
+            xaxis_dataset_name="", xlabel="Time", 
+            ylabel="Intensity", 
+            cmap="Blues",
+            use_markers=False,
+            marker_size: int = 3,
+            data_labels = None,
+            data_alphas = None,
+            data_idxs: List[int] = None,
+            distr_std = None, 
+            distr_max = None, 
+            distr_min = None):
+        
+        self._final_plotter.plot_data(dataset_name=dataset_name,
+            title=title,
+            xaxis_dataset_name=xaxis_dataset_name,
+            ylabel=ylabel,
+            cmap=cmap,
+            use_markers=use_markers,
+            marker_size=marker_size,
+            data_labels=data_labels,
+            data_alphas=data_alphas,
+            data_idxs=data_idxs,
+            distr_std=distr_std,
+            distr_max=distr_max,
+            distr_min=distr_min)
+    
+    def compose_datasets(self, datasets_list: List[str], name: str):
+        self._final_plotter.compose_datasets(datasets_list, name)
+
+    def show(self):
+        self._final_plotter.show()
+        
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="")
@@ -759,7 +862,7 @@ if __name__ == "__main__":
             data_idxs=idxs)
         
         # losses 
-        plotter.compose_datasets(name="qf1_loss",
+        compose_ok=plotter.compose_datasets(name="qf1_loss",
             datasets_list=["qf1_loss", "qf1_loss_validation"])
         plotter.plot_data(dataset_name="qf1_loss", title="qf1 loss", 
             xaxis_dataset_name=xaxis_dataset_name,
