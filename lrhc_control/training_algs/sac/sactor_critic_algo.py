@@ -1271,7 +1271,7 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
-                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs())
+                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs.numpy()
 
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
@@ -1288,7 +1288,7 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
                 
-                hf.create_dataset('expl_env_selector', data=self._expl_env_selector)
+                hf.create_dataset('expl_env_selector', data=self._expl_env_selector.numpy())
                 
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
@@ -1344,9 +1344,9 @@ class SActorCriticAlgoBase(ABC):
 
                 if self._rnd_net.obs_running_norm is not None:
                     if self._running_mean_rnd_input is not None:
-                        hf.create_dataset('_running_mean_rnd_input', data=self._running_mean_rnd_input.numpy())
+                        hf.create_dataset('running_mean_rnd_input', data=self._running_mean_rnd_input.numpy())
                     if self._running_std_rnd_input is not None:
-                        hf.create_dataset('_running_std_rnd_input', data=self._running_std_rnd_input.numpy())
+                        hf.create_dataset('running_std_rnd_input', data=self._running_std_rnd_input.numpy())
 
             # dump all custom env data  
             db_data_names = list(self._env.custom_db_data.keys())
