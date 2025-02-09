@@ -1257,7 +1257,7 @@ class SActorCriticAlgoBase(ABC):
             hf.create_dataset('tot_rew_avrg_over_envs', data=self._tot_rew_avrg_over_envs.numpy())
             hf.create_dataset('tot_rew_std_over_envs', data=self._tot_rew_std_over_envs.numpy())
 
-            hf.create_dataset('ep_tsteps_env_distribution', data=self._ep_tsteps_env_distribution.numpy())
+            hf.create_dataset('ep_tsteps_env_distr', data=self._ep_tsteps_env_distribution.numpy())
 
             if self._n_expl_envs > 0:
                 # expl envs
@@ -1271,7 +1271,7 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
-                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs())
+                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs().numpy())
 
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
@@ -1288,7 +1288,7 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
                 
-                hf.create_dataset('expl_env_selector', data=self._expl_env_selector)
+                hf.create_dataset('expl_env_selector', data=self._expl_env_selector.numpy())
                 
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())

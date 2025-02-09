@@ -1,6 +1,7 @@
 import h5py
 import matplotlib.pyplot as plt
 import os
+import glob
 import numpy as np
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from typing import List, Union
@@ -20,13 +21,15 @@ colors = [
 custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", colors, N=256)
 
 class LRHCPlotter:
-    def __init__(self, hdf5_file_path):
+    def __init__(self, hdf5_file_path, verbose: bool = True):
         """
         Initialize the LRHCPlotter with the path to the HDF5 file.
         
         Args:
             hdf5_file_path (str): Path to the HDF5 file.
         """
+        self._verbose=verbose
+
         if not os.path.exists(hdf5_file_path):
             raise FileNotFoundError(f"The file '{hdf5_file_path}' does not exist.")
         self.hdf5_file_path = hdf5_file_path
@@ -103,11 +106,14 @@ class LRHCPlotter:
                         else:
                             self.data[dataset_name] = dataset[:]  # Use slicing for arrays
                             if env_idx is not None: # load data just for one specific env
-                                print(f"Dataset '{dataset_name}' will be loaded only for env {env_idx}. Original shape {self.data[dataset_name].shape[0]}, {self.data[dataset_name].shape[1]}, {self.data[dataset_name].shape[2]}")
+                                if self._verbose:
+                                    print(f"Dataset '{dataset_name}' will be loaded only for env {env_idx}. Original shape {self.data[dataset_name].shape[0]}, {self.data[dataset_name].shape[1]}, {self.data[dataset_name].shape[2]}")
                                 self.data[dataset_name] = self.data[dataset_name][:, env_idx:env_idx+1, :]
-                        print(f"Dataset '{dataset_name}' with shape {self.data[dataset_name].shape} loaded successfully.")
+                        if self._verbose:
+                            print(f"Dataset '{dataset_name}' with shape {self.data[dataset_name].shape} loaded successfully.")
                     else:
-                        print(f"Warning: Dataset '{dataset_name}' not found in the file.")
+                        if self._verbose:
+                            print(f"Warning: Dataset '{dataset_name}' not found in the file.")
         except Exception as e:
             print(f"Error loading data: {e}")
 
@@ -414,20 +420,130 @@ class LRHCPlotter:
         self.data[name] = composed_data
         print(f"Composed dataset '{name}' created with shape {composed_data.shape}.")
 
+class LRHCMultiRunPlotter():
+
+    def __init__(self, hdf5_file_path):
+        
+        self._base_path=hdf5_file_path
+        self._hdf5_files, self._fnames = self.check_hdf5_files(self._base_path)
+        
+        self._single_run_plotters=[]
+        self._single_run_datasets=[]
+        self._single_run_attributes=[]
+
+        for i in range(len(self._hdf5_files)):
+            dataset=self._hdf5_files[i]
+            self._single_run_plotters.append(LRHCPlotter(hdf5_file_path=dataset, verbose=False))
+            self._single_run_datasets.append(self._single_run_plotters[i].list_datasets())
+            self._single_run_plotters[i].load_attributes()
+            self._single_run_plotters[i].load_data(dataset_names=self._single_run_datasets[i])
+            self._single_run_attributes.append(list(self._single_run_plotters[i].list_attributes().keys()))
+        
+        self._check_all_attr_are_there()
+        self._check_all_datasets_are_there()
+
+        self._dataset_names=self._single_run_datasets[0]
+        self._dataset_attributes=self._single_run_attributes[0]
+
+        self._highlight_attr_val_differences()
+
+    def _highlight_attr_val_differences(self):
+        
+        self._attr_values_across_runs={}
+        self._attr_values_are_different_across_runs={}
+        self._different_attrs_across_runs=[]
+        attrnames='\n'.join(self._dataset_attributes)
+        # print(f"Attribute list: \n {attrnames}\n")
+
+        print(f"################################\n\
+            The following different attributes were found:\n")
+
+        for i in range(len(self._dataset_attributes)): # for each attr
+            attr_name=self._dataset_attributes[i]
+            self._attr_values_across_runs[attr_name]=[]
+            self._attr_values_are_different_across_runs[attr_name]=False
+            attr_value=self._single_run_plotters[0].attributes[attr_name] # init with
+            if isinstance(attr_value, np.ndarray):
+                attr_value=attr_value.tolist()
+
+            self._attr_values_across_runs[attr_name].append(attr_value)
+            # first run
+            for j in range(len(self._single_run_plotters)): # for each run
+                value=self._single_run_plotters[j].attributes[attr_name]
+                if isinstance(value, np.ndarray):
+                    value=value.tolist()
+                if not value==attr_value:
+                    self._attr_values_are_different_across_runs[attr_name]=True
+                self._attr_values_across_runs[attr_name].append(value)
+            if self._attr_values_are_different_across_runs[attr_name]:
+                self._different_attrs_across_runs.append(attr_name)
+                print(f"{attr_name}: {self._attr_values_across_runs[attr_name]}\n")
+
+        print(f"################################")
+                      
+    def check_hdf5_files(self, directory):
+        if not os.path.isdir(directory):
+            raise ValueError(f"Error: '{directory}' is not a valid directory.")
+
+        # Get a list of all HDF5 files in the directory
+        hdf5_files = glob.glob(os.path.join(directory, "*.h5")) + glob.glob(os.path.join(directory, "*.hdf5"))
+        file_names = [os.path.splitext(os.path.basename(file))[0] for file in hdf5_files]
+
+        # Check if there are no files or just one file, raise an error
+        if len(hdf5_files) < 2:
+            raise ValueError("Error: Less than two HDF5 files found in the directory.")
+        
+        fnames_db_print='\n'.join(file_names)
+        print(f"\n[LRHCMultiRunPlotter] Will load runs from datasets: \n {fnames_db_print} \n")
+
+        return hdf5_files, file_names
+    
+    def _check_all_attr_are_there(self):
+        
+        self._all_lists_equal(self._single_run_attributes)
+
+    def _check_all_datasets_are_there(self):
+
+        self._all_lists_equal(self._single_run_datasets)
+
+    def _all_lists_equal(self, lst_of_lsts):
+        if not lst_of_lsts:  # Handle empty input
+            raise ValueError("Error: The input list is empty.")
+        
+        # Convert each list to a set
+        first_set = set(lst_of_lsts[0])  # Take the first list as a reference
+        
+        for i, lst in enumerate(lst_of_lsts[1:], start=1):  # Compare with the rest
+            current_set = set(lst)
+            if current_set != first_set:
+                missing_in_current = first_set - current_set
+                extra_in_current = current_set - first_set
+                raise ValueError(
+                    f"Error: List at index {i} does not match the reference list.\n"
+                    f"Missing elements: {missing_in_current}\n"
+                    f"Extra elements: {extra_in_current}"
+                )
+    
+        return True  # All lists are equal
+
+
+
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--env_db',action='store_true', help='')
     parser.add_argument('--env_idx',type=int, help='', default=None)
     parser.add_argument('--data_path',type=str, help='full path to dataset to plot')
+    parser.add_argument('--multirun',action='store_true', help='plot comparative results (if env db across envs, otherwise across runs)')
 
     args = parser.parse_args()
 
     path = args.data_path
 
+    Plotter=LRHCPlotter if not args.multirun else LRHCMultiRunPlotter
     if not args.env_db:
         # load training data
-        plotter = LRHCPlotter(hdf5_file_path=path)
+        plotter = Plotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
         attributes = plotter.list_attributes()
         plotter.load_data(dataset_names=datasets, env_idx=args.env_idx)
@@ -763,7 +879,7 @@ if __name__ == "__main__":
 
     else:
         # load env db data
-        plotter = LRHCPlotter(hdf5_file_path=path)
+        plotter = Plotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
         attributes = plotter.list_attributes()
         plotter.load_data(dataset_names=datasets, env_idx=args.env_idx)
