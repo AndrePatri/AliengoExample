@@ -112,7 +112,7 @@ class SAC(SActorCriticAlgoBase):
         return env_step_ok
     
     def _time_to_randomize_actions(self):
-        its_time=(self._vec_transition_counter % self._noise_freq == 0 or \
+        its_time=(self._vec_transition_counter % self._noise_freq_vec == 0 or \
                 self._pert_counter>0)
         return its_time
     

@@ -531,9 +531,12 @@ class SActorCriticAlgoBase(ABC):
         if "expl_envs_perc" in custom_args:
             self._expl_envs_perc=custom_args["expl_envs_perc"]
         self._n_expl_envs = int(self._num_envs*self._expl_envs_perc) # n of random envs on which noisy actions will be applied
-        self._noise_freq = 25
-        self._noise_duration = 5 # should be less than _noise_freq
-
+        self._noise_freq_vec = 100 # substeps
+        self._noise_duration_vec = 5 # should be less than _noise_freq
+        # correct with env substepping
+        self._noise_freq_vec=self._noise_freq_vec//self._env_n_action_reps
+        self._noise_duration_vec=self._noise_duration_vec//self._env_n_action_reps
+        
         self._continuous_act_expl_noise_std=0.1 
         self._discrete_act_expl_noise_std=1.0
         
@@ -615,7 +618,7 @@ class SActorCriticAlgoBase(ABC):
             self._db_env_selector_bool[:]=True
         self._db_env_selector=torch.nonzero(self._db_env_selector_bool).flatten()
         
-        self._transition_noise_freq=float(self._noise_duration)/float(self._noise_freq)
+        self._transition_noise_freq=float(self._noise_duration_vec)/float(self._noise_freq_vec)
         self._env_noise_freq=float(self._n_expl_envs)/float(self._num_envs)
         self._noise_buff_freq=self._transition_noise_freq*self._env_noise_freq
 
@@ -701,7 +704,7 @@ class SActorCriticAlgoBase(ABC):
 
         self._hyperparameters["n_db_envs"] = self._num_db_envs
         self._hyperparameters["n_expl_envs"] = self._n_expl_envs
-        self._hyperparameters["noise_freq"] = self._noise_freq
+        self._hyperparameters["noise_freq"] = self._noise_freq_vec
         self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
         self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
         
@@ -1983,7 +1986,7 @@ class SActorCriticAlgoBase(ABC):
                 scaling=self._discrete_act_expl_noise_std)
         
         self._pert_counter+=1
-        if self._pert_counter >= self._noise_duration:
+        if self._pert_counter >= self._noise_duration_vec:
             self._pert_counter=0
     
     def _perturb_actions(self, 
