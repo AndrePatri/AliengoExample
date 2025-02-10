@@ -1369,6 +1369,19 @@ if __name__ == "__main__":
                 marker_size=marker_size,
                 data_labels=rhc_refs_names,
                 data_idxs=None)
+             
+            from lrhc_control.utils.data_postproc.contact_visual import ContactPlotter
+            patterns=["fc_contact*z*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            vertical_contact_f=plotter.data[ep_prefix+"Obs"][:, :, idxs]
+
+            valid_mask = np.isfinite(vertical_contact_f[:, 0, 0])
+            valid_f=vertical_contact_f[valid_mask, 0, :]
+            is_contact=valid_f>=1e-3
+            contact_state=np.full_like(valid_f, fill_value=0.0)
+            contact_state[is_contact]=1.0
+            contact_plotter=ContactPlotter(data=contact_state.T)
+            contact_plotter.plot()
             
         plotter.show()
 
