@@ -92,7 +92,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         self._add_env_opt(env_opts, "add_power_reward", True)
         self._add_env_opt(env_opts, "add_CoT_reward", False)
-        self._add_env_opt(env_opts, "add_action_rate_reward", False)
+        self._add_env_opt(env_opts, "add_action_rate_reward", True)
 
         self._add_env_opt(env_opts, "add_jnt_v_reward", True)
 
