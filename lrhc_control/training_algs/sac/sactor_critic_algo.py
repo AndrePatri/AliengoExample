@@ -534,7 +534,7 @@ class SActorCriticAlgoBase(ABC):
         self._noise_freq = 25
         self._noise_duration = 5 # should be less than _noise_freq
 
-        self._continuous_act_expl_noise_std=0.05 
+        self._continuous_act_expl_noise_std=0.1 
         self._discrete_act_expl_noise_std=1.0
         
         # rnd
