@@ -506,8 +506,8 @@ class SActorCriticAlgoBase(ABC):
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
 
-        self._lr_policy = 1e-3
-        self._lr_q = 5e-4
+        self._lr_policy = 5e-4
+        self._lr_q = 1e-3
 
         self._discount_factor = 0.99
         self._smoothing_coeff = 0.005
