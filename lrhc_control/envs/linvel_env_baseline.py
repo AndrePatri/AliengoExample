@@ -1,5 +1,6 @@
 from lrhc_control.utils.sys_utils import PathsGetter
 from lrhc_control.envs.lrhc_training_env_base import LRhcTrainingEnvBase
+from lrhc_control.utils.timers import PeriodicTimer
 
 from control_cluster_bridge.utilities.shared_data.rhc_data import RobotState, RhcStatus, RhcRefs
 from control_cluster_bridge.utilities.math_utils_torch import world2base_frame, base2world_frame, w2hor_frame
@@ -150,6 +151,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
 
         self._add_env_opt(env_opts, "add_rhc_cmds_to_obs", default=True) # add the rhc cmds which are being applied now to the robot
 
+        if not "add_periodic_clock_to_obs" in env_opts:
+            # add a sin/cos clock to obs (useful if task is explicitly
+            # time-dependent)
+            self._add_env_opt(env_opts, "add_periodic_clock_to_obs", default=False) 
+
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 
@@ -210,7 +216,8 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                 obs_dim+=env_opts["actions_history_size"]*actions_dim
         if env_opts["use_action_smoothing"]:
             obs_dim+=actions_dim # it's better to also add the smoothed actions as obs
-        
+        if env_opts["add_periodic_clock_to_obs"]:
+            obs_dim+=2
         # Agent task reference
         self._add_env_opt(env_opts, "use_pof0", default=True) # with some prob, references will be null
         self._add_env_opt(env_opts, "pof0", default=0.01) # [0, 1] prob of null refs (from bernoulli distr)
@@ -517,7 +524,18 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
                     f"add_action_rate_reward  requires actions history ({history_size}) to be >=2!",
                     LogType.EXCEP,
                     throw_when_excep=True)
-                
+        
+        # add periodic timer if required
+        self._periodic_clock=None
+        if self._env_opts["add_periodic_clock_to_obs"]:
+            period=self._action_repeat*self.task_rand_timeout_bounds()[1] # correcting with n substeps
+            # (we are using the _substep_abs_counter counter)
+            period=int(1.5)*period # a bit more than freq at which task is randomized
+            self._periodic_clock=PeriodicTimer(counter=self._substep_abs_counter,
+                                    period=int(self._action_repeat*self.task_rand_timeout_bounds()[1]), 
+                                    dtype=self._dtype,
+                                    device=self._device)
+
     def get_file_paths(self):
         paths=LRhcTrainingEnvBase.get_file_paths(self)
         paths.append(self._this_child_path)        
@@ -742,6 +760,10 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         if self._env_opts["use_action_smoothing"]: # adding smoothed actions
             obs[:, self._obs_map["action_smoothing"]:(self._obs_map["action_smoothing"]+self.actions_dim())]=self.get_actual_actions()
             next_idx+=self.actions_dim()
+        
+        if self._env_opts["add_periodic_clock_to_obs"]:
+            obs[:, next_idx:(next_idx+2)]=self._periodic_clock.get()
+            next_idx+=2
 
     def _get_custom_db_data(self, 
             episode_finished,
@@ -1106,6 +1128,13 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             for smoothed_action in range(self.actions_dim()):
                 obs_names[next_idx+smoothed_action] = action_names[smoothed_action]+f"_smoothed"
             next_idx+=self.actions_dim()
+
+        if self._env_opts["add_periodic_clock_to_obs"]:
+            self._obs_map["clock"]=next_idx
+            obs_names[next_idx] = "clock_cos"
+            obs_names[next_idx+1] = "clock_sin"
+            next_idx+=2
+
         return obs_names
 
     def _set_substep_obs(self):

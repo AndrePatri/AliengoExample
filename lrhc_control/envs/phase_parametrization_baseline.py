@@ -37,6 +37,9 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         self._add_env_opt(env_opts, "control_fapex", default=False) 
         self._add_env_opt(env_opts, "control_fend", default=False) 
         
+        self._add_env_opt(env_opts, "add_periodic_clock_to_obs", default=True) # task becomes
+        # clearly time dependent -> we need a clock
+
         # temporarily creating robot state client to get some data
         robot_state_tmp = RobotState(namespace=namespace,
                                 is_server=False, 

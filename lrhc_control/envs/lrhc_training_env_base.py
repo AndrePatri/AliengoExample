@@ -650,8 +650,9 @@ class LRhcTrainingEnvBase(ABC):
         # synchronize and reset counters for finished episodes
         self._ep_timeout_counter.reset(to_be_reset=episode_finished)
         self._task_rand_counter.reset(to_be_reset=episode_finished)
-        self._substep_abs_counter.reset(to_be_reset=torch.logical_or(terminated,to_be_reset)) # reset only 
-        # if resetting environment or if terminal
+        self._substep_abs_counter.reset(to_be_reset=torch.logical_or(terminated,to_be_reset),
+            randomize_offsets=True # otherwise timers across envs would be strongly correlated
+            ) # reset only if resetting environment or if terminal
 
         if self._rand_trunc_counter is not None:
             # only reset when safety truncation was is triggered   
@@ -1518,7 +1519,7 @@ class LRhcTrainingEnvBase(ABC):
                             n_envs=self._n_envs,
                             n_steps_lb=1e9,
                             n_steps_ub=1e9,
-                            randomize_offsets_at_startup=False,
+                            randomize_offsets_at_startup=True, # randomizing startup offsets
                             is_server=True,
                             verbose=self._verbose,
                             vlevel=self._vlevel,

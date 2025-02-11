@@ -740,6 +740,9 @@ class SimpleCounters(SharedDataBase):
                     force_reconnection=force_reconnection,
                     with_gpu_mirror=with_gpu_mirror)
 
+    def n_envs(self):
+        return self._n_envs
+    
     def _write(self):
         if self._debug:
             if self._using_gpu:
