@@ -501,8 +501,7 @@ class SActorCriticAlgoBase(ABC):
         self._collection_freq=1
         self._update_freq=1
 
-        self._replay_buffer_size_nominal = int(1e6) # 32768
-        self._replay_buffer_size_vec = self._replay_buffer_size_nominal//self._num_envs # 32768
+        self._replay_buffer_size_vec=3*self._task_rand_timeout_ub # cover at least a number of eps
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
 
@@ -537,7 +536,7 @@ class SActorCriticAlgoBase(ABC):
         self._noise_freq_vec=self._noise_freq_vec//self._env_n_action_reps
         self._noise_duration_vec=self._noise_duration_vec//self._env_n_action_reps
         
-        self._continuous_act_expl_noise_std=0.1 
+        self._continuous_act_expl_noise_std=0.2
         self._discrete_act_expl_noise_std=1.0
         
         # rnd
@@ -634,8 +633,7 @@ class SActorCriticAlgoBase(ABC):
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
         self._validation_ratio=1.0/self._validation_collection_vecfreq # [0, 1], 0.1 10% size of training buffer
-        self._validation_buffer_size_nominal= int(self._replay_buffer_size_nominal*self._validation_ratio)
-        self._validation_buffer_size_vec = self._validation_buffer_size_nominal//self._num_envs
+        self._validation_buffer_size_vec = int(self._replay_buffer_size*self._validation_ratio)//self._num_envs
         self._validation_buffer_size = self._validation_buffer_size_vec*self._num_envs
         self._validation_batch_size = int(self._batch_size*self._validation_ratio)
         self._validation_db_vecstep_freq=self._db_vecstep_frequency
@@ -679,7 +677,7 @@ class SActorCriticAlgoBase(ABC):
         
         self._hyperparameters["warmstart_timesteps"] = self._warmstart_timesteps
         self._hyperparameters["warmstart_vectimesteps"] = self._warmstart_vectimesteps
-        self._hyperparameters["replay_buffer_size_nominal"] = self._replay_buffer_size_nominal
+        self._hyperparameters["replay_buffer_size"] = self._replay_buffer_size
         self._hyperparameters["batch_size"] = self._batch_size
         self._hyperparameters["total_timesteps"] = self._total_timesteps
         self._hyperparameters["lr_policy"] = self._lr_policy
@@ -723,12 +721,10 @@ class SActorCriticAlgoBase(ABC):
             f"total (vectorized) timesteps to be simulated {self._total_timesteps_vec}\n" + \
             f"total timesteps to be simulated {self._total_timesteps}\n" + \
             f"warmstart timesteps {self._warmstart_timesteps}\n" + \
-            f"training replay buffer nominal size {self._replay_buffer_size_nominal}\n" + \
             f"training replay buffer size {self._replay_buffer_size}\n" + \
             f"training replay buffer vec size {self._replay_buffer_size_vec}\n" + \
             f"training batch size {self._batch_size}\n" + \
             f"validation enabled {self._validate}\n" + \
-            f"validation buffer nominal size {self._validation_buffer_size_nominal}\n" + \
             f"validation buffer size {self._validation_buffer_size}\n" + \
             f"validation buffer vec size {self._validation_buffer_size_vec}\n" + \
             f"validation collection freq {self._validation_collection_vecfreq}\n" + \
