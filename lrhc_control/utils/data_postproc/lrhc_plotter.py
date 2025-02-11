@@ -1216,7 +1216,7 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
-            patterns=["*stepfreq*"]
+            patterns=["*phase_freq*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
             plotter.plot_data(dataset_name=ep_prefix+"Actions", 
                 title=ep_prefix+"actions - step frequency only [flights/mpc_steps]", 
@@ -1227,7 +1227,7 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
-            patterns=["*stepoffset*"]
+            patterns=["*phase_offset*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
             plotter.plot_data(dataset_name=ep_prefix+"Actions", 
                 title=ep_prefix+"actions - step offset only [mpc_steps]", 

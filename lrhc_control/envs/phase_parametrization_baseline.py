@@ -96,7 +96,7 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         self._actions_lb[:, idx:idx+self._n_contacts] = 0.0
         self._actions_ub[:, idx:idx+self._n_contacts] = 1.0/self._env_opts["flength_min"]
 
-        idx=self._actions_map["flight_stepoffset_start"]
+        idx=self._actions_map["flight_offset_start"] # [0, 1) where 1 is an offset of an offset of a full period
         self._actions_lb[:, idx:idx+self._n_contacts] = 0.0
         self._actions_ub[:, idx:idx+self._n_contacts] = self._env_opts["phase_vecfreq_max"]
 
@@ -189,11 +189,15 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         action_to_be_applied[:, start_freq:(start_freq+self._n_contacts)][zero_freq]=0.0 # set exactly zero freq
         for i in range(self._n_contacts):
             idx_freq=start_freq+i
-            idx_offset=self._actions_map["flight_stepoffset_start"]+i
-            n_substeps_freq_cmd=(1.0/(action_to_be_applied[:, idx_freq:(idx_freq+1)])).to(dtype=torch.int32)
-            flight_step_offset_cmd=action_to_be_applied[:, idx_offset:(idx_offset+1)].to(dtype=torch.int32)
-            time_to_insert_flights=self._substep_abs_counter.time_limits_reached(limit=n_substeps_freq_cmd,
-                                            offset=flight_step_offset_cmd)# robust against 0 freq since freq is always <1
+            idx_offset=self._actions_map["flight_offset_start"]+i
+            # compute period of phase for each contact [n. substeps]
+            period_n_substeps_cmd=(1.0/(action_to_be_applied[:, idx_freq:(idx_freq+1)])).to(dtype=torch.int32)
+            
+            # compute phase offset for each contact [n. substeps]
+            offset_n_substeps_cmd=(action_to_be_applied[:, idx_offset:(idx_offset+1)]*period_n_substeps_cmd).to(dtype=torch.int32)
+            time_to_insert_flights=self._substep_abs_counter.time_limits_reached(limit=period_n_substeps_cmd,
+                                            offset=offset_n_substeps_cmd)# robust against 0 freq since freq is always <1
+            
             rhc_latest_contact_ref[:, i:i+1] =~time_to_insert_flights
 
         # write right away to mpc
@@ -215,12 +219,12 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
         self._actions_map["flights_per_substeps_start"]=next_idx
         for i in range(len(self._contact_names)):
             contact=self._contact_names[i]
-            action_names[next_idx] = f"stepfreq_{contact}"
+            action_names[next_idx] = f"phase_freq_{contact}"
             next_idx+=1
-        self._actions_map["flight_stepoffset_start"]=next_idx
+        self._actions_map["flight_offset_start"]=next_idx
         for i in range(len(self._contact_names)):
             contact=self._contact_names[i]
-            action_names[next_idx] = f"stepoffset_{contact}"
+            action_names[next_idx] = f"phase_offset_{contact}"
             next_idx+=1
         if self._env_opts["control_flength"]:
             self._actions_map["flight_len_start"]=next_idx

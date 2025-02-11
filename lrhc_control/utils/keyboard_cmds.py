@@ -580,8 +580,8 @@ class AgentActionsFromKeyboard:
         self._d_flight_length=1
         self._d_flight_apex=0.01
         self._d_flight_end=0.01
-        self._d_freq=5.0
-        self._d_offset=1.0
+        self._d_freq=0.005
+        self._d_offset=0.01
         self._d_flength_enabled=False
         self._d_fapex_enabled=False
         self._d_fend_enabled=False
@@ -622,8 +622,8 @@ class AgentActionsFromKeyboard:
         self.flight_apex_first, self.flight_apex_end = self.get_first_and_last_indices(act_names, "flight_apex")
         self.flight_end_first, self.flight_end_end = self.get_first_and_last_indices(act_names, "flight_end")
 
-        self.flight_freq_first, self.flight_freq_end = self.get_first_and_last_indices(act_names, "stepfreq")
-        self.stepoffset_first, self.stepoffset_end = self.get_first_and_last_indices(act_names, "stepoffset")
+        self.flight_freq_first, self.flight_freq_end = self.get_first_and_last_indices(act_names, "phase_freq")
+        self.phase_offset_first, self.phase_offset_end = self.get_first_and_last_indices(act_names, "phase_offset")
 
         self.contact_p_first, self.contact_p_end = self.get_first_and_last_indices(act_names, "contact_p")
 
@@ -648,8 +648,10 @@ class AgentActionsFromKeyboard:
             actions[self.cluster_idx, self.flight_end_first:self.flight_end_end+1]=0.0
         if self.flight_freq_first is not None:
             actions[self.cluster_idx, self.flight_freq_first:self.flight_freq_end+1]=0.0
-        if self.stepoffset_first is not None:
-            actions[self.cluster_idx, self.stepoffset_first:self.stepoffset_end+1]=0.0
+        if self.phase_offset_first is not None:
+            actions[self.cluster_idx, self.phase_offset_first:self.phase_offset_end+1]=0.0
+        # actions[self.cluster_idx, self.phase_offset_first:self.phase_offset_first+1]=0.5
+        # actions[self.cluster_idx, (self.phase_offset_first+3):self.phase_offset_first+4]=0.5
 
         self._synch(read=False)
 
@@ -794,15 +796,23 @@ class AgentActionsFromKeyboard:
             else:
                 flight_params[start:start+1]=\
                     flight_params[start:start+1]-self._d_freq
-            
+            if flight_params[start:start+1]>1/3.0:
+                flight_params[start:start+1]=1/3.0
+            if flight_params[start:start+1]<0.0:
+                flight_params[start:start+1]=0.0
+
         if self._d_offset_enabled:
-            start=self.stepoffset_first+contact_idx
+            start=self.phase_offset_first+contact_idx
             if increment:
                 flight_params[start:start+1]=\
                     flight_params[start:start+1]+self._d_offset
             else:
                 flight_params[start:start+1]=\
                     flight_params[start:start+1]-self._d_offset
+            if flight_params[start:start+1]>1.0:
+                flight_params[start:start+1]=1.0
+            if flight_params[start:start+1]<0.0:
+                flight_params[start:start+1]=0.0
                 
     def _set_contacts(self,
                 key,
