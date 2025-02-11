@@ -98,7 +98,7 @@ class PhaseParametrizationBaseline(LinVelTrackBaseline):
 
         idx=self._actions_map["flight_offset_start"] # [0, 1) where 1 is an offset of an offset of a full period
         self._actions_lb[:, idx:idx+self._n_contacts] = 0.0
-        self._actions_ub[:, idx:idx+self._n_contacts] = self._env_opts["phase_vecfreq_max"]
+        self._actions_ub[:, idx:idx+self._n_contacts] = 1.0
 
         # flight params (length)
         if self._env_opts["control_flength"]:
