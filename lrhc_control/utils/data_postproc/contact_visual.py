@@ -13,6 +13,7 @@ class ContactPlotter:
         """
         self.data = data
         self.n_contacts, self.n_timesteps = data.shape
+        
         self.ref_vel=ref_vel
         self.meas_vel=meas_vel
 
@@ -62,8 +63,9 @@ class ContactPlotter:
         theta = np.arctan2(vy, vx)  # Range: [-pi, pi]
         
         # Ensure the range is [-pi, pi) by mapping pi to -pi
+        return theta  # Smooth out discontinuities
 
-        return np.unwrap(theta)  # Smooth out discontinuities
+        # return np.unwrap(theta)  # Smooth out discontinuities
 
     def plot(self):
         """
@@ -107,7 +109,7 @@ class ContactPlotter:
 
             ax = axes[1]
             ax.plot(range(self.n_timesteps), self.ref_vel_norm, color="blue", alpha=0.8)
-            ax.plot(range(self.n_timesteps), self.meas_vel_norm, color="red", alpha=0.8)
+            ax.plot(range(self.n_timesteps), self.meas_vel_norm, color="red", alpha=0.3)
             ax.set_ylabel("[m/s]")
             labels=["ref. velocity norm", "meas. velocity norm"]
             ax.set_xlim(0, self.n_timesteps)
@@ -122,8 +124,8 @@ class ContactPlotter:
             ax.grid()
             
             ax = axes[2]
-            ax.plot(range(self.n_timesteps), self._heading_ref, 'o', color="blue", alpha=0.8, markersize=3)
-            ax.plot(range(self.n_timesteps), self._heading_meas, 'o', color="red", alpha=0.8, markersize=3)
+            ax.plot(range(self.n_timesteps), self._heading_ref, '-', color="blue",linewidth=2, alpha=0.8, markersize=3)
+            ax.plot(range(self.n_timesteps), self._heading_meas, 'o', color="red",linewidth=2, alpha=0.3, markersize=3)
             # Add horizontal dashed lines at -π and π
             ax.axhline(y=-np.pi, color='black', linestyle='dashed', linewidth=2, alpha=0.3)
             ax.axhline(y=np.pi, color='black', linestyle='dashed', linewidth=2, alpha=0.3)
@@ -144,9 +146,9 @@ class ContactPlotter:
             ax.grid()
 
             ax = axes[3]
-            ax.plot(range(self.n_timesteps), self.ref_vel[0, :], 'o', color="blue", alpha=0.8, markersize=3)
-            ax.plot(range(self.n_timesteps), self.ref_vel[1, :], 'o', color="red", alpha=0.8, markersize=3)
-            ax.plot(range(self.n_timesteps), self.ref_vel[2, :], 'o', color="green", alpha=0.8, markersize=3)
+            ax.plot(range(self.n_timesteps), self.ref_vel[0, :], '-', color="blue", alpha=0.8, markersize=3, linewidth=2)
+            ax.plot(range(self.n_timesteps), self.ref_vel[1, :], '-', color="red", alpha=0.8, markersize=3, linewidth=2)
+            ax.plot(range(self.n_timesteps), self.ref_vel[2, :], '-', color="green", alpha=0.8, markersize=3, linewidth=2)
             ax.set_ylabel("[m/s]")
             labels=["vx ref", "vy ref", "vz ref"]
             ax.set_xlim(0, self.n_timesteps)
