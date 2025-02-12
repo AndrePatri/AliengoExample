@@ -635,6 +635,8 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--env_db',action='store_true', help='')
+    parser.add_argument('--expl',action='store_true', help='whether to plot db data from expl env (if any)')
+    parser.add_argument('--demo',action='store_true', help='whether to plot db data from demo env (if any)')
     parser.add_argument('--env_idx',type=int, help='', default=None)
     parser.add_argument('--data_path',type=str, help='full path to dataset to plot')
     parser.add_argument('--multirun',action='store_true', help='plot comparative results (if env db across envs, otherwise across runs)')
@@ -981,6 +983,10 @@ if __name__ == "__main__":
         plotter.show()  # Display all plots
 
     else:
+        dset_suffix="" if not args.expl else "_expl"
+        if args.demo:
+            dset_suffix="_demo"
+
         # load env db data
         plotter = Plotter(hdf5_file_path=path)
         datasets = plotter.list_datasets()
@@ -1012,19 +1018,21 @@ if __name__ == "__main__":
         for ep_idx in range(n_eps):
             ep_prefix=f"ep_{ep_idx}_"
             
+            obs_datasetname=ep_prefix+"Obs"+dset_suffix
+            actions_datasetname=ep_prefix+"Actions"+dset_suffix
             # gravity vec
             patterns=["gn_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - gravity vec", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - gravity vec"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
                 marker_size=marker_size,
                 data_labels=selected,
                 data_idxs=idxs)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - gravity vec", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - gravity vec"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1035,8 +1043,8 @@ if __name__ == "__main__":
             # joint pos
             patterns=["q_jnt_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - meas joint q", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - meas joint q"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1047,8 +1055,8 @@ if __name__ == "__main__":
             # joint vel
             patterns=["v_jnt_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - meas joint v", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - meas joint v"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1059,8 +1067,8 @@ if __name__ == "__main__":
             # cmd effort
             patterns=["rhc_cmd_q_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - rhc cmd q", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - rhc cmd q"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1071,8 +1079,8 @@ if __name__ == "__main__":
             # cmd effort
             patterns=["rhc_cmd_v_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - rhc cmd v", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - rhc cmd v"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1083,8 +1091,8 @@ if __name__ == "__main__":
             # cmd effort
             patterns=["rhc_cmd_eff_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - rhc cmd effort", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - rhc cmd effort"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1095,8 +1103,8 @@ if __name__ == "__main__":
             # estimated contact forces
             patterns=["fc_contact*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - est. contact f", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - est. contact f"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1107,8 +1115,8 @@ if __name__ == "__main__":
             # mpc fail idx
             patterns=["rhc_fail*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - MPC fail index", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - MPC fail index"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1119,8 +1127,8 @@ if __name__ == "__main__":
             # rhc flight info
             patterns=["flight_*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - rhc flight info", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - rhc flight info"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1131,8 +1139,8 @@ if __name__ == "__main__":
             # linvel
             patterns=["linvel_*_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - linvel (meas/ref)", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - linvel (meas/ref)"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1143,8 +1151,8 @@ if __name__ == "__main__":
             # omega
             patterns=["omega_*_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - omega (meas/ref)", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - omega (meas/ref)"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1155,8 +1163,8 @@ if __name__ == "__main__":
             # actions buffer
             patterns=["*_prev_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - action buffer - prev cmds", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - action buffer - prev cmds"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1165,8 +1173,8 @@ if __name__ == "__main__":
                 data_idxs=idxs)
             patterns=["*_avrg_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - action buffer - mean cmds over window", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - action buffer - mean cmds over window"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1175,8 +1183,8 @@ if __name__ == "__main__":
                 data_idxs=idxs)
             patterns=["*_std_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - action buffer - std cmds over window", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - action buffer - std cmds over window"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1186,8 +1194,8 @@ if __name__ == "__main__":
 
             patterns=["*_m*_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Obs", 
-                title=ep_prefix+"obs - action buffer - full action history buffer", 
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"obs - action buffer - full action history buffer"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1196,8 +1204,8 @@ if __name__ == "__main__":
                 data_idxs=idxs)
             
             # actions
-            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - all", 
+            plotter.plot_data(dataset_name=actions_datasetname, 
+                title=ep_prefix+"actions - all"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1207,8 +1215,8 @@ if __name__ == "__main__":
             # contact actions
             patterns=["*contact_flag*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - contact flag actions only", 
+            plotter.plot_data(dataset_name=actions_datasetname, 
+                title=ep_prefix+"actions - contact flag actions only"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1218,8 +1226,8 @@ if __name__ == "__main__":
             
             patterns=["*phase_freq*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - step frequency only [flights/mpc_steps]", 
+            plotter.plot_data(dataset_name=actions_datasetname, 
+                title=ep_prefix+"actions - step frequency only [flights/mpc_steps]"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1229,8 +1237,8 @@ if __name__ == "__main__":
             
             patterns=["*phase_offset*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - step offset only [mpc_steps]", 
+            plotter.plot_data(dataset_name=actions_datasetname, 
+                title=ep_prefix+"actions - step offset only [mpc_steps]"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1240,8 +1248,8 @@ if __name__ == "__main__":
 
             patterns=["*flight_*"]
             idxs,selected=plotter.get_idx_matching(patterns, actions_names)
-            plotter.plot_data(dataset_name=ep_prefix+"Actions", 
-                title=ep_prefix+"actions - flight params actions only", 
+            plotter.plot_data(dataset_name=actions_datasetname, 
+                title=ep_prefix+"actions - flight params actions only"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1250,8 +1258,8 @@ if __name__ == "__main__":
                 data_idxs=idxs)
 
             # sub terminations
-            plotter.plot_data(dataset_name=ep_prefix+"SubTerminations", 
-                title=ep_prefix+"SubTerminations", 
+            plotter.plot_data(dataset_name=ep_prefix+"SubTerminations"+dset_suffix, 
+                title=ep_prefix+"SubTerminations"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1261,8 +1269,8 @@ if __name__ == "__main__":
             
             
             # sub terminations
-            plotter.plot_data(dataset_name=ep_prefix+"SubTruncations", 
-                title=ep_prefix+"SubTruncations", 
+            plotter.plot_data(dataset_name=ep_prefix+"SubTruncations"+dset_suffix, 
+                title=ep_prefix+"SubTruncations"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1271,8 +1279,8 @@ if __name__ == "__main__":
                 data_idxs=None)
             
             # terminations
-            plotter.plot_data(dataset_name=ep_prefix+"Terminations", 
-                title=ep_prefix+"Terminations", 
+            plotter.plot_data(dataset_name=ep_prefix+"Terminations"+dset_suffix, 
+                title=ep_prefix+"Terminations"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1281,8 +1289,8 @@ if __name__ == "__main__":
                 data_idxs=None)
             
             # truncations
-            plotter.plot_data(dataset_name=ep_prefix+"Truncations", 
-                title=ep_prefix+"Truncations", 
+            plotter.plot_data(dataset_name=ep_prefix+"Truncations"+dset_suffix, 
+                title=ep_prefix+"Truncations"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1291,8 +1299,8 @@ if __name__ == "__main__":
                 data_idxs=None)
             
             # sub rewards
-            plotter.plot_data(dataset_name=ep_prefix+"sub_rew", 
-                title=ep_prefix+"sub_rew", 
+            plotter.plot_data(dataset_name=ep_prefix+"sub_rew"+dset_suffix, 
+                title=ep_prefix+"sub_rew"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1301,8 +1309,8 @@ if __name__ == "__main__":
                 data_idxs=None)
             
             # tot rewards
-            plotter.plot_data(dataset_name=ep_prefix+"tot_rew", 
-                title=ep_prefix+"tot reward", 
+            plotter.plot_data(dataset_name=ep_prefix+"tot_rew"+dset_suffix, 
+                title=ep_prefix+"tot reward"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1311,8 +1319,8 @@ if __name__ == "__main__":
                 data_idxs=None)
 
             # agent twist refs
-            plotter.plot_data(dataset_name=ep_prefix+"AgentTwistRefs", 
-                title=ep_prefix+"agent refs", 
+            plotter.plot_data(dataset_name=ep_prefix+"AgentTwistRefs"+dset_suffix, 
+                title=ep_prefix+"agent refs"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1322,8 +1330,8 @@ if __name__ == "__main__":
 
             # other custom data
 
-            plotter.plot_data(dataset_name=ep_prefix+"Power", 
-                title=ep_prefix+"Power", 
+            plotter.plot_data(dataset_name=ep_prefix+"Power"+dset_suffix, 
+                title=ep_prefix+"Power"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1331,8 +1339,8 @@ if __name__ == "__main__":
                 data_labels=pow_names,
                 data_idxs=None)
             
-            plotter.plot_data(dataset_name=ep_prefix+"TrackingError", 
-                title=ep_prefix+"TrackingError", 
+            plotter.plot_data(dataset_name=ep_prefix+"TrackingError"+dset_suffix, 
+                title=ep_prefix+"TrackingError"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 ylabel="m/s",
@@ -1343,8 +1351,8 @@ if __name__ == "__main__":
 
             patterns=["*z_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, contact_forces_names)
-            plotter.plot_data(dataset_name=ep_prefix+"RhcContactForces", 
-                title=ep_prefix+"Vertical MPC contact f (base loc)", 
+            plotter.plot_data(dataset_name=ep_prefix+"RhcContactForces"+dset_suffix, 
+                title=ep_prefix+"Vertical MPC contact f (base loc)"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=False,
@@ -1352,8 +1360,8 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
             
-            plotter.plot_data(dataset_name=ep_prefix+"RhcFailIdx", 
-                title=ep_prefix+"Rhc fail idx", 
+            plotter.plot_data(dataset_name=ep_prefix+"RhcFailIdx"+dset_suffix, 
+                title=ep_prefix+"Rhc fail idx"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1361,8 +1369,8 @@ if __name__ == "__main__":
                 data_labels="fail_idx",
                 data_idxs=None)
             
-            plotter.plot_data(dataset_name=ep_prefix+"RhcRefsFlag", 
-                title=ep_prefix+"Rhc refs flags", 
+            plotter.plot_data(dataset_name=ep_prefix+"RhcRefsFlag"+dset_suffix, 
+                title=ep_prefix+"Rhc refs flags"+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
@@ -1373,7 +1381,7 @@ if __name__ == "__main__":
             from lrhc_control.utils.data_postproc.contact_visual import ContactPlotter
             patterns=["fc_contact*z*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            vertical_contact_f=plotter.data[ep_prefix+"Obs"][:, :, idxs]
+            vertical_contact_f=plotter.data[obs_datasetname][:, :, idxs]
 
             valid_mask = np.isfinite(vertical_contact_f[:, 0, 0])
             valid_f=vertical_contact_f[valid_mask, 0, :]
