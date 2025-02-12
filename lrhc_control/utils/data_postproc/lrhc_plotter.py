@@ -1383,14 +1383,23 @@ if __name__ == "__main__":
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
             vertical_contact_f=plotter.data[obs_datasetname][:, :, idxs]
 
+            patterns=["linvel_*_ref_base_loc"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            linvel_ref=plotter.data[obs_datasetname][:, 0, idxs]
+
+            patterns=["linvel_x_base_loc", "linvel_y_base_loc", "linvel_z_base_loc"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            linvel_meas=plotter.data[obs_datasetname][:, 0, idxs]
+
             valid_mask = np.isfinite(vertical_contact_f[:, 0, 0])
             valid_f=vertical_contact_f[valid_mask, 0, :]
             is_contact=valid_f>=1e-3
             contact_state=np.full_like(valid_f, fill_value=0.0)
             contact_state[is_contact]=1.0
-            contact_plotter=ContactPlotter(data=contact_state.T)
+            contact_plotter=ContactPlotter(data=contact_state.T,
+                ref_vel=linvel_ref.T,meas_vel=linvel_meas.T)
             contact_plotter.plot()
-            
+
         plotter.show()
 
     
