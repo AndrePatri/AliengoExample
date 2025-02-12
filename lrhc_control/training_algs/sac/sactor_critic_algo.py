@@ -1270,7 +1270,7 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
-                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs.numpy())
+                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs().numpy())
 
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
