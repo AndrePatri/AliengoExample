@@ -1152,6 +1152,8 @@ class SActorCriticAlgoBase(ABC):
                 hf.attrs['n_policy_updates'] = self._n_policy_updates[self._log_it_counter]
                 hf.attrs['elapsed_min'] = self._elapsed_min[self._log_it_counter]
                 hf.attrs['ep_vec_freq'] = ep_vec_freq
+                hf.attrs['n_expl_envs'] = self._n_expl_envs
+                hf.attrs['n_demo_envs'] = self._env.n_demo_envs()
 
                 # first dump custom db data names
                 db_data_names = list(self._env.custom_db_data.keys())
@@ -1173,12 +1175,14 @@ class SActorCriticAlgoBase(ABC):
                             data=sub_rew_full_expl[ep_idx, :, :, :])
                         hf.create_dataset(ep_prefix+'tot_rew_expl', 
                             data=tot_rew_full_expl[ep_idx, :, :, :])
+                        hf.create_dataset('expl_env_selector', data=self._expl_env_selector.numpy())
                     if self._env.n_demo_envs() > 0:
                         hf.create_dataset(ep_prefix+'sub_rew_demo', 
                             data=sub_rew_full_demo)
                         hf.create_dataset(ep_prefix+'tot_rew_demo', 
                             data=tot_rew_full_demo[ep_idx, :, :, :])
-                    
+                        hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs().numpy())
+
                     # dump all custom env data
                     db_data_names = list(self._env.custom_db_data.keys())
                     for db_dname in db_data_names:
@@ -1270,8 +1274,8 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_expl_env_distr', data=self._ep_tsteps_expl_env_distribution.numpy())
                 
-                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs().numpy())
-
+                hf.create_dataset('expl_env_selector', data=self._expl_env_selector.numpy())
+                
             hf.create_dataset('demo_envs_active', data=self._demo_envs_active.numpy())
             hf.create_dataset('demo_perf_metric', data=self._demo_perf_metric.numpy())
             
@@ -1287,8 +1291,8 @@ class SActorCriticAlgoBase(ABC):
 
                 hf.create_dataset('ep_timesteps_demo_env_distr', data=self._ep_tsteps_demo_env_distribution.numpy())
                 
-                hf.create_dataset('expl_env_selector', data=self._expl_env_selector.numpy())
-                
+                hf.create_dataset('demo_env_idxs', data=self._env.demo_env_idxs().numpy())
+
             # profiling data
             hf.create_dataset('env_step_fps', data=self._env_step_fps.numpy())
             hf.create_dataset('env_step_rt_factor', data=self._env_step_rt_factor.numpy())
