@@ -108,8 +108,8 @@ class ContactPlotter:
             import matplotlib.lines as mlines
 
             ax = axes[1]
-            ax.plot(range(self.n_timesteps), self.ref_vel_norm, color="blue", alpha=0.8)
-            ax.plot(range(self.n_timesteps), self.meas_vel_norm, color="red", alpha=0.3)
+            ax.plot(range(self.n_timesteps), self.ref_vel_norm, color="blue", alpha=0.8, linewidth=2)
+            ax.plot(range(self.n_timesteps), self.meas_vel_norm, color="red", alpha=0.3, linewidth=2)
             ax.set_ylabel("[m/s]")
             labels=["ref. velocity norm", "meas. velocity norm"]
             ax.set_xlim(0, self.n_timesteps)
@@ -124,7 +124,7 @@ class ContactPlotter:
             ax.grid()
             
             ax = axes[2]
-            ax.plot(range(self.n_timesteps), self._heading_ref, '-', color="blue",linewidth=2, alpha=0.8, markersize=3)
+            ax.plot(range(self.n_timesteps), self._heading_ref, 'o', color="blue",linewidth=2, alpha=0.5, markersize=4)
             ax.plot(range(self.n_timesteps), self._heading_meas, 'o', color="red",linewidth=2, alpha=0.3, markersize=3)
             # Add horizontal dashed lines at -π and π
             ax.axhline(y=-np.pi, color='black', linestyle='dashed', linewidth=2, alpha=0.3)
