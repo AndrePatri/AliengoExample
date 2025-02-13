@@ -501,7 +501,7 @@ class SActorCriticAlgoBase(ABC):
         self._collection_freq=1
         self._update_freq=1
 
-        self._replay_buffer_size_vec=3*self._task_rand_timeout_ub # cover at least a number of eps
+        self._replay_buffer_size_vec=1*self._task_rand_timeout_ub # cover at least a number of eps
         self._replay_buffer_size = self._replay_buffer_size_vec*self._num_envs
         self._batch_size = 8192
 
