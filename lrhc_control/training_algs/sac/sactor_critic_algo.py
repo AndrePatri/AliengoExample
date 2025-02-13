@@ -628,7 +628,7 @@ class SActorCriticAlgoBase(ABC):
         if self._db_vecstep_frequency == 0:
             self._db_vecstep_frequency=self._collection_freq
 
-        self._env_db_checkpoints_vecfreq=50*self._db_vecstep_frequency # detailed db data from envs
+        self._env_db_checkpoints_vecfreq=150*self._db_vecstep_frequency # detailed db data from envs
 
         self._validate=True
         self._validation_collection_vecfreq=50 # add vec transitions to val buffer with some vec freq
