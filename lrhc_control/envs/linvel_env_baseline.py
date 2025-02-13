@@ -532,7 +532,7 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
             # (we are using the _substep_abs_counter counter)
             period=int(1.5)*period # a bit more than freq at which task is randomized
             self._periodic_clock=PeriodicTimer(counter=self._substep_abs_counter,
-                                    period=int(self._action_repeat*self.task_rand_timeout_bounds()[1]), 
+                                    period=int(1.5*self._action_repeat*self.task_rand_timeout_bounds()[1]), 
                                     dtype=self._dtype,
                                     device=self._device)
 
