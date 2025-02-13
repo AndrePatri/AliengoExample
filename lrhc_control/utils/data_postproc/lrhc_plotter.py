@@ -1160,6 +1160,18 @@ if __name__ == "__main__":
                 data_labels=selected,
                 data_idxs=idxs)
 
+            # clock (if any)
+            patterns=["clock*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name=obs_datasetname, 
+                title=ep_prefix+"clock"+dset_suffix, 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
             # actions buffer
             patterns=["*_prev_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
@@ -1378,20 +1390,18 @@ if __name__ == "__main__":
                 data_labels=rhc_refs_names,
                 data_idxs=None)
              
+            # plotting contact phases
             from lrhc_control.utils.data_postproc.contact_visual import ContactPlotter
             patterns=["fc_contact*z*"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
             vertical_contact_f=plotter.data[obs_datasetname][:, :, idxs]
-
+            valid_mask = np.isfinite(vertical_contact_f[:, 0, 0])
             patterns=["linvel_*_ref_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            linvel_ref=plotter.data[obs_datasetname][:, 0, idxs]
-
+            linvel_ref=plotter.data[obs_datasetname][:, 0, idxs][valid_mask, :]
             patterns=["linvel_x_base_loc", "linvel_y_base_loc", "linvel_z_base_loc"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-            linvel_meas=plotter.data[obs_datasetname][:, 0, idxs]
-
-            valid_mask = np.isfinite(vertical_contact_f[:, 0, 0])
+            linvel_meas=plotter.data[obs_datasetname][:, 0, idxs][valid_mask, :]
             valid_f=vertical_contact_f[valid_mask, 0, :]
             is_contact=valid_f>=1e-3
             contact_state=np.full_like(valid_f, fill_value=0.0)
