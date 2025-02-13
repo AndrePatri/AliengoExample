@@ -536,8 +536,8 @@ class SActorCriticAlgoBase(ABC):
         self._noise_freq_vec=self._noise_freq_vec//self._env_n_action_reps
         self._noise_duration_vec=self._noise_duration_vec//self._env_n_action_reps
         
-        self._continuous_act_expl_noise_std=0.2
-        self._discrete_act_expl_noise_std=1.0
+        self._continuous_act_expl_noise_std=0.3 # wrt actions scale
+        self._discrete_act_expl_noise_std=1.5 # setting it a bit > 1 helps in ensuring discr. actions range is explored
         
         # rnd
         self._use_rnd=False
@@ -1984,7 +1984,6 @@ class SActorCriticAlgoBase(ABC):
                 env_idxs=self._expl_env_selector.to(actions.device),
                 normal=False, # use uniform distr for discrete
                 scaling=self._discrete_act_expl_noise_std)
-        
         self._pert_counter+=1
         if self._pert_counter >= self._noise_duration_vec:
             self._pert_counter=0

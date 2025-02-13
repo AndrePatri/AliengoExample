@@ -36,6 +36,9 @@ class SAC(SActorCriticAlgoBase):
             actions, _, _ = self._agent.get_action(x=obs)
             actions = actions.detach()
             if self._n_expl_envs>0 and self._time_to_randomize_actions():
+                # this is synchronized across envs, so it's important
+                # env takes care of removing temp. correlation between eps (e.g. randomizing
+                # eps timelines)
                 self._perturb_some_actions(actions=actions)
                 
         else:
