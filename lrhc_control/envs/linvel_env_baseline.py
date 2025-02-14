@@ -528,11 +528,11 @@ class LinVelTrackBaseline(LRhcTrainingEnvBase):
         # add periodic timer if required
         self._periodic_clock=None
         if self._env_opts["add_periodic_clock_to_obs"]:
-            period=self._action_repeat*self.task_rand_timeout_bounds()[1] # correcting with n substeps
+            self._add_env_opt(self._env_opts, "clock_period", 
+                default=int(1.5*self._action_repeat*self.task_rand_timeout_bounds()[1])) # correcting with n substeps
             # (we are using the _substep_abs_counter counter)
-            period=int(1.5)*period # a bit more than freq at which task is randomized
             self._periodic_clock=PeriodicTimer(counter=self._substep_abs_counter,
-                                    period=int(1.5*self._action_repeat*self.task_rand_timeout_bounds()[1]), 
+                                    period=self._env_opts["clock_period"], 
                                     dtype=self._dtype,
                                     device=self._device)
 

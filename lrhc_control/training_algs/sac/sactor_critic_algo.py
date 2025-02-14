@@ -703,7 +703,11 @@ class SActorCriticAlgoBase(ABC):
         self._hyperparameters["n_db_envs"] = self._num_db_envs
         self._hyperparameters["n_expl_envs"] = self._n_expl_envs
         self._hyperparameters["noise_freq"] = self._noise_freq_vec
+        self._hyperparameters["noise_duration_vec"] = self._noise_duration_vec
         self._hyperparameters["noise_buff_freq"] = self._noise_buff_freq
+        self._hyperparameters["continuous_act_expl_noise_std"] = self._continuous_act_expl_noise_std
+        self._hyperparameters["discrete_act_expl_noise_std"] = self._discrete_act_expl_noise_std
+
         self._hyperparameters["n_demo_envs"] = self._env.n_demo_envs()
         
         self._hyperparameters["bnorm_bsize"] = self._bnorm_bsize
