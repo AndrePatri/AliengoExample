@@ -9,6 +9,7 @@ import re
 import math
 import matplotlib.lines as mlines
 import argparse
+from matplotlib.colors import LogNorm
 
 # Define a custom colormap (this is an example; adjust as needed)
 colors = [
@@ -147,11 +148,15 @@ class LRHCPlotter:
 
         return True
     
+    def create_dataset(self, dataset_name, data: np.ndarray):
+        print(f"Created dataset '{dataset_name}' with shape {data.shape}.")
+        self.data[dataset_name]=data
+
     def plot_data(self, dataset_name,
             title="Plot",
             xaxis_dataset_name="", xlabel="Time", 
             ylabel="Intensity", 
-            cmap="Blues",
+            cmap="plasma", # viridis, 
             use_markers=False,
             marker_size: int = 3,
             data_labels = None,
@@ -237,6 +242,7 @@ class LRHCPlotter:
             data_indexes=list(range(0, n_data)) if data_idxs is None else data_idxs
             labels=[]
             plt_lines=[]
+            
             for i in range(len(data_indexes)):
                 idx=data_indexes[i]
                 valid_mask = np.isfinite(data[:, idx])
@@ -244,24 +250,31 @@ class LRHCPlotter:
                 alpha=data_alphas[i] if data_alphas is not None else 1.0
                 labels.append(label)
                 plt_line=None
+                
+                # print(dataset_name)
+                # print(idx)
+                # print(valid_mask.shape)
+                # print((~valid_mask).any())
+                # print(xaxis[valid_mask].shape)
+                # print(data[valid_mask, idx].shape)
                 if use_markers:
                     plt_line, = ax.plot(xaxis[valid_mask], data[valid_mask, idx], 'o', label=label, markersize=marker_size, alpha=alpha)
                 else:
                     plt_line, = ax.plot(xaxis[valid_mask], data[valid_mask, idx], label=label, alpha=alpha)
-                    if data_distr_std is not None: # add data distribution std area
-                        alpha=0.2
-                        ax.fill_between(xaxis[valid_mask], 
-                                data[valid_mask, idx] - data_distr_std[valid_mask, idx], data[valid_mask, idx] + data_distr_std[valid_mask, idx],
-                                color=plt_line.get_color(), alpha=alpha, 
-                                label="± 1 std")
-                    if data_distr_min is not None and data_distr_max is not None: # add min max bounds
-                        alpha=0.2
-                        if data_distr_std is not None:
-                            alpha=0.1 # max min even more transparent
-                        ax.fill_between(xaxis[valid_mask], 
-                                data_distr_min[valid_mask, idx], data_distr_max[valid_mask, idx],
-                                color=plt_line.get_color(), alpha=alpha, 
-                                label="min/max")
+                if data_distr_std is not None: # add data distribution std area
+                    alpha=0.2
+                    ax.fill_between(xaxis[valid_mask], 
+                            data[valid_mask, idx] - data_distr_std[valid_mask, idx], data[valid_mask, idx] + data_distr_std[valid_mask, idx],
+                            color=plt_line.get_color(), alpha=alpha, 
+                            label="± 1 std")
+                if data_distr_min is not None and data_distr_max is not None: # add min max bounds
+                    alpha=0.2
+                    if data_distr_std is not None:
+                        alpha=0.1 # max min even more transparent
+                    ax.fill_between(xaxis[valid_mask], 
+                            data_distr_min[valid_mask, idx], data_distr_max[valid_mask, idx],
+                            color=plt_line.get_color(), alpha=alpha, 
+                            label="min/max")
                 plt_lines.append(plt_line)
 
             ax.set_title(f"{title}")
@@ -340,7 +353,7 @@ class LRHCPlotter:
                     x_edges, 
                     y_edges, 
                     hist_2d, 
-                    norm="log", # linear , symlog
+                    norm=LogNorm(), # linear , symlog
                     cmap=cmap,
                     alpha=0.5,
                     shading="auto", # "nearest", "flat"
@@ -640,6 +653,7 @@ if __name__ == "__main__":
     parser.add_argument('--env_idx',type=int, help='', default=None)
     parser.add_argument('--data_path',type=str, help='full path to dataset to plot')
     parser.add_argument('--multirun',action='store_true', help='plot comparative results (if env db across envs, otherwise across runs)')
+    parser.add_argument('--running_obs_stats',action='store_true', help='whether to plot running stats used for obs normalization')
 
     args = parser.parse_args()
 
@@ -663,225 +677,62 @@ if __name__ == "__main__":
         obs_names=list(plotter.attributes["obs_names"])
         sub_trunc_names=list(plotter.attributes["sub_trunc_names"])
         sub_term_names=list(plotter.attributes["sub_term_names"])
+        sub_rew_names=list(plotter.attributes["sub_reward_names"])
+
+        n_envs=plotter.attributes["n_envs"]
         
-        xlabel="n_timesteps_done"
+        substepping_dt=plotter.attributes["substep_dt"]
+        action_reps=plotter.attributes["action_repeat"]
+        env_step_dsec=action_reps*substepping_dt
+        total_simulated_secs=plotter.data["n_timesteps_done"]*env_step_dsec
+        total_simulated_vec_secs=plotter.data["n_timesteps_done"]/n_envs
+        total_simulated_h=total_simulated_secs/3600.0
+        total_simulated_vec_h=total_simulated_vec_secs/3600.0
+        total_simulated_d=total_simulated_h/24.0
+        total_simulated_vec_d=total_simulated_vec_h/24.0
+        
+        plotter.create_dataset(dataset_name="total_simulated_secs", 
+            data=total_simulated_secs)
+        plotter.create_dataset(dataset_name="total_simulated_vec_secs", 
+            data=total_simulated_vec_secs)
+        plotter.create_dataset(dataset_name="total_simulated_h", 
+            data=total_simulated_h)
+        plotter.create_dataset(dataset_name="total_simulated_vec_h", 
+            data=total_simulated_vec_h)
+        plotter.create_dataset(dataset_name="total_simulated_d", 
+            data=total_simulated_d)
+        plotter.create_dataset(dataset_name="total_simulated_vec_d", 
+            data=total_simulated_vec_d)
+        
+        # xlabel=xlabel
+        xlabel="total_simulated_vec_h"
+        # xlabel="n_timesteps_done"
         xaxis_dataset_name=xlabel
         # plot some data
 
-        # obs stats
-        # gravity vecs
-        patterns=["gn_*"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - gravity vec", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - gravity vec", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # joint pos
-        patterns=["q_jnt_*"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - meas joint q", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - meas joint q", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # joint vel
-        patterns=["v_jnt_*"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - meas joint v", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - meas joint v", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # cmd efforts
-        patterns=["rhc_cmd_eff_*"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc cmd effort", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc cmd effort", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # estimated contact forces
-        patterns=["fc_contact*"]
-        idxs, selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - est. contact f", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - est. contact f", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # mpc fail idx
-        patterns=["rhc_fail*"]
-        idxs, selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - MPC fail index", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - MPC fail index", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # rhc flight info
-        patterns=["flight_*"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc flight info", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc flight info", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # linvel
-        patterns=["linvel_*_base_loc"]
-        idxs, selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - linvel (meas/ref)", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - linvel (meas/ref)", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        
-        # actions buffer
-        patterns=["*_prev_act"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - prev cmds", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer - prev cmds", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        patterns=["*_avrg_act"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - mean cmds over window", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer - mean cmds over window", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        patterns=["*_std_act"]
-        idxs,selected=plotter.get_idx_matching(patterns, obs_names)
-        plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - std cmds over window", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
-        plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer - std cmds over window", 
-            xaxis_dataset_name=xaxis_dataset_name,
-            xlabel=xlabel,
-            use_markers=True,
-            marker_size=1,
-            data_labels=selected,
-            data_idxs=idxs)
+        marker_size=1
         
         # losses 
-        compose_ok=plotter.compose_datasets(name="qf1_loss",
+        compose_ok=plotter.compose_datasets(name="qf1_losses",
             datasets_list=["qf1_loss", "qf1_loss_validation"])
-        plotter.plot_data(dataset_name="qf1_loss", title="qf1 loss", 
+        plotter.plot_data(dataset_name="qf1_losses", title="qf1 loss", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
             ylabel="bellman error",
             data_labels=["qf1 training loss", "qf1 validation loss"],
             data_alphas=[0.6, 0.2],
-            use_markers=False)
-        plotter.compose_datasets(name="qf2_loss",
+            use_markers=False,
+            marker_size=marker_size)
+        plotter.compose_datasets(name="qf2_losses",
             datasets_list=["qf2_loss", "qf2_loss_validation"])
-        plotter.plot_data(dataset_name="qf2_loss", title="qf2 loss", 
+        plotter.plot_data(dataset_name="qf2_losses", title="qf2 loss", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
             ylabel="bellman error",
             data_labels=["qf2 training loss", "qf2 validation loss"],
             data_alphas=[0.6, 0.2],
-            use_markers=False)
+            use_markers=False,
+            marker_size=marker_size)
         plotter.compose_datasets(name="actor_losses",
             datasets_list=["actor_loss", "actor_loss_validation"])
         plotter.plot_data(dataset_name="actor_losses", title="actor_loss", 
@@ -890,7 +741,8 @@ if __name__ == "__main__":
             ylabel="[]",
             data_labels=["training", "validation"],
             data_alphas=[0.6, 0.2],
-            use_markers=True)
+            use_markers=False,
+            marker_size=marker_size)
         plotter.compose_datasets(name="alpha_losses",
             datasets_list=["alpha_loss", "alpha_loss_validation"])
         plotter.plot_data(dataset_name="alpha_losses", title="alpha_loss", 
@@ -899,11 +751,12 @@ if __name__ == "__main__":
             ylabel="[]",
             data_labels=["training", "validation"],
             data_alphas=[0.6, 0.2],
-            use_markers=True)
+            use_markers=False,
+            marker_size=marker_size)
         
         # other training data
         plotter.compose_datasets(name="qf_vals",
-            datasets_list=["qf1_vals_mean", "qf2_vals_mean"])
+            datasets_list=["qf1_vals_mean", "qqq"])
         plotter.compose_datasets(name="qf_vals_std",
             datasets_list=["qf1_vals_std", "qf2_vals_std"])
         plotter.compose_datasets(name="qf_vals_max",
@@ -917,47 +770,119 @@ if __name__ == "__main__":
             ylabel="Q val.",
             data_labels=["qf1", "qf2"],
             use_markers=False,
+            marker_size=marker_size,
             distr_std="qf_vals_std",
             distr_max="qf_vals_max",
             distr_min="qf_vals_min")
 
         # total reward
-        plotter.plot_data(dataset_name="tot_rew_avrg", title="tot_rew_avrg", 
+
+        # distribution
+        plotter.plot_data(dataset_name="tot_rew_avrg", title="scaled returns distribution across envs", 
             xaxis_dataset_name=xaxis_dataset_name,
-            xlabel="n_timesteps_done")
-        plotter.plot_data(dataset_name="tot_rew_avrg_over_envs", title="tot_rew_avrg_over_envs", 
+            xlabel=xlabel)
+        plotter.plot_data(dataset_name="tot_rew_max", title="max rewards distribution across envs", 
             xaxis_dataset_name=xaxis_dataset_name,
-            xlabel="n_timesteps_done")
-        plotter.plot_data(dataset_name="tot_rew_max", title="tot_rew_max", 
+            xlabel=xlabel)
+        plotter.plot_data(dataset_name="tot_rew_min", title="min rewards distribution across envs", 
             xaxis_dataset_name=xaxis_dataset_name,
-            xlabel="n_timesteps_done")
-        plotter.plot_data(dataset_name="tot_rew_min", title="tot_rew_min", 
+            xlabel=xlabel)
+
+        plotter.plot_data(dataset_name="tot_rew_avrg_over_envs", title="scaled returns average over envs", 
             xaxis_dataset_name=xaxis_dataset_name,
-            xlabel="n_timesteps_done")
+            xlabel=xlabel,
+            ylabel="",
+            data_labels=["return"],
+            use_markers=False,
+            marker_size=marker_size,
+            distr_std="tot_rew_std_over_envs",
+            distr_max=None, # tot_rew_max_over_envs
+            distr_min=None) # tot_rew_min_over_envs
+        
+        # sub rewards
+
+        for i in range(len(sub_rew_names)):
+            sub_rew_name=sub_rew_names[i]
+            avrg_over_envs_name=sub_rew_name+"_avrg_over_envs"
+            std_over_envs_name=sub_rew_name+"_std_over_envs"
+            distr_name=sub_rew_name+"_avrg"
+            distr_name_max=sub_rew_name+"_max"
+            distr_name_min=sub_rew_name+"_min"
+            
+            plotter.create_dataset(dataset_name=distr_name,
+                data=plotter.data["sub_rew_avrg"][:, :, i:i+1])
+            plotter.create_dataset(dataset_name=distr_name_max,
+                data=plotter.data["sub_rew_max"][:, :, i:i+1])
+            plotter.create_dataset(dataset_name=distr_name_min,
+                data=plotter.data["sub_rew_min"][:, :, i:i+1])
+            
+            plotter.create_dataset(dataset_name=avrg_over_envs_name,
+                data=plotter.data["sub_rew_avrg_over_envs"][:, :, i:i+1])
+            plotter.create_dataset(dataset_name=std_over_envs_name,
+                data=plotter.data["sub_rew_std_over_envs"][:, :, i:i+1])
+            
+            # distribution over envs
+            plotter.plot_data(dataset_name=distr_name, title=f"scaled sub returns ({sub_rew_name}) distribution across envs", 
+            xaxis_dataset_name=xaxis_dataset_name,
+            xlabel=xlabel)
+            plotter.plot_data(dataset_name=distr_name_max, title=f"max rewards ({sub_rew_name}) distribution across envs", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel)
+            plotter.plot_data(dataset_name=distr_name_min, title=f"min rewards ({sub_rew_name}) distribution across envs", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel)
+
+            # average over envs
+            plotter.plot_data(dataset_name=avrg_over_envs_name, title=f"scaled sub returns ({sub_rew_name}) average over envs", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                ylabel="",
+                data_labels=[sub_rew_name],
+                use_markers=False,
+                marker_size=marker_size,
+                distr_std=std_over_envs_name,
+                distr_max=None, # tot_rew_max_over_envs
+                distr_min=None) # tot_rew_min_over_envs
+        # plotter.plot_data(dataset_name="tot_rew_avrg_over_envs", title="tot_rew_avrg_over_envs", 
+        #     xaxis_dataset_name=xaxis_dataset_name,
+        #     xlabel=xlabel)
+        # plotter.plot_data(dataset_name="tot_rew_std_over_envs", title="tot_rew_std_over_envs", 
+        #     xaxis_dataset_name=xaxis_dataset_name,
+        #     xlabel=xlabel)
+        # plotter.plot_data(dataset_name="tot_rew_max_over_envs", title="tot_rew_max_over_envs", 
+        #     xaxis_dataset_name=xaxis_dataset_name,
+        #     xlabel=xlabel)
+        # plotter.plot_data(dataset_name="tot_rew_min_over_envs", title="tot_rew_min_over_envs", 
+        #     xaxis_dataset_name=xaxis_dataset_name,
+        #     xlabel=xlabel)
 
         # env data 
         plotter.plot_data(dataset_name="env_step_rt_factor", title="env_step_rt_factor", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
-            use_markers=True)
+            use_markers=True,
+            marker_size=marker_size)
         
-        plotter.plot_data(dataset_name="ep_tsteps_env_distribution", title="ep_tsteps_env_distribution", 
+        plotter.plot_data(dataset_name="ep_tsteps_env_distr", title="ep_tsteps_env_distribution", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
-            use_markers=True)
+            use_markers=True,
+            marker_size=marker_size)
         
         plotter.plot_data(dataset_name="SubTruncations_avrg_over_envs", title="SubTruncations_avrg_over_envs", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
             ylabel="bool",
             data_labels=sub_trunc_names,
-            use_markers=True)
+            use_markers=True,
+            marker_size=marker_size)
         plotter.plot_data(dataset_name="SubTerminations_avrg_over_envs", title="SubTerminations_avrg_over_envs", 
             xaxis_dataset_name=xaxis_dataset_name,
             xlabel=xlabel,
             ylabel="bool",
             data_labels=sub_term_names,
-            use_markers=True)
+            use_markers=True,
+            marker_size=marker_size)
         
         # rnd
         if "use_rnd" in attributes:
@@ -966,8 +891,9 @@ if __name__ == "__main__":
                     datasets_list=["expl_bonus_proc_avrg", "expl_bonus_proc_std"])
                 plotter.plot_data(dataset_name="expl_bonus_proc", title="expl_bonus_proc", 
                     xaxis_dataset_name=xaxis_dataset_name,
-                    xlabel="n_timesteps_done",
+                    xlabel=xlabel,
                     use_markers=True,
+                    marker_size=marker_size,
                     data_alphas=[0.3, 0.3],
                     data_labels=["expl_bonus_proc_avrg", "expl_bonus_proc_std"])
                 
@@ -975,10 +901,297 @@ if __name__ == "__main__":
                     datasets_list=["expl_bonus_raw_avrg", "expl_bonus_raw_std"])
                 plotter.plot_data(dataset_name="expl_bonus_raw", title="expl_bonus_raw", 
                     xaxis_dataset_name=xaxis_dataset_name,
-                    xlabel="n_timesteps_done",
+                    xlabel=xlabel,
                     use_markers=True,
+                    marker_size=marker_size,
                     data_alphas=[0.3, 0.3],
                     data_labels=["expl_bonus_raw_avrg", "expl_bonus_raw_std"])
+                
+        if args.running_obs_stats:
+            # obs stats
+            # gravity vecs
+            patterns=["gn_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - gravity vec", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - gravity vec", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # joint pos
+            patterns=["q_jnt_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - meas joint q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - meas joint q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # joint vel
+            patterns=["v_jnt_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - meas joint v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - meas joint v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd efforts
+            patterns=["rhc_cmd_q_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc cmd q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc cmd q", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd efforts
+            patterns=["rhc_cmd_v_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc cmd v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc cmd v", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # cmd efforts
+            patterns=["rhc_cmd_eff_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc cmd effort", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc cmd effort", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # estimated contact forces
+            patterns=["fc_contact*"]
+            idxs, selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - est. contact f", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - est. contact f", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # mpc fail idx
+            patterns=["rhc_fail*"]
+            idxs, selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - MPC fail index", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - MPC fail index", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # rhc flight info
+            patterns=["flight_*"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - rhc flight info", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - rhc flight info", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # linvel
+            patterns=["linvel_*_base_loc"]
+            idxs, selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - linvel (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - linvel (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # omega
+            patterns=["omega_*_base_loc"]
+            idxs, selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - omega (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - omega (meas/ref)", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # clock (if any)
+            patterns=["clock*"]
+            idxs, selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - clock", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - clock", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # actions buffer stats (if used)
+            patterns=["*_prev_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - prev cmds", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer - prev cmds", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            patterns=["*_avrg_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer - mean cmds over window", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer - mean cmds over window", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            patterns=["*_std_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer ", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer ", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            
+            # full actions buffer (if used)
+            patterns=["*_m*_act"]
+            idxs,selected=plotter.get_idx_matching(patterns, obs_names)
+            plotter.plot_data(dataset_name="running_mean_obs", title="running_mean_obs - action buffer ", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
+            plotter.plot_data(dataset_name="running_std_obs", title="running_std_obs - action buffer ", 
+                xaxis_dataset_name=xaxis_dataset_name,
+                xlabel=xlabel,
+                use_markers=True,
+                marker_size=marker_size,
+                data_labels=selected,
+                data_idxs=idxs)
                 
         plotter.show()  # Display all plots
 
@@ -1196,7 +1409,7 @@ if __name__ == "__main__":
             patterns=["*_std_act"]
             idxs,selected=plotter.get_idx_matching(patterns, obs_names)
             plotter.plot_data(dataset_name=obs_datasetname, 
-                title=ep_prefix+"obs - action buffer - std cmds over window"+dset_suffix, 
+                title=ep_prefix+"obs - action buffer "+dset_suffix, 
                 xaxis_dataset_name=xaxis_dataset_name,
                 xlabel=xlabel,
                 use_markers=True,
