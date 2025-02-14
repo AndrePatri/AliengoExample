@@ -245,18 +245,12 @@ class LRHCPlotter:
             
             for i in range(len(data_indexes)):
                 idx=data_indexes[i]
-                valid_mask = np.isfinite(data[:, idx])
+                valid_mask = np.logical_and(np.isfinite(data[:, idx]), xaxis[:]>=0)
                 label=f"Data {idx+1}" if data_labels is None else data_labels[i]
                 alpha=data_alphas[i] if data_alphas is not None else 1.0
                 labels.append(label)
                 plt_line=None
-                
-                # print(dataset_name)
-                # print(idx)
-                # print(valid_mask.shape)
-                # print((~valid_mask).any())
-                # print(xaxis[valid_mask].shape)
-                # print(data[valid_mask, idx].shape)
+            
                 if use_markers:
                     plt_line, = ax.plot(xaxis[valid_mask], data[valid_mask, idx], 'o', label=label, markersize=marker_size, alpha=alpha)
                 else:
@@ -681,6 +675,13 @@ if __name__ == "__main__":
 
         n_envs=plotter.attributes["n_envs"]
         
+        # fix for n_timesteps being 0 over indexes not reached during training
+        where_zero=np.where(plotter.data["n_timesteps_done"]==0)[0] # getting second index (first one
+        where_zero_first=where_zero[0]
+        end=plotter.data["n_timesteps_done"].shape[0]
+        plotter.data["n_timesteps_done"][where_zero_first:end, :]=-1 # set to invalid val
+        # should be the start )
+        
         substepping_dt=plotter.attributes["substep_dt"]
         action_reps=plotter.attributes["action_repeat"]
         env_step_dsec=action_reps*substepping_dt
@@ -756,7 +757,7 @@ if __name__ == "__main__":
         
         # other training data
         plotter.compose_datasets(name="qf_vals",
-            datasets_list=["qf1_vals_mean", "qqq"])
+            datasets_list=["qf1_vals_mean", "qf2_vals_mean"])
         plotter.compose_datasets(name="qf_vals_std",
             datasets_list=["qf1_vals_std", "qf2_vals_std"])
         plotter.compose_datasets(name="qf_vals_max",
